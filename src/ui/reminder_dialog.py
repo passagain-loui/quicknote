@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from tkcalendar import DateEntry
 from .theme import Theme
 from ..core.database import update_note  # v2.3.2: Direct database persistence
-import ctypes  # v2.5.8: Native Windows API for HWND topmost lock
 
 
 class ReminderDialog:
@@ -70,21 +69,19 @@ class ReminderDialog:
         self.dialog.lift()
         self.dialog.focus_set()  # Use focus_set() instead of focus_force() (gentler)
 
-        # v2.5.8: NATIVE WINDOWS API HWND TOPMOST LOCK — Prevent scheduler thread from stealing focus
-        # Use OS-level SetWindowPos with HWND_TOPMOST (-1) to lock dialog above all windows
+        # v2.5.9: TRUE MODAL PATTERN — Disable main window (prevents OS refocus on dropdown close)
+        # When dropdown closes, OS won't refocus main window (it's disabled)
+        # This is the proper Tkinter modal behavior and prevents Z-order jitter
+        self.parent_root = parent.winfo_toplevel()
+
+        # Disable main window (prevents user interaction AND OS refocus)
         try:
-            hwnd = ctypes.windll.user32.GetParent(self.dialog.winfo_id())
-            if not hwnd:  # If no parent, use dialog's own HWND
-                hwnd = self.dialog.winfo_id()
-            # SetWindowPos(hWnd, hWndInsertAfter, x, y, cx, cy, uFlags)
-            # HWND_TOPMOST = -1, SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001
-            ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002)
+            self.parent_root.attributes("-disabled", True)
         except Exception:
-            pass  # Graceful fallback if SetWindowPos fails
+            pass
 
         # v2.5.8: PAUSE SCHEDULER — Prevent root.after() callback from stealing focus while dialog open
         # Store reference to parent's scheduler state so we can pause it
-        self.parent_root = parent.winfo_toplevel()
         self.scheduler_was_running = False
         if hasattr(self.parent_root, '_scheduler_enabled'):
             self.scheduler_was_running = self.parent_root._scheduler_enabled
@@ -262,7 +259,15 @@ class ReminderDialog:
         # v2.0.4: Native titlebar handles dragging - no custom drag binding needed
 
     def _close_dialog(self):
-        """v2.5.8: Proper modal cleanup — release grab, reset topmost, resume scheduler"""
+        """v2.5.9: Proper modal cleanup — re-enable main window, release grab, destroy dialog"""
+        # v2.5.9: Re-enable main window (was disabled to prevent OS refocus)
+        try:
+            self.parent_root.attributes("-disabled", False)
+            self.parent_root.lift()  # Lift main window to front
+            self.parent_root.focus_force()  # Restore focus to main window
+        except Exception:
+            pass
+
         # v2.5.8: Resume scheduler if it was paused
         try:
             if hasattr(self.parent_root, '_scheduler_enabled') and self.scheduler_was_running:

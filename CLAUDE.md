@@ -1,8 +1,18 @@
-# QuickNote v2.5.8 — HARDWARE/OS NUCLEAR FIX: Native HWND Topmost Lock + Scheduler Pause
+# QuickNote v2.5.9 — TRUE MODAL FIX: Main Window Disable (Proper Tkinter Modal)
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.8 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.9 Released 2026-08-20
+
+> **v2.5.9** แก้ไข **True Modal: Disable Main Window + Scheduler Pause (Final Z-Order Fix)**
+>   - Problem: v2.5.8 ctypes solution had window manager conflicts, Z-order still jittery
+>   - Root cause: Complex Win32 API hacks conflict with Tkinter event loop
+>   - Solution 1: Disable main window while dialog open (prevents OS refocus entirely)
+>   - Solution 2: Keep scheduler pause from v2.5.8 (no competing focus)
+>   - Solution 3: Re-enable main window + restore focus on dialog close
+>   - Impact: True modal behavior (user can't touch main window), no Z-order jitter ✅
+>   - Verification: Dialog always visible, main window disabled, dropdowns work ✅
+>   - Architecture: Proper Tkinter modal pattern, simpler & more reliable
 
 > **v2.5.8** แก้ไข **OS-Level Z-Order: Native HWND Topmost Lock + Scheduler Pause (Final Dialog Fix)**
 >   - Problem: While using dialog, scheduler thread steals focus (dialog disappears every 5 sec)
@@ -685,7 +695,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.8  
+**Version:** 2.5.9  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -842,6 +852,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.8  
+**Version:** 2.5.9  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (OS-Level HWND Topmost Lock + Scheduler Pause Control)
+**Status:** ✅ PRODUCTION-STABLE (True Modal Pattern — Main Window Disabled)

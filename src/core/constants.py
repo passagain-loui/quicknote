@@ -1,6 +1,6 @@
 """App-wide constants"""
 
 APP_NAME = "QuickNote"
-APP_VERSION = "2.5.8"
+APP_VERSION = "2.5.9"
 APP_AUTHOR = "Passagain P."
 APP_DESCRIPTION = "Notes Always on Top — Python + tkinter + SQLite3"

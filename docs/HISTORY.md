@@ -1,5 +1,71 @@
 # QuickNote Release History
 
+## v2.5.9 (2026-08-20) — TRUE MODAL FIX: Main Window Disable + Scheduler Pause (Final Z-Order Fix)
+
+### 🔧 TRUE MODAL Pattern (Simplest Solution)
+
+**Problem: v2.5.8 Still Has Z-Order Issues**
+- HWND topmost lock helped but not perfect
+- When dropdown closes, OS refocuses main window
+- Main window pops up and covers dialog
+- Root cause: Complex ctypes code conflicts with Tkinter window manager
+
+**Root Cause Analysis:**
+- ctypes SetWindowPos works but conflicts with Tkinter's event loop
+- Window manager doesn't know dialog is modal (Tkinter-level only)
+- When dropdown closes, OS returns focus to root window
+- Root window pops to front, covering dialog
+
+**Simplest Solution: Proper Tkinter Modal**
+- Disable main window entirely while dialog open
+- Windows OS can't refocus disabled windows
+- Re-enable when dialog closes
+- Scheduler already paused (v2.5.8 feature kept)
+
+**Implementation: Two Simple Changes**
+
+**In __init__ (When dialog opens):**
+```python
+self.parent_root.attributes("-disabled", True)  # Disable main window
+```
+
+**In _close_dialog (When dialog closes):**
+```python
+self.parent_root.attributes("-disabled", False)  # Re-enable main window
+self.parent_root.lift()                          # Bring back to front
+self.parent_root.focus_force()                   # Restore focus
+```
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`:
+  * Removed complex ctypes SetWindowPos code (v2.5.8)
+  * Added simple `-disabled` attribute management
+  * Kept scheduler pause functionality (v2.5.8)
+  * Removed ctypes import (no longer needed)
+- `src/core/constants.py`: Version bumped to 2.5.9
+
+**Why This Is Better Than v2.5.8:**
+- Simpler code (3 lines vs 10+ lines with ctypes)
+- No window manager conflicts
+- True Tkinter modal pattern (standard, tested)
+- Prevents all OS refocus attempts (window is literally disabled)
+- Zero performance impact
+
+**Verification:**
+- Dialog opens and stays visible ✅
+- Main window completely disabled (can't click it) ✅
+- Dropdowns work (dialog has focus, can interact) ✅
+- Dialog closes cleanly, main window re-enabled ✅
+- No Z-order jitter or focus theft ✅
+
+**Lesson Learned:**
+- Don't fight window manager with ctypes hacks
+- Use proper modal patterns (disable parent window)
+- Simpler solutions often work better than complex ones
+- True modal: user can't touch main window until dialog closes
+
+---
+
 ## v2.5.8 (2026-08-20) — HARDWARE/OS NUCLEAR FIX: Native HWND Topmost Lock + Scheduler Pause
 
 ### 🔧 OS-Level Z-Order + Scheduler Control
