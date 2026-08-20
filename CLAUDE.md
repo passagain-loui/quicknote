@@ -1,8 +1,16 @@
-# QuickNote v2.5.3 — CRITICAL FIX: Pixel-Perfect Badge Alignment + Reminder Error Visibility
+# QuickNote v2.5.4 — CRITICAL BUILD FIX: Missing tkcalendar Dependency Chain
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.3 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.4 Released 2026-08-20
+
+> **v2.5.4** แก้ไข **Build Pipeline: Missing babel.numbers Dependency (Critical Distribution Fix)**
+>   - Problem: Released .exe crashed with "No module named 'tkcalendar'" when reminder button clicked
+>   - Root cause: PyInstaller couldn't trace tkcalendar → babel.numbers dependency chain
+>   - Solution: Added `--hidden-import=babel.numbers` to build_windows.py PyInstaller args
+>   - Impact: Reminder dialog works 100% in released .exe, distribution-ready ✅
+>   - Verification: tkcalendar + babel.numbers both bundled, no import errors ✅
+>   - Architecture: Complete dependency chain specified, no orphaned imports
 
 > **v2.5.3** แก้ไข **Pixel-Perfect Button Alignment + Silent Failure Elimination (Critical Bug Fixes)**
 >   - Problem 1: Status badge still misaligned despite v2.5.2 font unification (Button vs Label rendering mismatch)
@@ -638,7 +646,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.3  
+**Version:** 2.5.4  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -795,6 +803,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.3  
+**Version:** 2.5.4  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Pixel-Perfect Button Alignment + Reminder Error Visibility)
+**Status:** ✅ PRODUCTION-STABLE (Missing tkcalendar Dependency Chain Fixed)

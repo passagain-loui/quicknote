@@ -78,6 +78,7 @@ def build_exe(debug: bool = False) -> int:
         "--hidden-import=src.platform.tray",
         "--hidden-import=src.platform.hotkey",
         "--hidden-import=tkcalendar",  # v2.0.0: Calendar DatePicker
+        "--hidden-import=babel.numbers",  # v2.5.4: tkcalendar dependency (missing from v2.5.3)
     ]
 
     if not debug:

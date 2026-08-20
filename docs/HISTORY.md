@@ -1,5 +1,44 @@
 # QuickNote Release History
 
+## v2.5.4 (2026-08-20) — CRITICAL BUILD FIX: Missing tkcalendar Dependency + Babel.numbers
+
+### 🔧 Build Pipeline Correction
+
+**Problem: Runtime Module Not Found**
+- Error: `Failed to open reminder dialog: No module named 'tkcalendar'`
+- Occurred when user clicked reminder button in released .exe
+- Root cause: PyInstaller couldn't detect tkcalendar's hidden dependency `babel.numbers`
+- Impact: Reminder dialog completely broken in distributed .exe (worked fine in dev)
+
+**Root Cause: Incomplete Hidden Imports**
+- v2.5.3 build_windows.py had `--hidden-import=tkcalendar`
+- But tkcalendar imports `babel.numbers` internally for locale handling
+- PyInstaller couldn't trace this deep dependency, left it out of .exe bundle
+- Result: tkcalendar module existed, but babel.numbers missing → ImportError
+
+**Solution: Complete Dependency Chain**
+- Added `--hidden-import=babel.numbers` to PyInstaller args
+- Ensures entire tkcalendar dependency tree included in .exe
+- Now both tkcalendar AND babel.numbers bundled together
+- Result: Reminder dialog works 100% in released .exe ✅
+
+**Code Changes:**
+- `build_windows.py`: Added `--hidden-import=babel.numbers` (line 81)
+- `src/core/constants.py`: Version bumped to 2.5.4
+
+**Verification:**
+- tkcalendar + babel.numbers both bundled ✅
+- Reminder dialog opens on click ✅
+- No more "No module named" errors ✅
+- Distribution-ready .exe confirmed ✅
+
+**Lesson Learned:**
+- When adding third-party widgets, audit ALL imports they make
+- Use `--hidden-import` for direct imports AND indirect dependencies
+- Test released .exe thoroughly — dev environment has all packages installed
+
+---
+
 ## v2.5.3 (2026-08-20) — CRITICAL FIX: Button Alignment + Reminder Silent Failure Elimination
 
 ### 🔧 Critical Corrections
