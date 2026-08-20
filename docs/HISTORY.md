@@ -1,5 +1,49 @@
 # QuickNote Release History
 
+## v2.7.2 (2026-08-20) — CLOCK ICON STATE & DING-DONG AUDIO OVERHAUL: Triggered Reminder Reset + Soft Chime
+
+### 🔧 UX & Audio Refinements
+
+**Problem 1: Clock Icon Doesn't Reset When Reminder Triggers**
+- User sets reminder for 15:30
+- Clock icon shows "⏰" (red/active) until 15:30
+- When 15:30 arrives and reminder triggers, icon still shows "⏰" (doesn't change to gray)
+- Root cause: reminder_datetime kept in DB even after reminder_triggered=True
+- Solution: Clear reminder_datetime when reminder triggers (consume the reminder)
+- Result: Icon resets to "⏱" (gray/inactive) when reminder notification shows
+
+**Problem 2: Audio Sound Too Harsh/Jarring**
+- v2.7.1 used Notification.Default which sounds like an error alert
+- User wants softer Ding-Dong tone that's friendly and non-alarming
+- Solution: Replace Notification.Default with MailBeep (soft Ding-Dong sound)
+- Fallback chain: MailBeep → SystemNotification → MessageBeep(MB_OK)
+- Result: Reminder notification plays friendly soft chime, not harsh alert
+
+**Code Changes:**
+- `src/ui/board.py`:
+  * Updated `_trigger_reminder()` to clear reminder_datetime on trigger (line ~723)
+  * Changed from `reminder_triggered=True` to `reminder_datetime=None, reminder_triggered=True`
+  * Added `_load_notes()` refresh in `_show_toast_banner()` to update UI immediately (line ~824)
+  * Updated `_play_notification_alert()` to use MailBeep instead of Notification.Default
+  * Enhanced audio fallback chain: MailBeep → SystemNotification → MessageBeep
+- `src/core/constants.py`: Version bumped to 2.7.2
+
+**Verification:**
+- Set reminder for near-future time ✅
+- Clock icon shows "⏰" (red/active) before reminder time ✅
+- Wait for reminder time to arrive ✅
+- Toast notification appears + audio plays (soft Ding-Dong) ✅
+- Clock icon immediately resets to "⏱" (gray/inactive) ✅
+- Audio is soft and friendly, not jarring ✅
+- Toast auto-hides after 8 seconds ✅
+
+**Architecture Note:**
+- Reminder state machine: reminder_datetime (set) → trigger → clear reminder_datetime (consumed)
+- This prevents re-triggering of the same reminder and gives clear visual feedback
+- Audio is completely non-blocking (threading + SND_ASYNC)
+
+---
+
 ## v2.7.1 (2026-08-20) — BUG FIX & MODERN AUDIO OVERHAUL: Reminder Dialog AttributeError + Windows 11 Notification Chime
 
 ### 🔧 Critical Bug Fixes

@@ -1,8 +1,21 @@
-# QuickNote v2.7.1 — BUG FIX & MODERN AUDIO OVERHAUL: Reminder Dialog AttributeError + Windows 11 Notification Chime
+# QuickNote v2.7.2 — CLOCK ICON STATE & DING-DONG AUDIO OVERHAUL: Triggered Reminder Reset + Soft Chime
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.7.1 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.7.2 Released 2026-08-20
+
+> **v2.7.2** แก้ไข **Clock Icon State & Ding-Dong Audio: Triggered Reminder Reset + Soft Chime (UX Polish)**
+>   - Problem 1: Clock icon doesn't reset when reminder time arrives (stays red/active)
+>   - Problem 2: Audio alert too harsh (sounds like error, not friendly notification)
+>   - Root cause 1: reminder_datetime kept in DB after reminder_triggered=True
+>   - Root cause 2: Notification.Default sound too jarring for gentle reminder
+>   - Solution 1: Clear reminder_datetime when reminder triggers (consume reminder)
+>   - Solution 2: Replace Notification.Default with MailBeep (soft Ding-Dong tone)
+>   - Solution 3: Add fallback chain: MailBeep → SystemNotification → MessageBeep
+>   - Solution 4: Refresh note cards immediately after toast shows (UI state updates)
+>   - Impact: Clock icon resets to gray when reminder triggers, audio is soft & friendly ✅
+>   - Verification: Icon shows ⏰ before trigger, ⏱ after trigger, audio plays soft chime ✅
+>   - Architecture: Reminder state fully consumed on trigger, clear visual feedback
 
 > **v2.7.1** แก้ไข **Bug Fix & Modern Audio: Reminder Dialog AttributeError + Windows 11 Notification Chime (Critical Hotfix)**
 >   - Problem 1: Clicking reminder button crashes with AttributeError (parent_root used before definition)

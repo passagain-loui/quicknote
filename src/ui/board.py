@@ -717,10 +717,11 @@ class Board:
             from src.core.models import Note
             note_obj = Note.from_dict(note_data)
 
-            # v2.6.1: Update DB FIRST (before UI), then show toast safely
-            # This ensures DB state is correct before any UI interaction
+            # v2.7.2: Update DB FIRST (before UI), then show toast safely
+            # Clear reminder_datetime (consume the reminder) and mark as triggered
+            # This makes the clock icon reset back to gray/inactive state
             try:
-                update_note(note_data["id"], reminder_triggered=True)
+                update_note(note_data["id"], reminder_datetime=None, reminder_triggered=True)
             except Exception:
                 pass  # Silently fail on DB update error
 
@@ -820,6 +821,13 @@ class Board:
             self.toast_frame.pack(side="top", fill="x", before=self.search_frame)
             self.toast_visible = True
 
+            # v2.7.2: Refresh note cards to update clock icon state (reminder_triggered changed in DB)
+            # This ensures the clock icon reflects the new reminder state immediately
+            try:
+                self._load_notes()
+            except Exception:
+                pass  # Silently fail if refresh doesn't work
+
             # Auto-hide after 8 seconds
             self.toast_timer = self.root.after(8000, self._hide_toast_banner)
 
@@ -843,15 +851,19 @@ class Board:
         self._on_note_reminder_open(note)
 
     def _play_notification_alert(self):
-        """v2.7.1: Play modern notification alert (Windows 11 style chime + fallback)"""
+        """v2.7.2: Play soft Ding-Dong audio alert (softer than notification, non-jarring)"""
         try:
             import winsound
-            # Modern: Use Windows Notification.Default chime (Windows 11 style)
+            # Primary: Use MailBeep for soft Ding-Dong tone (friendly, not harsh)
             try:
-                winsound.PlaySound("Notification.Default", winsound.SND_ALIAS | winsound.SND_ASYNC)
+                winsound.PlaySound("MailBeep", winsound.SND_ALIAS | winsound.SND_ASYNC)
             except Exception:
-                # Fallback: System notification sound
-                winsound.PlaySound("SystemNotification", winsound.SND_ALIAS | winsound.SND_ASYNC)
+                # Fallback 1: System notification sound
+                try:
+                    winsound.PlaySound("SystemNotification", winsound.SND_ALIAS | winsound.SND_ASYNC)
+                except Exception:
+                    # Fallback 2: Generic beep
+                    winsound.MessageBeep(winsound.MB_OK)
         except Exception:
             pass
 
