@@ -5,9 +5,10 @@ import ctypes
 from .theme import Theme
 from .titlebar import TitleBar
 from .note_card import NoteCard
+from .settings_window import SettingsWindow
 from ..core.models import Note
 from ..core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
-from ..core.database import get_all_notes, get_notes_by_status, create_note, delete_note, update_note
+from ..core.database import get_all_notes, get_notes_by_status, get_note, create_note, delete_note, update_note, update_note_status_only
 
 
 def _get_screen_bounds() -> tuple:
@@ -27,21 +28,28 @@ def _get_screen_bounds() -> tuple:
 class Board:
     """หน้าต่างหลัก — borderless, always-on-top, scrollable + load notes from DB"""
 
-    def __init__(self, geometry: str = "", theme_mode: str = "light"):
+    def __init__(self, geometry: str = "", theme_mode: str = "light", settings_obj=None, on_settings_saved=None, on_open_settings=None):
         self.theme = Theme(theme_mode)
+        self.settings = settings_obj  # Settings object from main.py
+        self.on_settings_saved = on_settings_saved  # Callback when settings are saved
+        self.on_open_settings = on_open_settings  # Callback to open settings window
         self._resize_start_x = 0
         self._resize_start_y = 0
         self.note_cards = {}  # id → NoteCard widget
         self.current_filter = "active"  # 'active' or 'completed'
+        self.settings_window_instance = None  # Singleton Settings window
 
         # Create window
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.config(bg=self.theme.c("bg"))
 
-        # Set geometry (clamp to screen if needed)
-        safe_geometry = self._get_safe_geometry(geometry)
-        self._restore_geometry(safe_geometry)
+        # Set minimum window size (for proper UI layout)
+        # ✓ v1.3.5: Increased from 450 to 500px width for header buttons (Status + Reminder + Delete)
+        self.root.minsize(500, 400)
+
+        # v1.8.6: Withdraw protocol for native centering (prevents top-left glitch)
+        self._center_main_window()
 
         # DPI awareness (อาจจะตั้งไปแล้วใน main.py แต่ทำอีกที่เพื่อให้ปลอดภัย)
         try:
@@ -51,26 +59,63 @@ class Board:
 
         # TitleBar
         self.titlebar = TitleBar(self.root, self.root, self.theme)
+
+        # v1.8.4: Reset unpinned state AFTER titlebar is created (CRITICAL: order matters!)
+        self.root.attributes("-topmost", False)
+        self.titlebar.is_topmost = False
+        if hasattr(self.titlebar, 'btn_window_pin'):
+            self.titlebar.btn_window_pin.config(text="📍")
         self.titlebar.on_new = self._on_new
         self.titlebar.on_close = self._on_close
         self.titlebar.on_minimize = self._on_minimize
         self.titlebar.on_roll_up = self._on_roll_up
+        self.titlebar.on_toggle_topmost = self._on_toggle_topmost  # v1.5.1: window pin
         self.titlebar.on_filter_changed = self._on_filter_changed
 
         # Roll-up state
         self._rolled_up = False
         self._saved_height = 600
 
+        # v2.3.0: Search Bar — Real-time note filtering
+        from tkinter import ttk
+        self.search_frame = tk.Frame(self.root, bg=self.theme.c("bg"), highlightthickness=0)
+        self.search_frame.pack(side="top", fill="x", padx=6, pady=4)
+
+        self.search_label = tk.Label(
+            self.search_frame,
+            text="🔍",
+            bg=self.theme.c("bg"),
+            fg=self.theme.c("fg"),
+            font=("Segoe UI", 10),
+        )
+        self.search_label.pack(side="left", padx=(0, 4))
+
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(
+            self.search_frame,
+            textvariable=self.search_var,
+            width=30,
+            font=("Segoe UI", 9),
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True)
+        self.search_entry.bind("<KeyRelease>", self._on_search)
+
+        # Bind clear button (Escape to clear search)
+        self.search_entry.bind("<Escape>", lambda e: self.search_var.set("") or self._on_search())
+
         # Body — scrollable area
-        self.body_frame = tk.Frame(self.root, bg=self.theme.c("bg"))
+        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
+        self.body_frame = tk.Frame(self.root, bg=self.theme.c("note_bg"), highlightthickness=0)
         self.body_frame.pack(side="top", fill="both", expand=True)
 
         # Canvas + scrollbar pattern
+        # v1.6.1: Ensure canvas has proper background color for seamless Dark Mode
         self.canvas = tk.Canvas(
             self.body_frame,
             bg=self.theme.c("note_bg"),
             highlightthickness=0,
             height=300,
+            bd=0,  # v1.6.1: Remove border
         )
         self.canvas.pack(side="left", fill="both", expand=True)
 
@@ -79,10 +124,23 @@ class Board:
         self.canvas.config(yscrollcommand=self.scrollbar.set)
 
         # Inner frame inside canvas
-        self.inner_frame = tk.Frame(self.canvas, bg=self.theme.c("note_bg"))
+        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
+        self.inner_frame = tk.Frame(self.canvas, bg=self.theme.c("note_bg"), highlightthickness=0)
         self.canvas_window = self.canvas.create_window(
             (0, 0), window=self.inner_frame, anchor="nw"
         )
+
+        # Empty state label (shown when no notes)
+        self.empty_state_label = tk.Label(
+            self.inner_frame,
+            text="ยังไม่มีโน้ต\n\nกดปุ่ม + เพื่อเริ่มสร้างโน้ตแรก",
+            bg=self.theme.c("note_bg"),
+            fg=self.theme.c("fg_muted"),
+            font=("Segoe UI", 11),
+            justify="center",
+            pady=60,
+        )
+        self.empty_state_label.pack(fill="both", expand=True)
 
         # Bind canvas resize to update inner frame width
         self.canvas.bind("<Configure>", self._on_canvas_resize)
@@ -92,10 +150,10 @@ class Board:
         self.canvas.bind("<Button-4>", self._on_mousewheel)   # Linux wheel up
         self.canvas.bind("<Button-5>", self._on_mousewheel)   # Linux wheel down
 
-        # Focus on click
-        self.root.bind("<Button-1>", lambda e: self.root.focus_force(), add="+")
+        # Focus on canvas click only (don't intercept widgets)
+        self.canvas.bind("<Button-1>", lambda e: self.root.focus_force(), add="+")
 
-        # Footer — credit line
+        # Footer — credit line + heartbeat (v2.2.2)
         footer_frame = tk.Frame(self.root, bg=self.theme.c("bg"))
         footer_frame.pack(side="bottom", fill="x", padx=8, pady=4)
 
@@ -108,6 +166,37 @@ class Board:
             font=("Segoe UI", 7),
         )
         self.footer_label.pack(side="left")
+
+        # Heartbeat indicator (v2.2.2) — shows scheduler is running
+        self.heartbeat_label = tk.Label(
+            footer_frame,
+            text="● Scheduler: Running",
+            bg=self.theme.c("bg"),
+            fg="#4CAF50",  # Green for active
+            font=("Segoe UI", 7),
+        )
+        self.heartbeat_label.pack(side="right", padx=(8, 0))
+
+        # Settings button (⚙) — right side of footer
+        self.btn_settings = tk.Button(
+            footer_frame,
+            text="⚙",
+            bg=self.theme.c("bg"),
+            fg=self.theme.c("fg"),
+            font=("Segoe UI Symbol", 10),
+            bd=0,
+            relief="flat",
+            activebackground=self.theme.c("bg_hover"),
+            activeforeground=self.theme.c("fg"),
+            command=self._open_settings,
+            padx=4,
+            pady=1,
+        )
+        self.btn_settings.pack(side="right", padx=(0, 4))
+
+        # Store references for theme refresh
+        self.footer_frame = footer_frame
+        self.footer_label = self.footer_label  # Already set above
 
         # Resize handle (corner)
         self.resize_corner = tk.Label(
@@ -133,8 +222,14 @@ class Board:
         # Re-apply topmost every 3 seconds (Windows bug)
         self._reapply_topmost()
 
+        # v1.6.0: Register as theme change listener for real-time updates
+        self.theme.register_theme_change_listener(self._on_theme_changed)
+
         # Load notes from database
         self._load_notes()
+
+        # Start reminder checker (v1.3.0) — non-blocking, runs every 5 seconds
+        self._check_reminders()
 
     def _get_safe_geometry(self, geometry: str) -> str:
         """ตรวจสอบ geometry — ถ้าไม่ปลอดภัยให้ center ที่จอ"""
@@ -142,7 +237,7 @@ class Board:
         if not geometry or "x" not in geometry.lower():
             # ไม่มี geometry → center ที่จอ
             screen_x, screen_y, screen_w, screen_h = _get_screen_bounds()
-            w, h = 400, 600
+            w, h = 450, 550
             x = screen_x + (screen_w - w) // 2
             y = screen_y + (screen_h - h) // 2
             return f"{w}x{h}+{x}+{y}"
@@ -157,7 +252,7 @@ class Board:
         except (ValueError, IndexError):
             # Parse failed → center
             screen_x, screen_y, screen_w, screen_h = _get_screen_bounds()
-            w, h = 400, 600
+            w, h = 450, 550
             x = screen_x + (screen_w - w) // 2
             y = screen_y + (screen_h - h) // 2
             return f"{w}x{h}+{x}+{y}"
@@ -177,6 +272,40 @@ class Board:
     def _restore_geometry(self, geometry: str) -> None:
         """โหลด geometry ปลอดภัยลงหน้าต่าง"""
         self.root.geometry(geometry)
+
+    def _center_main_window(self) -> None:
+        """v1.8.6: Native window centering with withdraw protocol (prevents top-left glitch)"""
+        try:
+            # Hide window during positioning (withdraw protocol)
+            self.root.withdraw()
+            self.root.update_idletasks()
+
+            # Get screen dimensions
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+
+            # If we got valid screen dimensions (>100px), use calculated center
+            if screen_w > 100 and screen_h > 100:
+                win_w, win_h = 420, 600
+                x = int((screen_w - win_w) / 2)
+                y = int((screen_h - win_h) / 2)
+                self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+            else:
+                # Timing bug: winfo_screenwidth() returned 0
+                # Fallback to native Tkinter centering engine
+                try:
+                    self.root.eval('tk::PlaceWindow . center')
+                except Exception:
+                    pass
+
+            # Show window after positioning
+            self.root.deiconify()
+        except Exception:
+            # Fallback: just show the window
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass
 
     def _on_canvas_resize(self, event):
         """ปรับความกว้างของ inner frame ให้เท่า canvas"""
@@ -199,6 +328,10 @@ class Board:
 
     def _load_notes(self):
         """อ่านโน้ตตาม current_filter จาก DB แล้วแสดง"""
+        # v2.3.0: Clear search when reloading notes (except from search event itself)
+        if hasattr(self, 'search_var'):
+            self.search_var.set("")
+
         # ลบการ์ดเก่าออกทั้งหมด
         for card in self.note_cards.values():
             card.pack_forget()
@@ -207,13 +340,43 @@ class Board:
 
         # โหลดตาม filter
         notes_data = get_notes_by_status(self.current_filter)
-        for row in notes_data:
-            note = Note.from_dict(row)
-            card = NoteCard(self.inner_frame, note, self.theme)
-            card.on_update = lambda n=note: self._on_note_update(n)
-            card.on_delete_note = lambda n=note: self._on_note_delete(n)
-            card.pack(fill="x", padx=4, pady=4)
-            self.note_cards[note.id] = card
+
+        if not notes_data:
+            # Show empty state (create if not exists)
+            if not hasattr(self, '_empty_state_created') or not self._empty_state_created:
+                self.empty_state_label = tk.Label(
+                    self.inner_frame,
+                    text="ยังไม่มีโน้ต\n\nกดปุ่ม + เพื่อเริ่มสร้างโน้ตแรก",
+                    bg=self.theme.c("note_bg"),
+                    fg=self.theme.c("fg_muted"),
+                    font=("Segoe UI", 11),
+                    justify="center",
+                    pady=60,
+                )
+                self._empty_state_created = True
+            self.empty_state_label.pack(fill="both", expand=True, pady=60)
+        else:
+            # Destroy empty state completely (no layout gap)
+            if hasattr(self, 'empty_state_label'):
+                try:
+                    if self.empty_state_label.winfo_exists():
+                        self.empty_state_label.destroy()
+                except Exception:
+                    pass
+                self._empty_state_created = False
+
+            # Load notes
+            for row in notes_data:
+                note = Note.from_dict(row)
+                # ✓ v1.3.8: Pass tab info so NoteCard can show different icons
+                is_completed_tab = (self.current_filter == "completed")
+                card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=is_completed_tab)
+                card.on_update = lambda n=note: self._on_note_update(n)
+                card.on_status_update = lambda n=note: self._on_note_status_update(n)  # v1.3.9: status-only
+                card.on_pin_change = lambda: self._load_notes()  # v1.5.0: Re-sort on pin change
+                card.on_delete_note = lambda n=note: self._on_note_delete(n)
+                card.pack(fill="x", padx=4, pady=4)
+                self.note_cards[note.id] = card
 
         # Update scroll region
         self.root.after(100, lambda: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
@@ -221,12 +384,94 @@ class Board:
     def _on_filter_changed(self, new_filter: str):
         """เมื่อเปลี่ยน filter (Active ↔ Completed)"""
         self.current_filter = new_filter
-        self._load_notes()
+        self._load_notes()  # This will clear search via _load_notes()
+
+    def _on_search(self, event=None):
+        """v2.3.0: Real-time search filter — show/hide notes based on keyword match"""
+        keyword = self.search_var.get().lower().strip()
+
+        # If search is empty, show all notes
+        if not keyword:
+            for card in self.note_cards.values():
+                card.pack(fill="x", padx=4, pady=4)
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            return
+
+        # Filter notes: match title or content
+        for note_id, card in self.note_cards.items():
+            note = card.note if hasattr(card, 'note') else None
+            if note:
+                title_match = keyword in note.title.lower()
+                content_match = keyword in note.content.lower()
+                if title_match or content_match:
+                    card.pack(fill="x", padx=4, pady=4)
+                else:
+                    card.pack_forget()
+            else:
+                card.pack(fill="x", padx=4, pady=4)
+
+        # Update scroll region
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _open_settings(self):
+        """Settings button (⚙) clicked — open SettingsWindow (singleton pattern)"""
+        try:
+            # Singleton check: if Settings window already open, just lift it to front
+            if self.settings_window_instance:
+                try:
+                    if self.settings_window_instance.root.winfo_exists():
+                        print("[UI] Settings Window already open — lifting to front")
+                        self.settings_window_instance.root.lift()
+                        self.settings_window_instance.root.focus_force()
+                        return
+                except Exception:
+                    self.settings_window_instance = None
+
+            print("[UI] Opening Settings Window...")
+
+            # Check if settings object exists
+            if not self.settings:
+                import tkinter.messagebox as msgbox
+                msgbox.showerror("Settings Error", "Settings object not initialized")
+                return
+
+            # Pass settings object directly (not copy) so changes sync back
+            # SettingsWindow needs reference to settings dict, not a copy
+            settings_data = self.settings if isinstance(self.settings, dict) else (
+                self.settings.data if hasattr(self.settings, 'data') else {}
+            )
+
+            # Create new SettingsWindow (only if not already open)
+            # v1.5.2: Add on_window_closed callback to clear reference when window is closed
+            self.settings_window_instance = SettingsWindow(
+                self.root,
+                settings_data,  # Pass reference, not copy
+                self.theme,
+                on_save_callback=self._on_settings_saved,
+                main_root=self.root,  # Main QuickNote window for opacity/theme
+                on_window_closed=self._on_settings_window_closed  # v1.5.2: garbage collection fix
+            )
+            print("[OK] Settings Window opened successfully")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to open settings: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Show error to user
+            try:
+                import tkinter.messagebox as msgbox
+                msgbox.showerror("Settings Error", f"Cannot open settings window:\n{str(e)}")
+            except Exception as err:
+                print(f"[ERROR] Failed to show error dialog: {err}")
 
     def _on_note_update(self, note: Note):
-        """เมื่อมีการแก้ไขโน้ต — เซฟ DB + refresh UI"""
+        """v2.2.3: Save note updates including reminder fields"""
+        # Save all note fields including reminder_datetime and reminder_triggered
         update_note(note.id, title=note.title, content=note.content,
-                   status=note.status, collapsed=note.collapsed)
+                   status=note.status, collapsed=note.collapsed,
+                   reminder_datetime=note.reminder_datetime,
+                   reminder_triggered=note.reminder_triggered)
 
         # ถ้า status เปลี่ยนและไม่ตรงกับ filter ปัจจุบัน ให้ลบออก
         if note.status != self.current_filter:
@@ -236,6 +481,29 @@ class Board:
                 del self.note_cards[note.id]
 
         # Refresh scroll region (เนื่องจากการพับ/กางอาจเปลี่ยนขนาด)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_note_status_update(self, note: Note):
+        """v1.3.9: อัปเดตสถานะเท่านั้น (ไม่แตะ title/content) — prevent corruption on status change"""
+        # v1.4.0: Fetch fresh data from DB before saving to ensure content payload is complete
+        fresh_note_data = get_note(note.id)
+        if fresh_note_data:
+            # Update note object with fresh database state
+            note.title = fresh_note_data.get("title", note.title)
+            note.content = fresh_note_data.get("content", note.content)
+            note.collapsed = fresh_note_data.get("collapsed", note.collapsed)
+
+        # Save status change only
+        update_note_status_only(note.id, status=note.status)
+
+        # ถ้า status เปลี่ยนและไม่ตรงกับ filter ปัจจุบัน ให้ลบออก
+        if note.status != self.current_filter:
+            if note.id in self.note_cards:
+                self.note_cards[note.id].pack_forget()
+                self.note_cards[note.id].destroy()
+                del self.note_cards[note.id]
+
+        # Refresh scroll region
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _on_note_delete(self, note: Note):
@@ -257,8 +525,11 @@ class Board:
             "status": "active",
             "collapsed": False,
         })
-        card = NoteCard(self.inner_frame, note, self.theme)
+        # ✓ v1.3.8: Pass tab info (new notes always start in active tab)
+        card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=False)
         card.on_update = lambda n=note: self._on_note_update(n)
+        card.on_status_update = lambda n=note: self._on_note_status_update(n)  # v1.3.9: status-only
+        card.on_pin_change = lambda: self._load_notes()  # v1.5.0: Re-sort on pin change
         card.on_delete_note = lambda n=note: self._on_note_delete(n)
         card.pack(fill="x", padx=4, pady=4)
         self.note_cards[note.id] = card
@@ -303,8 +574,50 @@ class Board:
             self.root.geometry(f"{w}x32+{x}+{y}")
             self._rolled_up = True
 
+    def _on_toggle_topmost(self, is_topmost: bool):
+        """Toggle window always-on-top state — v1.5.1"""
+        self.root.attributes("-topmost", is_topmost)
+
+    def _on_settings_window_closed(self):
+        """Settings window closed — v1.5.2: clear reference for garbage collection"""
+        print("[UI] Settings window closed — clearing reference")
+        self.settings_window_instance = None
+
+    def _on_theme_changed(self, theme):
+        """Handle real-time theme changes — v1.6.0: broadcast to all UI elements"""
+        try:
+            print(f"[Board] Theme changed to {theme.mode}, updating all UI...")
+            self.theme = theme
+            # Update main window colors
+            self.root.config(bg=theme.c("bg"))
+            # Update canvas
+            self.canvas.config(bg=theme.c("note_bg"))
+            # Update scrollbar
+            self.scrollbar.config(troughcolor=theme.c("bg"))
+            # Update footer
+            self.footer_frame.config(bg=theme.c("bg"))
+            self.footer_label.config(bg=theme.c("bg"), fg=theme.c("fg_muted"))
+            self.btn_settings.config(bg=theme.c("bg"), fg=theme.c("fg"),
+                                    activebackground=theme.c("bg_hover"))
+            # Update titlebar
+            self.titlebar.apply_theme(theme)
+            # Update all note cards
+            for card in self.note_cards.values():
+                try:
+                    card.apply_theme(theme)
+                except Exception as e:
+                    print(f"[Board] Failed to update card theme: {e}")
+            print("[Board] All UI elements updated")
+        except Exception as e:
+            print(f"[Board] Failed to update theme: {e}")
+
     def _on_close(self):
         """ปุ่ม close — ปิดโปรแกรม"""
+        # v1.8.2: Safety guard — release any modal grab before closing
+        try:
+            self.root.grab_release()
+        except Exception:
+            pass
         self.root.quit()
 
     def _reapply_topmost(self):
@@ -314,6 +627,201 @@ class Board:
         except Exception:
             pass
         self.root.after(3000, self._reapply_topmost)
+
+    def _check_reminders(self):
+        """v2.2.3: Unbreakable reminder scheduler with visual debug (next reminder display)"""
+        try:
+            from datetime import datetime
+            from src.core.database import get_next_due_reminder
+
+            # Update heartbeat indicator with next due reminder (v2.2.3)
+            try:
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                next_reminder = get_next_due_reminder()
+                next_text = next_reminder if next_reminder else "None"
+                self.heartbeat_label.config(
+                    text=f"● Scheduler: {timestamp} | Next: {next_text}"
+                )
+            except Exception:
+                pass  # Silently fail heartbeat update
+
+            # Get all notes and check reminders
+            try:
+                all_notes = get_all_notes()
+            except Exception:
+                all_notes = []
+
+            # Use string comparison for reliability (ISO format: YYYY-MM-DD HH:MM)
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            for note_data in all_notes:
+                try:
+                    # Skip if no reminder set
+                    if not note_data.get("reminder_datetime"):
+                        continue
+
+                    # Skip if already triggered
+                    if note_data.get("reminder_triggered"):
+                        continue
+
+                    # Get reminder time string (should be ISO format)
+                    reminder_str = note_data.get("reminder_datetime", "")
+                    if not reminder_str:
+                        continue
+
+                    # Safe string comparison: "2026-08-20 14:30" <= "2026-08-20 14:35"
+                    # This avoids datetime parsing exceptions entirely
+                    if reminder_str <= now_str:
+                        # Trigger reminder notification
+                        try:
+                            self._trigger_reminder(note_data)
+                        except Exception:
+                            pass  # Silently fail on notification error
+
+                        # Mark as triggered in DB
+                        try:
+                            update_note(note_data["id"], reminder_triggered=True)
+                        except Exception:
+                            pass  # Silently fail on DB update error
+
+                except Exception:
+                    # Silently skip this note on any error
+                    pass
+
+        except Exception:
+            # Catch-all for any unexpected exception
+            pass
+
+        finally:
+            # v2.1.1: GUARANTEED to reschedule, unbreakable loop
+            # This ensures scheduler never dies, even on catastrophic failure
+            self.root.after(5000, self._check_reminders)
+
+    def _trigger_reminder(self, note_data: dict):
+        """v2.1.0: Show desktop notification + play audio alert (System Sound + Fallback Beeps)"""
+        try:
+            # Convert note_data dict to Note object
+            from src.core.models import Note
+            note_obj = Note.from_dict(note_data)
+
+            # Import notification popup
+            from .notification import NotificationPopup
+
+            # Show notification popup at bottom-right corner
+            NotificationPopup(
+                self.root,
+                note_obj,
+                self.theme,
+                on_dismiss=lambda: None,
+                on_open=lambda: self._on_note_reminder_open(note_obj)
+            )
+        except Exception:
+            pass  # Silently fail to avoid blocking UI
+
+    def _on_note_reminder_open(self, note):
+        """Callback when 'Open Note' clicked from reminder notification"""
+        try:
+            # Scroll to note in the view
+            self._show_note_in_view(note)
+        except Exception:
+            pass
+
+    def _on_settings_saved(self):
+        """Called when settings are saved — refresh UI (theme/alpha changes)"""
+        try:
+            if self.settings:
+                # Get settings dict (handle both dict and Settings object)
+                settings_dict = self.settings if isinstance(self.settings, dict) else (
+                    self.settings.data if hasattr(self.settings, 'data') else {}
+                )
+
+                # Handle opacity change
+                new_alpha = settings_dict.get("alpha", 1.0)
+                try:
+                    new_alpha = float(new_alpha)
+                    new_alpha = max(0.2, min(1.0, new_alpha))
+                    self.root.attributes("-alpha", new_alpha)
+                    self.root.update_idletasks()
+                    print(f"[UI] Applied opacity: {new_alpha:.0%}")
+                except Exception as e:
+                    print(f"[WARN] Failed to apply opacity: {e}")
+
+                # Handle theme change — always refresh to ensure colors sync
+                new_theme_mode = settings_dict.get("theme", "light")
+                print(f"[UI] Setting theme to {new_theme_mode}...")
+                self.theme.set_mode(new_theme_mode)
+                self._refresh_ui_colors()
+                print("[OK] UI colors refreshed")
+
+        except Exception as e:
+            print(f"[WARN] Failed to refresh UI: {e}")
+
+    def _refresh_ui_colors(self):
+        """Refresh all UI widget colors based on current theme"""
+        try:
+            # Refresh main window background
+            self.root.config(bg=self.theme.c("bg"))
+            self.body_frame.config(bg=self.theme.c("bg"))
+            self.canvas.config(bg=self.theme.c("note_bg"), highlightthickness=0)
+            self.inner_frame.config(bg=self.theme.c("note_bg"))
+            self.scrollbar.config(bg=self.theme.c("bg"), troughcolor=self.theme.c("bg"))
+            self.empty_state_label.config(
+                bg=self.theme.c("note_bg"),
+                fg=self.theme.c("fg_muted"),
+                font=("Segoe UI", 11)
+            )
+
+            # Refresh titlebar colors
+            if hasattr(self, 'titlebar') and self.titlebar:
+                self.titlebar.root.config(bg=self.theme.c("bg"))
+                # Refresh titlebar filter buttons
+                try:
+                    for btn in [self.titlebar.btn_active, self.titlebar.btn_completed]:
+                        if btn:
+                            btn.config(bg=self.theme.c("bg"), fg=self.theme.c("fg"))
+                except Exception:
+                    pass
+
+            # Refresh footer colors
+            if hasattr(self, 'footer_frame') and self.footer_frame:
+                self.footer_frame.config(bg=self.theme.c("bg"))
+                if hasattr(self, 'footer_label'):
+                    self.footer_label.config(bg=self.theme.c("bg"), fg=self.theme.c("fg_muted"))
+                if hasattr(self, 'btn_settings'):
+                    self.btn_settings.config(bg=self.theme.c("bg"), fg=self.theme.c("fg"),
+                                           activebackground=self.theme.c("bg_hover"))
+
+            # Refresh ALL note cards — this is critical for theme change!
+            print(f"[UI] Updating {len(self.note_cards)} note cards...")
+            for card_id, card in self.note_cards.items():
+                try:
+                    # Update card widget colors
+                    card.config(bg=self.theme.c("bg"))
+                    # Update card internal structure (if has update_theme method)
+                    if hasattr(card, 'update_theme'):
+                        card.update_theme(self.theme)
+                    # Fallback: manually update key card elements
+                    else:
+                        # Update main frame
+                        if hasattr(card, 'main_frame'):
+                            card.main_frame.config(bg=self.theme.c("note_bg"))
+                        # Update header elements
+                        if hasattr(card, 'title_entry'):
+                            card.title_entry.config(bg=self.theme.c("note_bg"), fg=self.theme.c("fg"))
+                        if hasattr(card, 'content_text'):
+                            card.content_text.config(bg=self.theme.c("note_bg"), fg=self.theme.c("fg"))
+                except Exception as card_err:
+                    print(f"[WARN] Failed to update card {card_id}: {card_err}")
+
+            # Force UI redraw with new colors
+            self.root.update_idletasks()
+            self.root.update()
+            print("[OK] All UI colors refreshed successfully")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to refresh colors: {e}")
+            import traceback
+            traceback.print_exc()
 
     def add_note_card(self, widget: tk.Widget) -> None:
         """เพิ่ม note card ลงใน inner frame (legacy method)"""
