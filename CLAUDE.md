@@ -1,9 +1,20 @@
-# QuickNote v2.3.2 — Bug Fixes: Direct Reminder Persistence + Minimal Search Icon + Data Persistence Guaranteed
+# QuickNote v2.4.0 — Major Features: Immediate Reminder Execution + Database Backup/Restore Engine
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Data Persistence
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.3.2 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.4.0 Released 2026-08-20
 
+> **v2.4.0** เพิ่ม **Immediate Reminder Execution + Database Backup/Restore Engine (Major Features)**
+>   - Feature 1: Reminders trigger immediately when set (no 5-second wait for next cycle)
+>   - Feature 2: Full database backup/restore engine with file dialogs
+>   - Feature 3: Users can backup to any location and restore with confirmation
+>   - Solution 1: Call `self.parent._check_reminders()` in reminder_dialog after saving
+>   - Solution 2: Added backup_database() and restore_database() functions to core/database.py
+>   - Solution 3: Added "Backup Data" + "Restore Data" buttons in Settings window
+>   - Impact: Immediate reminder feedback, users have full control over data backup
+>   - Verification: Reminders execute instantly, backup/restore work correctly ✅
+>   - Architecture: Direct method calls for immediate feedback, file dialogs for max flexibility
+>
 > **v2.3.2** แก้ไข **Direct Reminder Persistence + Search Icon Redesign (Critical Bug Fixes)**
 >   - Problem 1: Reminder still doesn't save (callback chain has too many layers)
 >   - Problem 2: Search icon is too dark/heavy (doesn't match minimal design)
@@ -588,9 +599,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.3.2  
+**Version:** 2.4.0  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Direct Reminder Persistence + Minimal Search Icon)
+**Status:** ✅ PRODUCTION-STABLE (Immediate Reminder Execution + Database Backup/Restore)
 
 ## 🔧 Build Workflow
 
@@ -745,6 +756,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.3.2  
+**Version:** 2.4.0  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Direct Reminder Persistence + Minimal Search Icon)
+**Status:** ✅ PRODUCTION-STABLE (Immediate Reminder Execution + Database Backup/Restore)

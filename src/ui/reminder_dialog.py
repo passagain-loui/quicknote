@@ -289,6 +289,10 @@ class ReminderDialog:
             if hasattr(self.parent, '_load_notes') and callable(self.parent._load_notes):
                 self.parent._load_notes()
 
+            # v2.4.0: Trigger reminder check immediately (no 5-second wait)
+            if hasattr(self.parent, '_check_reminders') and callable(self.parent._check_reminders):
+                self.parent._check_reminders()
+
             # Legacy callback for compatibility
             self.on_save()
             self._close_dialog()
@@ -310,6 +314,10 @@ class ReminderDialog:
         # Refresh UI immediately
         if hasattr(self.parent, '_load_notes') and callable(self.parent._load_notes):
             self.parent._load_notes()
+
+        # v2.4.0: Trigger reminder check immediately (no 5-second wait)
+        if hasattr(self.parent, '_check_reminders') and callable(self.parent._check_reminders):
+            self.parent._check_reminders()
 
         # Legacy callback for compatibility
         self.on_clear()

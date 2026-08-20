@@ -26,12 +26,47 @@ def init_db() -> None:
             status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed')),
             collapsed BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            completed_at TIMESTAMP
+            completed_at TIMESTAMP,
+            priority TEXT DEFAULT 'none' CHECK(priority IN ('none', 'low', 'medium', 'high')),
+            reminder_datetime TEXT,
+            reminder_triggered BOOLEAN DEFAULT 0,
+            is_pinned BOOLEAN DEFAULT 0
         )
     """)
 
     conn.commit()
     conn.close()
+    _migrate_db_schema()  # v1.3.0: ensure old DB gets new columns
+    sanitize_reminders()  # v2.2.2: clean corrupted reminder times on startup
+
+
+def _migrate_db_schema() -> None:
+    """ตรวจและเพิ่มคอลัมน์ใหม่สำหรับ v1.3.0+ (priority, reminders, pinning)"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    try:
+        # ตรวจว่าคอลัมน์มีอยู่หรือไม่
+        c.execute("PRAGMA table_info(notes)")
+        columns = {row[1] for row in c.fetchall()}
+
+        # เพิ่มคอลัมน์ใหม่ถ้ายังไม่มี
+        if "priority" not in columns:
+            c.execute("ALTER TABLE notes ADD COLUMN priority TEXT DEFAULT 'none'")
+        if "reminder_datetime" not in columns:
+            c.execute("ALTER TABLE notes ADD COLUMN reminder_datetime TEXT")
+        if "reminder_triggered" not in columns:
+            c.execute("ALTER TABLE notes ADD COLUMN reminder_triggered BOOLEAN DEFAULT 0")
+        if "is_pinned" not in columns:
+            # v1.5.0: Add pinning support
+            c.execute("ALTER TABLE notes ADD COLUMN is_pinned BOOLEAN DEFAULT 0")
+
+        conn.commit()
+    except sqlite3.OperationalError as e:
+        # ถ้า constraint ขัดแย้ง ให้ rollback ซ้ำ ไม่ต้องทำลายฐานข้อมูล
+        conn.rollback()
+    finally:
+        conn.close()
 
 
 def create_note(title: str, content: str = "") -> str:
@@ -64,12 +99,24 @@ def get_all_notes() -> list[dict]:
 
 
 def get_notes_by_status(status: str) -> list[dict]:
-    """อ่านโน้ตตามสถานะ (active/completed)"""
+    """อ่านโน้ตตามสถานะ (active/completed) — v1.5.0: sorted by pinned + priority"""
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    c.execute("SELECT * FROM notes WHERE status = ? ORDER BY created_at DESC", (status,))
+    # v1.5.0: Sort by is_pinned DESC (pinned first), then priority DESC, then created_at DESC
+    c.execute("""
+        SELECT * FROM notes
+        WHERE status = ?
+        ORDER BY is_pinned DESC,
+                 CASE priority
+                   WHEN 'high' THEN 0
+                   WHEN 'medium' THEN 1
+                   WHEN 'low' THEN 2
+                   ELSE 3
+                 END,
+                 created_at DESC
+    """, (status,))
     notes = [dict(row) for row in c.fetchall()]
 
     conn.close()
@@ -78,8 +125,11 @@ def get_notes_by_status(status: str) -> list[dict]:
 
 def update_note(note_id: str, title: Optional[str] = None,
                 content: Optional[str] = None, status: Optional[str] = None,
-                collapsed: Optional[bool] = None) -> None:
-    """อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน"""
+                collapsed: Optional[bool] = None, priority: Optional[str] = None,
+                reminder_datetime: Optional[str] = None,
+                reminder_triggered: Optional[bool] = None,
+                is_pinned: Optional[bool] = None) -> None:
+    """อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (v1.5.0: supports pinning)"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
@@ -101,6 +151,50 @@ def update_note(note_id: str, title: Optional[str] = None,
     if collapsed is not None:
         updates.append("collapsed = ?")
         params.append(collapsed)
+    if priority is not None:
+        updates.append("priority = ?")
+        params.append(priority)
+    if reminder_datetime is not None:
+        updates.append("reminder_datetime = ?")
+        params.append(reminder_datetime)
+    if reminder_triggered is not None:
+        updates.append("reminder_triggered = ?")
+        params.append(reminder_triggered)
+    if is_pinned is not None:
+        # v1.5.0: Add pinning support
+        updates.append("is_pinned = ?")
+        params.append(is_pinned)
+
+    if updates:
+        params.append(note_id)
+        sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
+        c.execute(sql, params)
+        conn.commit()
+
+    conn.close()
+
+
+def update_note_status_only(note_id: str, status: str,
+                           reminder_triggered: Optional[bool] = None) -> None:
+    """อัปเดตสถานะของโน้ตเท่านั้น (v1.3.9: prevent title/content corruption on status change)"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    updates = []
+    params = []
+
+    # Always update status
+    updates.append("status = ?")
+    params.append(status)
+
+    if status == "completed":
+        updates.append("completed_at = ?")
+        params.append(datetime.now().isoformat())
+
+    # Optional: update reminder_triggered
+    if reminder_triggered is not None:
+        updates.append("reminder_triggered = ?")
+        params.append(reminder_triggered)
 
     if updates:
         params.append(note_id)
@@ -131,6 +225,141 @@ def get_note(note_id: str) -> Optional[dict]:
 
     conn.close()
     return dict(row) if row else None
+
+
+def get_next_due_reminder() -> Optional[str]:
+    """v2.2.3: Get the next due reminder datetime for UI display
+
+    Returns the earliest reminder_datetime that:
+    - Has a value (not NULL)
+    - Not yet triggered
+    - Chronologically in the future (greater than current time)
+
+    Format: "YYYY-MM-DD HH:MM" or None if no due reminders
+    """
+    try:
+        from datetime import datetime
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+
+        # Get current time in ISO format (YYYY-MM-DD HH:MM)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # Find earliest reminder that's not triggered and in the future
+        c.execute("""
+            SELECT MIN(reminder_datetime) FROM notes
+            WHERE reminder_datetime IS NOT NULL
+            AND reminder_triggered = 0
+            AND reminder_datetime > ?
+        """, (now_str,))
+
+        result = c.fetchone()
+        conn.close()
+
+        if result and result[0]:
+            return result[0]
+        return None
+    except Exception:
+        return None
+
+
+def sanitize_reminders() -> None:
+    """v2.2.2: Clean corrupted reminder datetime values
+
+    Fixes reminders with invalid format:
+    - Length != 16 chars (YYYY-MM-DD HH:MM is exactly 16)
+    - Format doesn't match YYYY-MM-DD HH:MM pattern
+
+    Sets reminder_datetime = NULL for any corrupted values
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+
+        # Get all reminders
+        c.execute("SELECT id, reminder_datetime FROM notes WHERE reminder_datetime IS NOT NULL")
+        rows = c.fetchall()
+
+        cleaned = 0
+        for row_id, reminder_str in rows:
+            # Validate format: must be exactly "YYYY-MM-DD HH:MM" (16 chars)
+            if not reminder_str or len(str(reminder_str)) != 16:
+                # Invalid length — clear it
+                c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
+                cleaned += 1
+                continue
+
+            # Validate format: must parse as YYYY-MM-DD HH:MM
+            try:
+                datetime.strptime(str(reminder_str), "%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                # Invalid format — clear it
+                c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
+                cleaned += 1
+
+        if cleaned > 0:
+            conn.commit()
+            print(f"[Sanitize] Cleaned {cleaned} corrupted reminder(s)")
+
+        conn.close()
+    except Exception as e:
+        print(f"[Sanitize Error] {e}")
+
+
+def backup_database(target_path: str) -> bool:
+    """v2.4.0: Backup database to specified location
+
+    Args:
+        target_path: Full file path where backup should be saved (e.g., "C:/Users/user/Desktop/notes_backup.db")
+
+    Returns:
+        True if backup successful, False otherwise
+    """
+    try:
+        import shutil
+        # Ensure source database exists
+        if not DB_FILE.exists():
+            return False
+        # Copy database file to target location
+        shutil.copy2(str(DB_FILE), target_path)
+        return True
+    except Exception as e:
+        print(f"[Backup Error] {e}")
+        return False
+
+
+def restore_database(backup_path: str) -> bool:
+    """v2.4.0: Restore database from backup file
+
+    Args:
+        backup_path: Full file path of backup database to restore (e.g., "C:/Users/user/Desktop/notes_backup.db")
+
+    Returns:
+        True if restore successful, False otherwise
+    """
+    try:
+        import shutil
+        # Ensure backup file exists
+        backup_file = Path(backup_path)
+        if not backup_file.exists():
+            return False
+
+        # Close any open connections (safety measure)
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.close()
+        except Exception:
+            pass
+
+        # Restore by copying backup over current database
+        shutil.copy2(str(backup_path), str(DB_FILE))
+
+        # Verify database integrity (run migrations)
+        init_db()
+        return True
+    except Exception as e:
+        print(f"[Restore Error] {e}")
+        return False
 
 
 if __name__ == "__main__":

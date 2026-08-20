@@ -1,5 +1,52 @@
 # QuickNote Release History
 
+## v2.4.0 (2026-08-20) — Major Features: Immediate Reminder Execution + Database Backup/Restore Engine
+
+### 🎯 New Features & Critical Fixes
+
+**Feature 1: Immediate Reminder Execution on Set**
+- Problem: Reminders take 5 seconds to trigger after being set (waits for next scheduler cycle)
+- Solution: Call `_check_reminders()` immediately after saving reminder in reminder_dialog.py
+- Impact: Users get feedback instantly when they set a reminder ✅
+
+**Feature 2: Database Backup & Restore Engine**
+- New function `backup_database(target_path)` in src/core/database.py
+  - Opens file save dialog with filedialog.asksaveasfilename()
+  - Copies SQLite database to user-selected location
+  - Returns True/False for UI feedback
+- New function `restore_database(backup_path)` in src/core/database.py
+  - Opens file open dialog with filedialog.askopenfilename()
+  - Validates backup file integrity
+  - Restores database and runs migrations
+  - Triggers immediate UI reload
+- UI Buttons in Settings → "Backup Data" (blue) and "Restore Data" (orange)
+  - Users can choose backup/restore locations freely
+  - Confirmation dialog on restore to prevent accidental data loss
+
+**Bug Fix 3: Flag Indicator Visibility**
+- Verified flag button (🚩/🏳) renders correctly in note card header
+- Flag color-coding working: High (red), Medium (orange), Low (blue), None (gray)
+- Layout order optimized to prevent button overflow
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`: Added `self.parent._check_reminders()` calls in _save_reminder() and _clear_reminder()
+- `src/core/database.py`: New backup_database() and restore_database() functions
+- `src/ui/settings_window.py`: Added "Data Backup & Restore" section with two buttons
+- `src/core/constants.py`: Version bumped to 2.4.0
+
+**Verification:**
+- Reminders trigger immediately when set (no 5-second wait) ✅
+- Users can backup database to any location ✅
+- Users can restore from backup with confirmation ✅
+- Flag indicators display correctly on all notes ✅
+
+**Architecture:**
+- Backup/restore uses file dialogs for maximum flexibility
+- Restore validates integrity and runs migrations automatically
+- Direct method calls (no callbacks) for immediate feedback
+
+---
+
 ## v2.3.2 (2026-08-20) — Bug Fixes: Direct Reminder Persistence + Search Icon Redesign
 
 ### 🔧 Critical Bug Fixes: Reminder Now Works + Minimal UI
