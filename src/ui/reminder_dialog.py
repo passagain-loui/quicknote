@@ -49,39 +49,25 @@ class ReminderDialog:
 
         self.dialog.geometry(f"{dialog_w}x{dialog_h}+{x}+{y}")
 
-        # v2.5.6: STRICT MODAL ENFORCEMENT — Z-order lock + continuous focus management
-        # Establish parent-child relationship
+        # v2.5.7: STANDARD MODAL PATTERN — No aggressive focus loop that breaks dropdowns
+        # Establish parent-child relationship for proper Z-order
         try:
             self.dialog.transient(parent.winfo_toplevel())
         except Exception:
             pass
 
-        # Lock focus to dialog (true modal behavior)
+        # Window-level modal lock (doesn't interfere with dropdown widgets)
         try:
             self.dialog.grab_set()
         except Exception:
             pass
 
-        # Force topmost state
+        # Keep dialog on top
         self.dialog.attributes("-topmost", True)
 
-        # Force dialog to front with multiple lift + focus operations
-        self.dialog.after(50, lambda: self.dialog.lift())
-        self.dialog.after(100, lambda: self.dialog.focus_force())
-        self.dialog.after(150, lambda: self.dialog.lift())
-
-        # v2.5.6: Continuous Z-order enforcement — re-lift every 200ms to prevent main window from stealing focus
-        def enforce_topmost():
-            """Continuously enforce Z-order to prevent dialog from hiding behind main window"""
-            try:
-                if self.dialog.winfo_exists():
-                    self.dialog.lift()
-                    self.dialog.focus_force()
-                    self.dialog.after(200, enforce_topmost)  # Re-check every 200ms
-            except Exception:
-                pass
-
-        self.dialog.after(200, enforce_topmost)
+        # Initial lift to front (one-time, not continuous loop)
+        self.dialog.lift()
+        self.dialog.focus_set()  # Use focus_set() instead of focus_force() (gentler)
 
         # v2.0.4: Using native OS titlebar - no custom header needed
 

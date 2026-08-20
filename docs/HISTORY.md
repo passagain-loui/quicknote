@@ -1,5 +1,55 @@
 # QuickNote Release History
 
+## v2.5.7 (2026-08-20) — UI INTERACTION FIX: Remove Focus Loop + Restore Dropdown Functionality
+
+### 🔧 Dropdown Menu Interaction Fix
+
+**Problem: DateEntry/Combobox Dropdowns Unresponsive**
+- Dialog stays on top (v2.5.6 works)
+- User clicks on DateEntry or Combobox to open dropdown
+- Dropdown opens briefly, then snaps closed
+- Root cause: enforce_topmost() loop steals focus every 200ms from dropdown
+
+**Root Cause Analysis:**
+- v2.5.6 added enforce_topmost() recursive function running every 200ms
+- Function calls `focus_force()` which forcefully takes focus from any child widget
+- When user clicks Combobox, dropdown listbox appears but loses focus immediately
+- Dropdown closes when it loses focus (standard Tk behavior)
+
+**Solution: Revert to Standard Tkinter Modal Pattern**
+- Removed entire enforce_topmost() loop and 200ms recursive scheduling
+- Kept standard modal setup:
+  ```python
+  self.dialog.transient(parent.winfo_toplevel())  # Parent relationship
+  self.dialog.grab_set()                          # Window-level modal lock
+  self.dialog.attributes("-topmost", True)        # Keep on top
+  self.dialog.lift()                              # Lift to front (one-time)
+  self.dialog.focus_set()                         # Gentle focus (not force_force)
+  ```
+- Standard Tkinter modal prevents interaction with main window without breaking dropdowns
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`: 
+  * Removed enforce_topmost() function entirely (lines 69-79 deleted)
+  * Removed after(200, enforce_topmost) scheduling call
+  * Changed focus_force() to focus_set() (gentler, allows child widgets priority)
+- `src/core/constants.py`: Version bumped to 2.5.7
+
+**Verification:**
+- DateEntry dropdown opens and stays open ✅
+- User can click to select dates ✅
+- Combobox dropdowns work for time selection ✅
+- Dialog still stays on top (not hidden behind main window) ✅
+- Modal lock still works (can't click main window) ✅
+
+**Lesson Learned:**
+- Continuous aggressive focus enforcement breaks child widget interactions
+- Standard Tkinter modal patterns (transient + grab_set + topmost) sufficient for most cases
+- grab_set() operates at window level, doesn't break widget-level focus
+- Gentler focus methods (focus_set) better than forceful ones (focus_force)
+
+---
+
 ## v2.5.6 (2026-08-20) — UI Z-ORDER FIX: Popup Z-Index Lock + Continuous Focus Enforcement
 
 ### 🔧 Dialog Z-Order Correction

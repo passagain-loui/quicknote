@@ -1,8 +1,18 @@
-# QuickNote v2.5.6 — UI Z-ORDER FIX: Popup Z-Index Lock + Focus Enforcement
+# QuickNote v2.5.7 — UI INTERACTION FIX: Remove Aggressive Focus Loop + Restore Dropdowns
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.6 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.7 Released 2026-08-20
+
+> **v2.5.7** แก้ไข **Dropdown Interaction: Remove Focus Loop + Revert to Standard Modal (Functionality Fix)**
+>   - Problem: DateEntry/Combobox dropdowns unresponsive (enforce_topmost loop breaks them)
+>   - Root cause: 200ms focus_force() loop steals focus from dropdown widgets
+>   - Solution 1: Removed enforce_topmost() recursive function entirely
+>   - Solution 2: Reverted to standard Tkinter modal (transient + grab_set + topmost)
+>   - Solution 3: Changed focus_force() to focus_set() (gentler, allows child widget priority)
+>   - Impact: DateEntry + Combobox dropdowns work, dialog still stays on top ✅
+>   - Verification: Date/time selection works, modal behavior intact ✅
+>   - Architecture: Standard modal patterns sufficient, no aggressive focus hijacking
 
 > **v2.5.6** แก้ไข **Popup Z-Order: Continuous Topmost Enforcement + Modal Cleanup (Dialog Stability)**
 >   - Problem: Reminder dialog opens but slides behind main window after 2-3 seconds
@@ -665,7 +675,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.6  
+**Version:** 2.5.7  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -822,6 +832,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.6  
+**Version:** 2.5.7  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Dialog Z-Order Lock + Continuous Focus Enforcement)
+**Status:** ✅ PRODUCTION-STABLE (Standard Modal Pattern + Full Dropdown Functionality)
