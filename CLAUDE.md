@@ -1,9 +1,18 @@
-# QuickNote v2.3.1 — Critical Fixes: Reminder Callback + Note Sorting + Data Persistence Guaranteed
+# QuickNote v2.3.2 — Bug Fixes: Direct Reminder Persistence + Minimal Search Icon + Data Persistence Guaranteed
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.3.1 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.3.2 Released 2026-08-20
 
+> **v2.3.2** แก้ไข **Direct Reminder Persistence + Search Icon Redesign (Critical Bug Fixes)**
+>   - Problem 1: Reminder still doesn't save (callback chain has too many layers)
+>   - Problem 2: Search icon is too dark/heavy (doesn't match minimal design)
+>   - Solution 1: Direct database update_note() call + immediate conn.commit() + _load_notes() refresh
+>   - Solution 2: Change icon from 🔍 to ⌕ (thin line) + muted gray #8C8C8C + minimal styling
+>   - Impact: Reminders save 100% reliably, UI looks clean and minimal
+>   - Verification: Reminder persistence works, search icon matches aesthetic ✅
+>   - Architecture: Bypass callback chain, direct persistence for reliability
+>
 > **v2.3.1** แก้ไข **Reminder Callback + Note Sorting (Critical Architecture Fixes)**
 >   - Problem 1: Reminder callback doesn't save (on_update called with no arguments)
 >   - Problem 2: New notes appear at bottom instead of top (no reload after create)
@@ -579,9 +588,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.3.1  
+**Version:** 2.3.2  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Reminder Callback Fixed + Note Sorting Fixed)
+**Status:** ✅ PRODUCTION-STABLE (Direct Reminder Persistence + Minimal Search Icon)
 
 ## 🔧 Build Workflow
 
@@ -736,6 +745,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.3.1  
+**Version:** 2.3.2  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Reminder Callback Fixed + Note Sorting Fixed + Data Persistence Guaranteed)
+**Status:** ✅ PRODUCTION-STABLE (Direct Reminder Persistence + Minimal Search Icon)

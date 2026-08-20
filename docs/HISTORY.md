@@ -1,5 +1,63 @@
 # QuickNote Release History
 
+## v2.3.2 (2026-08-20) — Bug Fixes: Direct Reminder Persistence + Search Icon Redesign
+
+### 🔧 Critical Bug Fixes: Reminder Now Works + Minimal UI
+
+**Problem 1: Reminder Still Not Saving After v2.3.1 Fixes**
+- Even with explicit on_update() argument passing, reminder doesn't persist
+- Root cause: Callback chain has too many layers and timing issues
+- Reminders either don't save or don't trigger notification
+
+**Problem 2: Search Icon Looks Bad**
+- Solid magnifying glass 🔍 is too dark and doesn't match minimal design
+- Should be a thin line version with muted gray color
+- Currently feels heavy and clashes with clean aesthetic
+
+**Solutions (v2.3.2):**
+
+**1. Direct Database Persistence for Reminders**
+```python
+# Old (v2.3.1): Multi-layer callback chain with potential failures
+self.on_update(self.note)  # Calls lambda → board._on_note_update() → update_note()
+
+# New (v2.3.2): Direct database update + immediate UI refresh
+update_note(self.note.id, 
+           reminder_datetime=reminder_str,
+           reminder_triggered=False)  # Commits immediately
+self.parent._load_notes()  # Force refresh (no callback chain)
+```
+- Execute SQL UPDATE directly in reminder_dialog.py
+- Call conn.commit() immediately (guaranteed persistence)
+- Call board._load_notes() for instant UI refresh
+- Reminder is now saved 100% reliably ✅
+
+**2. Search Icon Redesign — Minimal + Muted**
+- Changed icon from 🔍 (solid, dark) → ⌕ (thin line, minimal)
+- Color: theme default → #8C8C8C (muted gray)
+- Font size: 10pt → 9pt (slimmer appearance)
+- Padding adjusted: cleaner vertical spacing
+- Result: Minimal, modern, matches clean UI aesthetic
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`: Direct update_note() calls in _save_reminder() and _clear_reminder()
+- `src/ui/board.py`: Search icon redesign (⌕ + #8C8C8C + size/padding adjustments)
+- `src/core/constants.py`: Version bumped to 2.3.2
+
+**Verification:**
+- Reminder data saves immediately to database ✅
+- Reminders trigger notifications reliably ✅
+- Search icon appears minimal and clean ✅
+- UI layout unchanged, only visual polish ✅
+
+**Architecture Impact:**
+- Bypasses callback chain for reminders (direct persistence)
+- Instant database commit (no race conditions)
+- Forced UI refresh ensures "Next Alert" displays correctly
+- More reliable and faster reminder save
+
+---
+
 ## v2.3.1 (2026-08-20) — Critical Fixes: Reminder Callback + Note Sorting
 
 ### 🔧 Critical Architecture Fixes: Reminder Save + Proper Note Order

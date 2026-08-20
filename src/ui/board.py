@@ -77,27 +77,29 @@ class Board:
         self._saved_height = 600
 
         # v2.3.0: Search Bar — Real-time note filtering
+        # v2.3.2: Minimal icon redesign (thin line + muted gray)
         from tkinter import ttk
         self.search_frame = tk.Frame(self.root, bg=self.theme.c("bg"), highlightthickness=0)
-        self.search_frame.pack(side="top", fill="x", padx=6, pady=4)
+        self.search_frame.pack(side="top", fill="x", padx=6, pady=3)
 
+        # v2.3.2: Minimal search icon (thin line style, muted gray)
         self.search_label = tk.Label(
             self.search_frame,
-            text="🔍",
+            text="⌕",  # Minimal thin line search symbol
             bg=self.theme.c("bg"),
-            fg=self.theme.c("fg"),
-            font=("Segoe UI", 10),
+            fg="#8C8C8C",  # Muted gray color
+            font=("Segoe UI", 9),  # Smaller font for minimal appearance
         )
-        self.search_label.pack(side="left", padx=(0, 4))
+        self.search_label.pack(side="left", padx=(0, 6))
 
         self.search_var = tk.StringVar()
         self.search_entry = ttk.Entry(
             self.search_frame,
             textvariable=self.search_var,
-            width=30,
+            width=28,
             font=("Segoe UI", 9),
         )
-        self.search_entry.pack(side="left", fill="x", expand=True)
+        self.search_entry.pack(side="left", fill="x", expand=True, pady=2)
         self.search_entry.bind("<KeyRelease>", self._on_search)
 
         # Bind clear button (Escape to clear search)
