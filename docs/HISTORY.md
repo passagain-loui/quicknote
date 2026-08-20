@@ -1,5 +1,47 @@
 # QuickNote Release History
 
+## v2.7.1 (2026-08-20) — BUG FIX & MODERN AUDIO OVERHAUL: Reminder Dialog AttributeError + Windows 11 Notification Chime
+
+### 🔧 Critical Bug Fixes
+
+**Problem 1: ReminderDialog AttributeError on Button Click**
+- Clicking reminder button crashes: `'ReminderDialog' object has no attribute 'parent_root'`
+- Root cause: `self.parent_root` used on line 38 before being defined on line 86
+- Solution: Move `self.parent_root = parent.winfo_toplevel()` to BEFORE positioning calculation (line ~35)
+
+**Problem 2: Audio Alert Uses Outdated Beep Sounds**
+- Old implementation uses SystemExclamation + MessageBeep + multiple Beeps (harsh, jarring)
+- Need modern Windows 11-style notification chime
+
+**Solution 1: Fix Initialization Order**
+- `src/ui/reminder_dialog.py`:
+  * Moved `self.parent_root = parent.winfo_toplevel()` to line 36 (right after dialog update_idletasks)
+  * Removed duplicate assignment on line 86
+  * All positioning logic now uses correctly-initialized parent_root reference
+  * Ensures no AttributeError on dialog creation
+
+**Solution 2: Modern Windows 11 Notification Chime**
+- `src/ui/board.py`:
+  * Replaced `_play_notification_alert()` with modern sound implementation
+  * Primary: `winsound.PlaySound("Notification.Default", SND_ALIAS | SND_ASYNC)`
+  * Fallback: `winsound.PlaySound("SystemNotification", SND_ALIAS | SND_ASYNC)`
+  * Removed harsh Beep layers and old SystemExclamation sound
+  * Maintains non-blocking async playback (no UI thread blocking)
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`: Initialize parent_root before use (v2.7.1 fix)
+- `src/ui/board.py`: Replace audio alert with modern notification chime (v2.7.1)
+- `src/core/constants.py`: Version bumped to 2.7.1
+
+**Verification:**
+- Click reminder button → Dialog opens without AttributeError ✅
+- Dialog positions correctly (side-by-side layout works) ✅
+- Reminder notification plays modern Windows chime sound ✅
+- Audio doesn't block UI (SND_ASYNC keeps app responsive) ✅
+- Fallback chain ensures audio always plays ✅
+
+---
+
 ## v2.7.0 (2026-08-20) — UI POSITIONING & REMINDER STATE: Side-by-Side Dialogs + Auto-Reset
 
 ### 🎯 UI Positioning & UX Enhancements

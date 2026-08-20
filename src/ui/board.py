@@ -843,16 +843,15 @@ class Board:
         self._on_note_reminder_open(note)
 
     def _play_notification_alert(self):
-        """v2.6.1: Play audio alert (background thread, non-blocking)"""
+        """v2.7.1: Play modern notification alert (Windows 11 style chime + fallback)"""
         try:
             import winsound
-            # Layer 1: System exclamation sound
-            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
-            # Layer 2: OS-level message beep
-            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-            # Layer 3: Fallback beeps
-            winsound.Beep(1000, 500)
-            winsound.Beep(1000, 500)
+            # Modern: Use Windows Notification.Default chime (Windows 11 style)
+            try:
+                winsound.PlaySound("Notification.Default", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            except Exception:
+                # Fallback: System notification sound
+                winsound.PlaySound("SystemNotification", winsound.SND_ALIAS | winsound.SND_ASYNC)
         except Exception:
             pass
 

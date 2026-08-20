@@ -1,8 +1,21 @@
-# QuickNote v2.7.0 — UI POSITIONING & REMINDER STATE: Side-by-Side Dialogs + Auto-Reset
+# QuickNote v2.7.1 — BUG FIX & MODERN AUDIO OVERHAUL: Reminder Dialog AttributeError + Windows 11 Notification Chime
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.7.0 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.7.1 Released 2026-08-20
+
+> **v2.7.1** แก้ไข **Bug Fix & Modern Audio: Reminder Dialog AttributeError + Windows 11 Notification Chime (Critical Hotfix)**
+>   - Problem 1: Clicking reminder button crashes with AttributeError (parent_root used before definition)
+>   - Problem 2: Audio alert uses outdated harsh beep sounds (old SystemExclamation + Beeps)
+>   - Root cause 1: self.parent_root assigned AFTER being used in positioning calculation
+>   - Root cause 2: Old audio implementation lacks modern Windows 11 chime style
+>   - Solution 1: Move parent_root initialization to BEFORE positioning calculation (line 36)
+>   - Solution 2: Remove duplicate parent_root assignment on line 86
+>   - Solution 3: Replace audio alert with modern Notification.Default Windows chime
+>   - Solution 4: Fallback to SystemNotification for compatibility
+>   - Impact: Reminder button fully functional, modern notification sound ✅
+>   - Verification: Dialog opens without error, Windows 11 chime plays on reminder ✅
+>   - Architecture: Proper initialization order, modern async audio playback
 
 > **v2.7.0** แก้ไข **UI Positioning & Reminder State: Side-by-Side Dialogs + Auto-Reset Reminder (UX Enhancement)**
 >   - Problem 1: Reminder dialog hidden behind main window (overlapping center positioning)

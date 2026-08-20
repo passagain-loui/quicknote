@@ -33,6 +33,9 @@ class ReminderDialog:
         parent.update_idletasks()
         self.dialog.update_idletasks()
 
+        # v2.7.1: Initialize parent_root reference FIRST (before positioning calculation)
+        self.parent_root = parent.winfo_toplevel()
+
         # v2.7.0: Position dialog to right side of main window (side-by-side)
         # Get parent's absolute screen position + size
         parent_root_x = self.parent_root.winfo_x()
@@ -83,7 +86,6 @@ class ReminderDialog:
         # v2.5.9: TRUE MODAL PATTERN — Disable main window (prevents OS refocus on dropdown close)
         # When dropdown closes, OS won't refocus main window (it's disabled)
         # This is the proper Tkinter modal behavior and prevents Z-order jitter
-        self.parent_root = parent.winfo_toplevel()
 
         # Disable main window (prevents user interaction AND OS refocus)
         try:
