@@ -28,12 +28,13 @@ class Note:
     def from_dict(cls, data: dict) -> "Note":
         """สร้าง Note จาก dict (จาก database) — ทนข้อมูลเพี้ยนได้"""
         # สกัดฟิลด์ที่คาดหวัง ปฏิเสธอันที่เหลือ
+        # v2.8.2: Default new notes to collapsed=True (closed state)
         return cls(
             id=data.get("id", ""),
             title=data.get("title", ""),
             content=data.get("content", ""),
             status=data.get("status", "active"),
-            collapsed=bool(data.get("collapsed", False)),
+            collapsed=bool(data.get("collapsed", True)),  # v2.8.2: Default True (collapsed)
             created_at=data.get("created_at", datetime.now().isoformat()),
             completed_at=data.get("completed_at"),
             priority=data.get("priority", "none"),  # v1.3.0

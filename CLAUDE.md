@@ -1,8 +1,21 @@
-# QuickNote v2.8.1 — CRITICAL GUI FREEZE FIX & WINDOWS NATIVE NOTIFICATIONS: Remove In-App Toast + Native OS Notifications
+# QuickNote v2.8.2 — NOTIFICATION FALLBACK & DEFAULT COLLAPSED STATE: Reliable Native Notifications + Clean UI
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Windows Native Notifications**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Windows Native Notifications** + **Reliable Fallback Chain**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.8.1 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.8.2 Released 2026-08-21
+
+> **v2.8.2** แก้ไข **Notification Fallback & Default Collapsed State: Reliable Native Notifications + Clean UI (UX Polish)**
+>   - Bug 1: Windows notification sometimes doesn't appear (even though sound plays)
+>   - Bug 2: New notes expand by default (user wants compact collapsed view)
+>   - Root cause 1: win10toast fails without fallback notification method
+>   - Root cause 2: collapsed=False default in Note model
+>   - Solution 1: Add notification fallback chain (win10toast → Shell → Sound)
+>   - Solution 2: Change collapsed default to True for new notes only
+>   - Solution 3: Implement _show_shell_notification() using win32gui fallback
+>   - Solution 4: Preserve existing note collapsed states (backward compatible)
+>   - Impact: Notifications always work, new notes start clean & compact ✅
+>   - Verification: Notification appears even with Focus Assist, new notes collapsed ✅
+>   - Architecture: Robust fallback chain, smart defaults, user-friendly UX
 
 > **v2.8.1** แก้ไข **Critical GUI Freeze Fix & Windows Native Notifications: Remove In-App Toast + Native OS (Critical Architecture Fix)**
 >   - Critical Bug 1: App freezes when dismissing in-app toast notification

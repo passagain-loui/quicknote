@@ -1,5 +1,64 @@
 # QuickNote Release History
 
+## v2.8.2 (2026-08-21) — NOTIFICATION FALLBACK & DEFAULT COLLAPSED STATE: Reliable Native Notifications + Clean UI
+
+### 🔧 Bug Fixes & UX Improvements
+
+**Problem 1: Windows Notification Sometimes Doesn't Appear**
+- Sound plays but notification popup missing
+- Occurs when: Windows Focus Assist enabled, AUMID not registered, or win10toast fails
+- Root cause: win10toast fails silently without fallback
+- Solution 1: Add fallback chain to notification service
+- Solution 2: Try win10toast first → Shell notification (win32gui) → Sound only
+- Solution 3: Ensure at least sound plays even if visual notification fails
+- Result: Notifications always appear (or at minimum, sound always plays) ✅
+
+**Problem 2: New Notes Expand by Default**
+- User creates new note → card immediately shows full content (expanded)
+- User wants clean compact view with only title visible initially
+- Root cause: collapsed=False default in Note model
+- Solution: Change default collapsed state to True for new notes
+- Result: New notes start collapsed, user clicks to expand if needed ✅
+
+**Code Changes:**
+- `src/services/notification.py`:
+  * Enhanced show_reminder_notification() with fallback chain (v2.8.2)
+  * Method 1: Try win10toast (most user-friendly)
+  * Method 2: Fallback to Windows Shell notification (win32gui.Shell_NotifyIcon)
+  * Method 3: Sound-only fallback if visual notification fails
+  * Added _show_shell_notification() method
+- `src/core/models.py`:
+  * Changed collapsed default from False → True in from_dict() (v2.8.2)
+  * New notes now start in collapsed state by default
+  * Existing notes preserve their saved collapsed state
+- `src/core/constants.py`: Version bumped to 2.8.2
+
+**Verification:**
+- Set reminder at near future time ✅
+- At trigger time → Windows notification appears (even if Focus Assist on) ✅
+- If visual fails → Audio/sound always plays ✅
+- Click notification → QuickNote opens, note appears ✅
+- Create new note → Card shows collapsed (title + buttons only) ✅
+- Click fold/expand arrow → Note expands to show full content ✅
+
+**Notification Fallback Chain:**
+```
+Try 1: win10toast (best UX, user-friendly toast)
+    ↓ if fails
+Try 2: Windows Shell notification (win32gui fallback)
+    ↓ if fails
+Try 3: Sound-only (MailBeep via winsound)
+    ↓ Result: Notification appears OR at minimum sound plays
+```
+
+**Default Collapsed Behavior:**
+- New notes: Start collapsed (title + controls visible)
+- Existing notes: Preserve saved state (no changes)
+- User can expand by clicking fold/unfold arrow
+- Clean, organized UI without visual clutter
+
+---
+
 ## v2.8.1 (2026-08-20) — CRITICAL GUI FREEZE FIX & WINDOWS NATIVE NOTIFICATIONS: Remove In-App Toast + Native OS Notifications
 
 ### 🔧 Critical Architecture Fix

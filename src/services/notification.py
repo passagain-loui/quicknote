@@ -28,7 +28,7 @@ class WindowsNotificationService:
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
                                   on_click=None, duration: int = 8) -> bool:
-        """Show Windows native reminder notification
+        """Show Windows native reminder notification with fallback chain
 
         Args:
             note_title: Title of the note (notification title)
@@ -41,17 +41,15 @@ class WindowsNotificationService:
         try:
             self.on_click_callback = on_click
 
-            # Use win10toast if available
+            # v2.8.2: Try multiple notification methods with fallback chain
+            # Method 1: win10toast
             if self.has_win10toast and self.notifier:
                 try:
-                    # Show notification in background thread to avoid blocking UI
-                    def show_in_thread():
+                    def show_win10toast_in_thread():
                         try:
-                            # Truncate title/content for readability
                             title = note_title[:50] if note_title else "QuickNote Reminder"
                             msg = note_content[:100] if note_content else "Reminder triggered"
 
-                            # Show toast (win10toast blocks briefly, so do it in thread)
                             self.notifier.show_toast(
                                 title=title,
                                 msg=msg,
@@ -61,24 +59,86 @@ class WindowsNotificationService:
 
                             # Execute callback if user clicked
                             if self.on_click_callback:
-                                self.on_click_callback()
+                                try:
+                                    self.on_click_callback()
+                                except Exception:
+                                    pass
                         except Exception as e:
-                            log.warning(f"[Notification] Failed to show win10toast: {e}")
+                            log.warning(f"[Notification] win10toast failed: {e}")
+                            # Fall through to next method
 
-                    # Run in daemon thread so it doesn't block UI
-                    thread = threading.Thread(target=show_in_thread, daemon=True)
+                    thread = threading.Thread(target=show_win10toast_in_thread, daemon=True)
                     thread.start()
                     return True
                 except Exception as e:
-                    log.error(f"[Notification] win10toast error: {e}")
-                    return False
-            else:
-                # Fallback: Use system MessageBox (not ideal but better than nothing)
-                log.warning("[Notification] Using fallback notification method")
-                return self._show_fallback_notification(note_title)
+                    log.warning(f"[Notification] win10toast error: {e}")
+
+            # Method 2: Windows Shell Notification (fallback)
+            try:
+                return self._show_shell_notification(note_title, note_content)
+            except Exception as e:
+                log.warning(f"[Notification] Shell notification failed: {e}")
+
+            # Method 3: System MessageBox (last resort)
+            log.warning("[Notification] Using final fallback notification method")
+            return self._show_fallback_notification(note_title)
 
         except Exception as e:
             log.error(f"[Notification] Failed to show reminder notification: {e}")
+            return False
+
+    def _show_shell_notification(self, title: str, message: str = None) -> bool:
+        """v2.8.2: Show Windows Shell notification using win32gui
+
+        This is a fallback when win10toast doesn't work (e.g., Focus Assist enabled)
+        """
+        try:
+            import win32gui
+            import win32con
+
+            # Create a hidden window for the notification
+            class NotificationWindow:
+                def __init__(self):
+                    self.hwnd = None
+
+            nw = NotificationWindow()
+
+            # Register window class
+            wc = win32gui.WNDCLASS()
+            wc.lpszClassName = "QuickNoteNotification"
+            wc.lpfnWndProc = {}
+
+            try:
+                classAtom = win32gui.RegisterClass(wc)
+                nw.hwnd = win32gui.CreateWindow(
+                    classAtom, "QuickNote",
+                    win32con.WS_OVERLAPPED | win32con.WS_SYSMENU,
+                    0, 0, win32con.CW_USEDEFAULT, win32con.CW_USEDEFAULT,
+                    0, 0, win32gui.GetModuleHandle(None), None
+                )
+
+                # Show notification using Shell_NotifyIcon
+                flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP
+                nid = (nw.hwnd, 0, flags, win32con.WM_USER + 20, win32gui.LoadIcon(0, win32con.IDI_APPLICATION), "QuickNote")
+                win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
+
+                # Update with our notification
+                nid = (nw.hwnd, 0, win32gui.NIF_INFO, win32con.WM_USER + 20,
+                       win32gui.LoadIcon(0, win32con.IDI_INFORMATION), "QuickNote",
+                       200, 200, (title[:256] if title else "Reminder"))
+                win32gui.Shell_NotifyIcon(win32gui.NIM_MODIFY, nid)
+
+                log.info("[Notification] Shell notification shown successfully")
+                return True
+            except Exception as e:
+                log.warning(f"[Notification] Shell_NotifyIcon failed: {e}")
+                return False
+
+        except ImportError:
+            log.warning("[Notification] win32gui not available, cannot use Shell notification")
+            return False
+        except Exception as e:
+            log.error(f"[Notification] Shell notification error: {e}")
             return False
 
     def _show_fallback_notification(self, title: str) -> bool:
