@@ -1,5 +1,52 @@
 # QuickNote Release History
 
+## v2.7.0 (2026-08-20) — UI POSITIONING & REMINDER STATE: Side-by-Side Dialogs + Auto-Reset
+
+### 🎯 UI Positioning & UX Enhancements
+
+**Problem 1: Reminder Dialog Hidden Behind Main Window**
+- Reminder dialog positioned at center, overlaps main window
+- User can't see both windows clearly
+- Root cause: Center positioning doesn't work well with overlapping windows
+
+**Problem 2: Reminder Icon Doesn't Reset After Opening Note**
+- User clicks "Open" from toast notification
+- Note opens, but reminder clock icon still shows as "set"
+- Root cause: reminder_datetime and reminder_triggered not cleared when opening from notification
+
+**Solution 1: Side-by-Side Positioning**
+- Changed reminder dialog to position on right side of main window (like Settings window)
+- If no space on right, automatically falls back to left side
+- Uses dynamic screen bounds detection for reliable positioning
+
+**Solution 2: Auto-Clear Reminder State**
+- When clicking "Open" from notification toast, auto-clear reminder:
+  - Set reminder_datetime = None
+  - Set reminder_triggered = False
+  - Refresh note card to show cleared state
+- User sees clock icon return to "not set" state
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`:
+  * Replaced center positioning with side-by-side logic
+  * Dynamic fallback to left side if right edge off-screen
+  * Uses ctypes to get screen width for bounds checking
+- `src/ui/board.py`:
+  * Enhanced `_on_note_reminder_open()` to clear reminder state in DB
+  * Added `_load_notes()` refresh after clearing reminder
+  * Reminder state fully reset before scrolling to note
+- `src/core/constants.py`: Version bumped to 2.7.0
+
+**Verification:**
+- Reminder dialog positions to right of main window ✅
+- Falls back to left if no space on right ✅
+- Settings window positioning unchanged (already works) ✅
+- Opening note from toast clears reminder state ✅
+- Clock icon shows as "not set" after opening ✅
+- No reminder triggered again until new reminder set ✅
+
+---
+
 ## v2.6.2 (2026-08-20) — CRITICAL STATE RESTORATION FIX: Cancel Button & Footer Clipping
 
 ### 🔧 State Restoration on Dialog Close

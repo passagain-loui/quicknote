@@ -1,8 +1,21 @@
-# QuickNote v2.6.2 — CRITICAL STATE RESTORATION FIX: Cancel Button & Footer Clipping
+# QuickNote v2.7.0 — UI POSITIONING & REMINDER STATE: Side-by-Side Dialogs + Auto-Reset
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.6.2 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.7.0 Released 2026-08-20
+
+> **v2.7.0** แก้ไข **UI Positioning & Reminder State: Side-by-Side Dialogs + Auto-Reset Reminder (UX Enhancement)**
+>   - Problem 1: Reminder dialog hidden behind main window (overlapping center positioning)
+>   - Problem 2: Reminder icon doesn't reset after opening note from notification
+>   - Root cause 1: Center positioning causes window overlap
+>   - Root cause 2: reminder_datetime not cleared when opening from notification
+>   - Solution 1: Reminder dialog now positions right of main window (dynamic side-by-side)
+>   - Solution 2: Falls back to left side if no space on right (smart positioning)
+>   - Solution 3: Opening note from notification auto-clears reminder state
+>   - Solution 4: Refresh note card to show cleared reminder icon
+>   - Impact: Both dialogs visible simultaneously, reminder state always consistent ✅
+>   - Verification: Dialogs side-by-side, smart positioning, reminder resets on open ✅
+>   - Architecture: Dynamic positioning logic, state-aware notification opening
 
 > **v2.6.2** แก้ไข **State Restoration: Cancel Button Bypass + Footer Text Clipping (Critical State Lock Fix)**
 >   - Problem 1: Cancel button bypassed _close_dialog(), leaving main window disabled & scheduler paused

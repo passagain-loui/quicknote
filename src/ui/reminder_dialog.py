@@ -33,21 +33,32 @@ class ReminderDialog:
         parent.update_idletasks()
         self.dialog.update_idletasks()
 
+        # v2.7.0: Position dialog to right side of main window (side-by-side)
         # Get parent's absolute screen position + size
-        parent_x = parent.winfo_rootx()
-        parent_y = parent.winfo_rooty()
-        parent_w = parent.winfo_width()
-        parent_h = parent.winfo_height()
+        parent_root_x = self.parent_root.winfo_x()
+        parent_root_y = self.parent_root.winfo_y()
+        parent_root_w = self.parent_root.winfo_width()
 
         # Dialog dimensions
         dialog_w = 380
         dialog_h = 320
 
-        # Center dialog on parent window
-        x = parent_x + (parent_w - dialog_w) // 2
-        y = parent_y + (parent_h - dialog_h) // 2
+        # Try to place on right side first
+        x = parent_root_x + parent_root_w + 10
+        y = parent_root_y
 
-        self.dialog.geometry(f"{dialog_w}x{dialog_h}+{x}+{y}")
+        # Check if position goes off-screen (right edge), if so place on left side
+        try:
+            import ctypes
+            gsm = ctypes.windll.user32.GetSystemMetrics
+            screen_w = gsm(0)  # SM_CXSCREEN
+            if x + dialog_w > screen_w:
+                # Not enough space on right, try left side
+                x = parent_root_x - dialog_w - 10
+        except Exception:
+            pass
+
+        self.dialog.geometry(f"{dialog_w}x{dialog_h}+{int(x)}+{int(y)}")
 
         # v2.5.7: STANDARD MODAL PATTERN — No aggressive focus loop that breaks dropdowns
         # Establish parent-child relationship for proper Z-order

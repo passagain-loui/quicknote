@@ -857,8 +857,23 @@ class Board:
             pass
 
     def _on_note_reminder_open(self, note):
-        """Callback when 'Open Note' clicked from reminder notification"""
+        """v2.7.0: Callback when 'Open Note' clicked from reminder notification
+        Opens note and clears reminder state (stops icon from showing reminder is set)"""
         try:
+            # v2.7.0: Clear reminder state when opening from notification
+            # This resets the reminder_datetime and reminder_triggered flags
+            # So the clock icon shows as "not set" instead of "already triggered"
+            try:
+                update_note(note.id, reminder_datetime=None, reminder_triggered=False)
+            except Exception:
+                pass  # Silently fail if DB update doesn't work
+
+            # Refresh the note card to show cleared reminder state
+            try:
+                self._load_notes()
+            except Exception:
+                pass
+
             # Scroll to note in the view
             self._show_note_in_view(note)
         except Exception:
