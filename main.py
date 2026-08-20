@@ -30,6 +30,14 @@ except Exception:
         except Exception:
             pass
 
+# v2.5.5: Force hard-import for PyInstaller AST scanning — ensures tkcalendar + dependencies bundled
+# Without this, PyInstaller's static analysis misses deep dependencies even with --hidden-import
+try:
+    import tkcalendar
+    import babel.numbers
+except ImportError:
+    pass
+
 from src.core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
 from src.core.database import init_db, get_all_notes, create_note
 from src.core.settings import Settings

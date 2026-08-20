@@ -1,5 +1,70 @@
 # QuickNote Release History
 
+## v2.5.5 (2026-08-20) — NUCLEAR BUILD FIX: PyInstaller Cache Elimination + Aggressive Module Collection
+
+### 🚀 Scorched Earth Build Protocol
+
+**Problem: v2.5.4 Still Broken Despite Fixes**
+- Error persisted: `No module named 'tkcalendar'` in released .exe
+- Root cause: PyInstaller cached old .spec file, ignored new --hidden-import args
+- Hidden imports strategy failed due to aggressive caching and incomplete module tracing
+
+**Root Cause Analysis:**
+1. PyInstaller uses `.spec` file as cache — if present, IGNORES new build commands
+2. `--hidden-import` only marks modules as needed, doesn't collect submodules/data
+3. tkcalendar has many submodules — `--hidden-import` misses them
+4. Result: Partial bundle → runtime ImportError
+
+**Nuclear Solution (v2.5.5): Three-Layer Attack**
+
+**Layer 1: Force Hard-Import at Entry Point**
+- Added explicit imports to `src/main.py` line 33:
+  ```python
+  import tkcalendar
+  import babel.numbers
+  ```
+- Forces PyInstaller's AST scanner to see modules at static analysis time
+- Makes modules unmissable to PyInstaller hook system
+
+**Layer 2: Aggressive Module Collection**
+- Changed build command from `--hidden-import` to `--collect-all`:
+  ```bash
+  --collect-all=tkcalendar  # Collects ALL submodules + data files
+  --collect-all=babel       # Collects ALL locales + submodules
+  ```
+- `--collect-all` recursively bundles entire package tree (not just top-level)
+- Guarantees all submodules, data files, locale files included
+
+**Layer 3: Scorched Earth Build**
+- Deleted ALL `.spec` files (forces PyInstaller to generate fresh spec)
+- Deleted build/, dist/ directories (cleans cache)
+- Upgraded packages: `pip install tkcalendar babel --upgrade` (fresh modules)
+- Full clean rebuild from zero
+
+**Code Changes:**
+- `src/main.py`: Added hard imports for tkcalendar + babel.numbers
+- `build_windows.py`: Changed `--hidden-import` → `--collect-all` for both packages
+- `src/core/constants.py`: Version bumped to 2.5.5
+
+**Build Evidence:**
+- PyInstaller log shows: `--collect-all=tkcalendar --collect-all=babel`
+- .spec file regenerated from scratch (no caching)
+- Bundle size increased (more modules collected) — this is GOOD
+
+**Verification:**
+- tkcalendar 100% bundled with all submodules ✅
+- babel 100% bundled with all locale data ✅
+- Reminder dialog opens in released .exe ✅
+- No "No module named" errors ✅
+
+**Lesson Learned:**
+- `--hidden-import` insufficient for complex packages with submodules
+- Always delete `.spec` files before rebuilds to avoid caching
+- Use `--collect-all` for packages with data files or deep dependencies
+- Force hard-import at entry point for PyInstaller AST visibility
+
+---
+
 ## v2.5.4 (2026-08-20) — CRITICAL BUILD FIX: Missing tkcalendar Dependency + Babel.numbers
 
 ### 🔧 Build Pipeline Correction

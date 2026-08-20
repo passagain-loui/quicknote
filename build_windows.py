@@ -77,8 +77,9 @@ def build_exe(debug: bool = False) -> int:
         "--hidden-import=src.core.settings",
         "--hidden-import=src.platform.tray",
         "--hidden-import=src.platform.hotkey",
-        "--hidden-import=tkcalendar",  # v2.0.0: Calendar DatePicker
-        "--hidden-import=babel.numbers",  # v2.5.4: tkcalendar dependency (missing from v2.5.3)
+        # v2.5.5: Use --collect-all for tkcalendar + babel (--hidden-import misses submodules)
+        "--collect-all=tkcalendar",  # Collects all submodules + data files
+        "--collect-all=babel",        # Collects all babel locale data
     ]
 
     if not debug:

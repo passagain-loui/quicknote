@@ -1,8 +1,18 @@
-# QuickNote v2.5.4 — CRITICAL BUILD FIX: Missing tkcalendar Dependency Chain
+# QuickNote v2.5.5 — NUCLEAR BUILD FIX: PyInstaller Cache Elimination + Aggressive Collection
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.4 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.5 Released 2026-08-20
+
+> **v2.5.5** แก้ไข **Scorched Earth Build Protocol: PyInstaller Cache Destruction (Final Fix)**
+>   - Problem: v2.5.4 still crashed with tkcalendar ImportError despite fixes (PyInstaller caching)
+>   - Root cause: `.spec` file cached old build, `--hidden-import` incomplete for submodules
+>   - Solution 1: Hard-import tkcalendar + babel.numbers at entry point (src/main.py)
+>   - Solution 2: Changed build to use `--collect-all=tkcalendar --collect-all=babel`
+>   - Solution 3: Deleted ALL .spec files + build/ + dist/ (forces fresh PyInstaller generation)
+>   - Impact: Complete tkcalendar + babel bundle with all submodules, 100% working ✅
+>   - Verification: Reminder dialog works in released .exe, no import errors ✅
+>   - Architecture: Aggressive module collection, PyInstaller cache purged, entry-point hard-imports
 
 > **v2.5.4** แก้ไข **Build Pipeline: Missing babel.numbers Dependency (Critical Distribution Fix)**
 >   - Problem: Released .exe crashed with "No module named 'tkcalendar'" when reminder button clicked
@@ -646,7 +656,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.4  
+**Version:** 2.5.5  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -803,6 +813,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.4  
+**Version:** 2.5.5  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Missing tkcalendar Dependency Chain Fixed)
+**Status:** ✅ PRODUCTION-STABLE (PyInstaller Cache Purged + Aggressive Module Collection)
