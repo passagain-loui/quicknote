@@ -1,9 +1,18 @@
-# QuickNote v2.5.2 — UI Polish: Badge Typography Unification + Reminder Dialog Focus Fix
+# QuickNote v2.5.3 — CRITICAL FIX: Pixel-Perfect Badge Alignment + Reminder Error Visibility
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.2 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.3 Released 2026-08-20
 
+> **v2.5.3** แก้ไข **Pixel-Perfect Button Alignment + Silent Failure Elimination (Critical Bug Fixes)**
+>   - Problem 1: Status badge still misaligned despite v2.5.2 font unification (Button vs Label rendering mismatch)
+>   - Problem 2: Reminder button silent failure — no error feedback when exceptions occur
+>   - Solution 1: Changed status_badge from Button to Label, added Event binding for identical rendering with priority_badge
+>   - Solution 2: Added try...except + messagebox.showerror() to show errors instead of silent failure
+>   - Impact: Badges perfectly aligned pixel-by-pixel, all errors immediately visible to user
+>   - Verification: Badges aligned, reminder button shows errors, no more silent failures ✅
+>   - Architecture: Widget-type consistency (both Labels), error visibility guarantees
+>
 > **v2.5.2** ปรับแต่ง **Badge Typography Unification + Reminder Dialog Focus (UI Polish)**
 >   - Problem 1: Status badge (Active/Done) has different font/padding than Priority badge (High/Medium/Low)
 >   - Problem 2: Reminder dialog doesn't display when reminder button is clicked
@@ -629,7 +638,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.2  
+**Version:** 2.5.3  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -786,6 +795,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.2  
+**Version:** 2.5.3  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
+**Status:** ✅ PRODUCTION-STABLE (Pixel-Perfect Button Alignment + Reminder Error Visibility)

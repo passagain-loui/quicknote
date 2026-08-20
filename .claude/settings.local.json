@@ -7,7 +7,15 @@
       "Bash(python -m py_compile src/core/models.py src/core/paths.py src/core/store.py src/core/settings.py src/ui/theme.py src/ui/tooltip.py src/ui/titlebar.py)",
       "Bash(python -m py_compile \"C:/Users/Passagain/.claude/skills/windows-python-desktop-app/assets/build_windows.py\")",
       "Bash(python -c ' *)",
-      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)"
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\passa\\\\.claude\\\\projects\\\\D--AI-OpenCode-Noted-Planing-and-Record\\\\memory\" -Force 2>$null | Select-Object Name | ForEach-Object { $_.Name })",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(python build_windows.py)",
+      "PowerShell(Get-Command python.exe)",
+      "PowerShell(ls -la \"D:\\\\AI\\\\OpenCode\\\\Noted Planing and Record\\\\dist\\\\QuickNote_v2.3.0.exe\" | Select-Object Name, @{N='Size\\(MB\\)';E={[math]::Round\\($_.Length/1MB, 2\\)}} | Format-Table)",
+      "PowerShell($file = Get-Item \"D:\\\\AI\\\\OpenCode\\\\Noted Planing and Record\\\\dist\\\\QuickNote_v2.3.0.exe\" ; Write-Host \"✓ File: $\\($file.Name\\)\" ; Write-Host \"✓ Size: $\\('{0:N2}' -f \\($file.Length / 1MB\\)\\) MB\" ; Write-Host \"✓ Created: $\\($file.CreationTime\\)\")",
+      "PowerShell($file = Get-Item \"D:\\\\AI\\\\OpenCode\\\\Noted Planing and Record\\\\dist\\\\QuickNote_v2.3.1.exe\" ; Write-Host \"✓ File: $\\($file.Name\\)\" ; Write-Host \"✓ Size: $\\('{0:N2}' -f \\($file.Length / 1MB\\)\\) MB\" ; Write-Host \"✓ Created: $\\($file.CreationTime\\)\")"
     ]
   }
 }

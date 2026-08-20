@@ -1,19 +1,25 @@
-# QuickNote — Notes Always on Top
+# QuickNote v2.2.3 — Notes Always on Top + Calendar Reminders + Desktop Notifications
 
 โปรแกรมจดโน้ตเบา ๆ ที่ค้างอยู่บนหน้าจอตลอดเวลา — สไตล์ macOS Pastel สำหรับ Windows
+
+**Status:** ✅ v2.2.3 RELEASED — SQLite Commits Fixed + Next Reminder Visual Debug
 
 ![QuickNote Screenshot](docs/screenshot.png)
 
 ---
 
-## ✨ ฟีเจอร์
+## ✨ ฟีเจอร์ (v1.3.0)
 
 - **ค้างบนหน้าจอ (Always-on-Top)** — เห็นโน้ตตลอดเวลาโดยไม่ต้องสลับหน้าต่าง
-- **Outliner** — เรียงโน้ตและพับ/กางแต่ละรายการได้
-- **Checklist** — ติ๊กถูกรายการย่อยแต่ละรายการ (ขีดฆ่า automatic)
-- **Pastel Colors** — ออกแบบแบบ macOS ใจติดพาสเทล
+- **Reminder Alerts** — ตั้งเวลาแจ้งเตือนสำหรับแต่ละโน้ต (แบบ non-blocking, ไม่ติดขัด UI)
+- **Priority Flags** — ทำเครื่องหมายเร่งด่วน (🚩 High / 🚩 Medium / 🚩 Low / 🏳 None) ด้วยสีเด่นชัด (v1.3.4)
+- **Quick Filter Toggle** — สลับ Active/Completed notes โดยตรงจาก titlebar
+- **Status Badge** — Done (สีเขียว) / Active (สีฟ้า) ดูสวยเรียบร้อย
+- **Modern UI** — macOS Pastel Design System แถบหัวลากได้ ปุ่มควบคุมชัดเจน
 - **System Tray** — ซ่อนลง tray แล้วเรียกกลับได้ง่าย ๆ
 - **Global Hotkey** — `Ctrl+Alt+N` สร้างโน้ตใหม่ / `Ctrl+Alt+S` toggle show/hide
+- **Dark Mode** — ธีมสีเข้ม ปรับได้แบบ Real-time
+- **Version & Credit** — Footer แสดง v1.3.0 + Developer (About tab)
 - **Local Database** — เก็บข้อมูลใน `~/.quicknote/` เท่านั้น ไม่มี cloud sync
 
 ---
@@ -22,7 +28,7 @@
 
 ### ✅ ตัวเลือก 1: Windows Installer (แนะนำ)
 
-1. ดาวน์โหลด `QuickNote-Setup-v1.0.0.exe` จากโฟลเดอร์ `installer_output/`
+1. ดาวน์โหลด `QuickNote-Setup-v1.0.2.exe` จากโฟลเดอร์ `installer_output/`
 2. ดับเบิลคลิกแล้วทำตามขั้นตอน
 3. เลือกตัวเลือก (Desktop Icon / Auto-launch on Startup)
 4. คลิก "Install"
@@ -32,7 +38,7 @@
 
 ### ตัวเลือก 2: Portable .exe (ไม่ต้องติดตั้ง)
 
-1. ดาวน์โหลด `QuickNote.exe` จากโฟลเดอร์ `dist/`
+1. ดาวน์โหลด `QuickNote_v1.3.8.exe` จากโฟลเดอร์ `dist/`
 2. ดับเบิลคลิก (ไม่ต้องติดตั้ง)
 3. ข้อมูลเก็บไว้ที่ `~/.quicknote/` (หาย เมื่อลบ .exe)
 

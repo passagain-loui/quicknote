@@ -5,18 +5,36 @@ import sys
 import ctypes
 import threading
 import socket
+import logging
 from pathlib import Path
 
-# DPI awareness — บรรทัดแรก ก่อนสร้าง Tk()
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="[%(levelname)s] %(name)s — %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+# DPI awareness — บรรทัดแรก ก่อนสร้าง Tk() (v1.8.9: Upgraded to Per-Monitor V2)
 try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    # v1.8.9: Per-Monitor DPI Awareness V2 for crisp UI on all monitor scales
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
 except Exception:
-    pass
+    try:
+        # Fallback to v1 if v2 not available
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            # Last resort: basic DPI awareness
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 from src.core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
 from src.core.database import init_db, get_all_notes, create_note
 from src.core.settings import Settings
 from src.ui.board import Board
+from src.ui.settings_window import SettingsWindow
 from src.platform.tray import start_tray_thread
 from src.platform.hotkey import start_hotkey_listener, create_default_hotkeys
 
@@ -96,13 +114,56 @@ def main():
             alpha = 1.0
         alpha = max(0.3, min(1.0, float(alpha)))
 
-        # Create and show Board UI
+        # Create and show Board UI (will set on_open_settings callback below)
         print("[>] Launching UI...")
-        board = Board(geometry=geometry, theme_mode=theme)
+        board = Board(geometry=geometry, theme_mode=theme, settings_obj=settings)
 
         # Apply alpha
         board.root.update_idletasks()
         board.root.attributes("-alpha", alpha)
+
+        # Settings Window instance (global to prevent duplicate windows)
+        settings_window = None
+
+        # Open Settings callback (PyInstaller safe — import at top level)
+        def open_settings_window():
+            """Open or focus Settings window (used by both tray and UI button)"""
+            nonlocal settings_window
+
+            # If window already exists and is valid, just focus it
+            if settings_window is not None:
+                try:
+                    # Check if window still exists
+                    if settings_window.root.winfo_exists():
+                        print("[>] Settings window already open, focusing...")
+                        settings_window.root.lift()
+                        settings_window.root.focus_force()
+                        return
+                except Exception:
+                    pass
+
+            # Create new Settings window
+            try:
+                print("[>] Opening Settings window...")
+                # Define callback that saves settings AND refreshes UI
+                def on_settings_saved():
+                    settings.save()
+                    board._on_settings_saved()
+
+                settings_window = SettingsWindow(
+                    board.root,
+                    settings.settings,
+                    board.theme,
+                    on_save_callback=on_settings_saved
+                )
+                print("[OK] Settings window opened")
+            except Exception as e:
+                print(f"[✗] Failed to open Settings: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Set callback for Board (PyInstaller safe)
+        board.on_open_settings = lambda: board.root.after(0, open_settings_window)
 
         # === Tray Icon ===
         def on_tray_show():
@@ -115,8 +176,15 @@ def main():
 
         def on_tray_settings():
             """Tray menu: Settings"""
-            # TODO: เปิด settings window
-            board.root.after(0, lambda: print("[!] Settings not implemented yet"))
+            # Ensure main window is visible first
+            print("[>] Ensuring main window is visible...")
+            board.root.after(0, lambda: (
+                board.root.deiconify(),
+                board.root.lift(),
+                board.root.focus_force(),
+            ))
+            # Then open settings after a short delay
+            board.root.after(200, open_settings_window)
 
         def on_tray_quit():
             """Tray menu: Quit"""
@@ -179,22 +247,71 @@ def main():
         return 0
 
     except Exception as e:
-        print(f"[✗] Error: {e}")
+        print(f"[✗] Error during startup: {e}")
         import traceback
         traceback.print_exc()
+
+        # Show error dialog to user
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            error_root = tk.Tk()
+            error_root.withdraw()  # Hide the root window
+            error_msg = f"QuickNote ไม่สามารถเปิดได้\n\nError: {str(e)}\n\nกรุณาตรวจสอบ Console หรือ Log file"
+            messagebox.showerror("QuickNote Startup Error", error_msg)
+            error_root.destroy()
+        except Exception as msg_err:
+            print(f"[!] Failed to show error dialog: {msg_err}")
+
+        lock.release()
         return 1
 
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
-        # ทำให้ AI สามารถเช็คว่าไม่ระเบิด
-        import tkinter as tk
-        root = tk.Tk()
-        root.overrideredirect(True)
-        root.geometry("1x1")
-        root.after(1500, root.destroy)
-        root.mainloop()
-        print("[OK] GUI test passed")
-        sys.exit(0)
+        # Run full initialization with timeout
+        print("[TEST] Starting full initialization test...")
+
+        def run_with_timeout():
+            try:
+                # Create minimal Tk to avoid full UI initialization
+                import tkinter as tk
+                root = tk.Tk()
+                root.overrideredirect(True)
+                root.geometry("1x1")
+
+                # Test database and settings
+                print("[TEST] Initializing database...")
+                init_db()
+                notes = get_all_notes()
+                print(f"[TEST] Database OK: {len(notes)} notes")
+
+                print("[TEST] Loading settings...")
+                settings = Settings()
+                settings.load()
+                print("[TEST] Settings OK")
+
+                print("[TEST] Testing tray icon initialization...")
+                def dummy_callback():
+                    pass
+                from src.platform.tray import TrayIcon
+                tray = TrayIcon(dummy_callback, dummy_callback, dummy_callback)
+                if tray.icon:
+                    print("[TEST] Tray icon initialized OK")
+                else:
+                    print("[WARN] Tray icon is None after initialization")
+
+                # Close after test
+                root.after(500, root.destroy)
+                root.mainloop()
+                print("[OK] Full test passed")
+                sys.exit(0)
+            except Exception as e:
+                print(f"[ERROR] Test failed: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+
+        run_with_timeout()
 
     sys.exit(main())

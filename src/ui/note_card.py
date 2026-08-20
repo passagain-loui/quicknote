@@ -193,7 +193,7 @@ class NoteCard(tk.Frame):
         right_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
         right_frame.pack(side="right", fill="x", expand=False, padx=2)
 
-        # Status badge (Done / Active) — v2.5.1: Convert to Button for toggling
+        # Status badge (Done / Active) — v2.5.3: Convert to Label for pixel-perfect alignment
         if note.status == "completed":
             badge_text = "Done"
             badge_bg = "#D1FAE5"  # Light green
@@ -203,22 +203,21 @@ class NoteCard(tk.Frame):
             badge_bg = "#DBEAFE"  # Light blue
             badge_fg = "#0EA5E9"  # Blue
 
-        # v2.5.2: Unified badge styling with priority badge
-        self.status_badge = tk.Button(
+        # v2.5.3: Unified Label (not Button) for exact pixel-perfect alignment with priority badge
+        self.status_badge = tk.Label(
             right_frame,
             text=badge_text,
             bg=badge_bg,
             fg=badge_fg,
-            font=("Segoe UI", 8, "bold"),  # v2.5.2: Consistent with priority badge
-            padx=8,  # v2.5.2: Unified padding
-            pady=2,  # v2.5.2: Unified padding
+            font=("Segoe UI", 8, "bold"),  # v2.5.3: Identical to priority badge
+            padx=8,  # v2.5.3: Identical padding
+            pady=2,  # v2.5.3: Identical padding
             bd=0,
             relief="flat",
-            command=self._on_toggle_status,
-            activebackground=badge_bg,
-            activeforeground=badge_fg,
         )
         self.status_badge.pack(side="left", padx=2)
+        # v2.5.3: Bind click event for status toggling
+        self.status_badge.bind("<Button-1>", lambda e: self._on_toggle_status())
 
         # Priority badge (v1.3.1) — Pill-shaped badge with priority level
         # Only show if priority != "none"
@@ -480,31 +479,41 @@ class NoteCard(tk.Frame):
 
     def _on_set_reminder(self):
         """เปิด DateTime picker dialog สำหรับตั้ง reminder — v1.7.2: Movable dialog with modern styling
-        v1.9.0: Ensure callback triggers immediate UI update with explicit refresh"""
-        from .reminder_dialog import ReminderDialog
+        v1.9.0: Ensure callback triggers immediate UI update with explicit refresh
+        v2.5.3: Add comprehensive error handling with messagebox feedback"""
+        try:
+            from .reminder_dialog import ReminderDialog
+            from tkinter import messagebox
 
-        reminder_dialog = ReminderDialog(self, self.note, self.theme)
+            reminder_dialog = ReminderDialog(self, self.note, self.theme)
 
-        def on_save_callback():
-            """v1.9.0: Force immediate UI update when reminder is set"""
-            # Update button appearance
-            self.btn_reminder.config(fg=self.theme.priority_color("high"), text="⏰")
-            # Force immediate visual refresh (prevents UI lag)
-            self.btn_reminder.update_idletasks()
-            # Save to database — v2.3.1: Pass note object explicitly
-            self.on_update(self.note)
+            def on_save_callback():
+                """v1.9.0: Force immediate UI update when reminder is set"""
+                # Update button appearance
+                self.btn_reminder.config(fg=self.theme.priority_color("high"), text="⏰")
+                # Force immediate visual refresh (prevents UI lag)
+                self.btn_reminder.update_idletasks()
+                # Save to database — v2.3.1: Pass note object explicitly
+                self.on_update(self.note)
 
-        def on_clear_callback():
-            """v1.9.0: Force immediate UI update when reminder is cleared"""
-            # Reset button appearance
-            self.btn_reminder.config(fg=self.theme.c("fg_muted"), text="⏱")
-            # Force immediate visual refresh (prevents UI lag)
-            self.btn_reminder.update_idletasks()
-            # Save to database — v2.3.1: Pass note object explicitly
-            self.on_update(self.note)
+            def on_clear_callback():
+                """v1.9.0: Force immediate UI update when reminder is cleared"""
+                # Reset button appearance
+                self.btn_reminder.config(fg=self.theme.c("fg_muted"), text="⏱")
+                # Force immediate visual refresh (prevents UI lag)
+                self.btn_reminder.update_idletasks()
+                # Save to database — v2.3.1: Pass note object explicitly
+                self.on_update(self.note)
 
-        reminder_dialog.on_save = on_save_callback
-        reminder_dialog.on_clear = on_clear_callback
+            reminder_dialog.on_save = on_save_callback
+            reminder_dialog.on_clear = on_clear_callback
+        except Exception as e:
+            # v2.5.3: Show error immediately instead of silent failure
+            from tkinter import messagebox
+            messagebox.showerror("Reminder Error", f"Failed to open reminder dialog:\n{str(e)}")
+            print(f"[Reminder Error] {e}")
+            import traceback
+            traceback.print_exc()
 
     def apply_theme(self, theme: Theme):
         """เปลี่ยนธีมตอนโปรแกรมทำงาน"""
@@ -512,7 +521,8 @@ class NoteCard(tk.Frame):
         self.config(bg=theme.c("note_bg"))
 
         # ✓ v1.3.3: Fixed button alignment — activebackground matches background to prevent shift
-        for btn in [self.btn_fold, self.btn_status, self.btn_delete, self.btn_reminder, self.btn_priority]:
+        # v2.5.3: Fixed reference to status_badge (was btn_status)
+        for btn in [self.btn_fold, self.btn_delete, self.btn_reminder, self.btn_priority]:
             btn.config(bg=theme.c("note_bg"), activebackground=theme.c("note_bg"))
 
         # Update priority button color based on current priority
@@ -524,7 +534,7 @@ class NoteCard(tk.Frame):
 
         # Update other buttons
         self.btn_fold.config(fg=theme.c("fg"))
-        self.btn_status.config(fg=theme.c("fg"))
+        # v2.5.3: status_badge is a Label, not a button, so no need to update it here
         self.btn_delete.config(fg=theme.c("fg_muted"))
 
         # Update reminder button color based on state

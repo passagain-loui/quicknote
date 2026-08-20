@@ -12,7 +12,7 @@ DefaultGroupName=QuickNote
 AllowNoIcons=yes
 OutputDir=installer_output
 OutputBaseFilename=QuickNote-Setup-v1.0.1
-SetupIconFile=assets/quicknote.ico
+; SetupIconFile=assets/quicknote.ico  (icon not available, use default)
 UninstallDisplayIcon={app}\QuickNote.exe
 Compression=lzma2
 SolidCompression=yes
@@ -25,7 +25,6 @@ PrivilegesRequiredOverridesAllowed=commandline
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "thai"; MessagesFile: "compiler:Thai.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -48,7 +47,7 @@ Name: "{group}\{cm:UninstallProgram,QuickNote}"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\QuickNote"; Filename: "{app}\QuickNote.exe"; Comment: "Notes Always on Top"; Tasks: desktopicon
 
 ; Startup folder shortcut (ถ้าผู้ใช้เลือก)
-Name: "{startup}\QuickNote"; Filename: "{app}\QuickNote.exe"; Comment: "QuickNote — Auto-launch"; Tasks: startupshortcut
+Name: "{userstartup}\QuickNote"; Filename: "{app}\QuickNote.exe"; Comment: "QuickNote — Auto-launch"; Tasks: startupshortcut
 
 [Run]
 ; เรียก QuickNote หลังติดตั้งเสร็จ (ไม่บังคับ)
@@ -56,4 +55,4 @@ Filename: "{app}\QuickNote.exe"; Description: "Launch QuickNote"; Flags: nowait 
 
 [UninstallDelete]
 ; ลบ shortcut ใน Startup folder เวลา uninstall
-Type: files; Name: "{startup}\QuickNote.lnk"
+Type: files; Name: "{userstartup}\QuickNote.lnk"

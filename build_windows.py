@@ -58,12 +58,26 @@ def build_exe(debug: bool = False) -> int:
         print(f"[x] ไม่พบ entry point: {entry}")
         return 1
 
+    # Generate versioned exe name
+    exe_name = f"{APP_NAME}_v{APP_VERSION}"
+
     args = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--noconfirm",
         "--clean",
-        "--name", APP_NAME,
+        "--name", exe_name,
+        "--hidden-import=src.ui.settings_window",
+        "--hidden-import=src.ui.board",
+        "--hidden-import=src.ui.titlebar",
+        "--hidden-import=src.ui.note_card",
+        "--hidden-import=src.ui.theme",
+        "--hidden-import=src.core.database",
+        "--hidden-import=src.core.models",
+        "--hidden-import=src.core.settings",
+        "--hidden-import=src.platform.tray",
+        "--hidden-import=src.platform.hotkey",
+        "--hidden-import=tkcalendar",  # v2.0.0: Calendar DatePicker
     ]
 
     if not debug:
@@ -85,7 +99,7 @@ def build_exe(debug: bool = False) -> int:
         print("[x] PyInstaller build ไม่สำเร็จ")
         return result.returncode
 
-    exe = ROOT / "dist" / f"{APP_NAME}.exe"
+    exe = ROOT / "dist" / f"{exe_name}.exe"
     size_mb = exe.stat().st_size / 1024 / 1024 if exe.exists() else 0
     print(f"\n[/] .exe เสร็จแล้ว: {exe}  ({size_mb:.1f} MB)")
     return 0

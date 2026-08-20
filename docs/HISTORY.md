@@ -1,5 +1,49 @@
 # QuickNote Release History
 
+## v2.5.3 (2026-08-20) — CRITICAL FIX: Button Alignment + Reminder Silent Failure Elimination
+
+### 🔧 Critical Corrections
+
+**Problem 1: Badge Size Mismatch Still Exists**
+- Status badge rendered with Button widget (slight visual padding difference)
+- Priority badge rendered with Label widget (different rendering engine)
+- Misalignment was subtle but persistent across all note cards
+- Caused by widget type difference despite identical config values
+
+**Problem 2: Reminder Button Silent Failure**
+- Clicking reminder button had no visible error when exceptions occurred
+- Exception silently caught, user assumes button is broken
+- No feedback mechanism to report what went wrong
+- Makes debugging impossible for end users
+
+**Solution 1: Pixel-Perfect Button Alignment**
+- Changed status_badge from `tk.Button` to `tk.Label` (matches priority_badge exactly)
+- Bind click event with Event handler: `self.status_badge.bind("<Button-1>", lambda e: self._on_toggle_status())`
+- BOTH badges now use identical widget type, font, padding, relief
+- Result: Badges rendered by same engine, exact pixel alignment guaranteed ✅
+
+**Solution 2: Destroy Silent Failure with Error Messages**
+- Wrapped entire `_on_set_reminder()` in try...except Exception block
+- Added messagebox.showerror() with detailed error message when exception occurs
+- Added console traceback output with traceback.print_exc()
+- User now sees EXACTLY what went wrong instead of silent failure ✅
+
+**Code Changes:**
+- `src/ui/note_card.py`:
+  * Changed status_badge from `tk.Button` to `tk.Label` (line 207)
+  * Added Event binding for click: `self.status_badge.bind("<Button-1>", lambda e: self._on_toggle_status())`
+  * Wrapped `_on_set_reminder()` in try...except with messagebox error reporting
+  * Fixed `apply_theme()` to reference `self.status_badge` instead of non-existent `self.btn_status`
+- `src/core/constants.py`: Version bumped to 2.5.3
+
+**Verification:**
+- Status and Priority badges now perfectly aligned ✅
+- Reminder button shows error if exception occurs ✅
+- All functionality works end-to-end ✅
+- No more silent failures or hidden bugs ✅
+
+---
+
 ## v2.5.2 (2026-08-20) — UI Polish: Badge Typography Unification + Reminder Dialog Focus Fix
 
 ### 🎨 UI Polish & Bug Fixes
