@@ -671,17 +671,12 @@ class Board:
                     # Safe string comparison: "2026-08-20 14:30" <= "2026-08-20 14:35"
                     # This avoids datetime parsing exceptions entirely
                     if reminder_str <= now_str:
-                        # Trigger reminder notification
+                        # v2.6.0: Trigger reminder notification (non-blocking via after_idle)
+                        # _trigger_reminder now handles DB update safely without blocking
                         try:
                             self._trigger_reminder(note_data)
                         except Exception:
                             pass  # Silently fail on notification error
-
-                        # Mark as triggered in DB
-                        try:
-                            update_note(note_data["id"], reminder_triggered=True)
-                        except Exception:
-                            pass  # Silently fail on DB update error
 
                 except Exception:
                     # Silently skip this note on any error
@@ -697,23 +692,45 @@ class Board:
             self.root.after(5000, self._check_reminders)
 
     def _trigger_reminder(self, note_data: dict):
-        """v2.1.0: Show desktop notification + play audio alert (System Sound + Fallback Beeps)"""
+        """v2.6.0: Show desktop notification + play audio alert (Non-blocking, thread-safe)
+        Uses root.after_idle() to defer notification display and DB update to prevent GUI freeze"""
         try:
             # Convert note_data dict to Note object
             from src.core.models import Note
             note_obj = Note.from_dict(note_data)
 
-            # Import notification popup
-            from .notification import NotificationPopup
+            # v2.6.0: Defer notification display to after_idle to prevent blocking event loop
+            # This ensures the notification popup doesn't freeze the main UI thread
+            def show_notification_safely():
+                try:
+                    # Import notification popup
+                    from .notification import NotificationPopup
 
-            # Show notification popup at bottom-right corner
-            NotificationPopup(
-                self.root,
-                note_obj,
-                self.theme,
-                on_dismiss=lambda: None,
-                on_open=lambda: self._on_note_reminder_open(note_obj)
-            )
+                    # Show notification popup at bottom-right corner
+                    NotificationPopup(
+                        self.root,
+                        note_obj,
+                        self.theme,
+                        on_dismiss=lambda: None,
+                        on_open=lambda: self._on_note_reminder_open(note_obj)
+                    )
+                except Exception:
+                    pass  # Silently fail to avoid blocking UI
+
+            # Schedule notification for after idle (non-blocking)
+            self.root.after_idle(show_notification_safely)
+
+            # v2.6.0: Defer database update to prevent blocking event loop
+            # Mark reminder as triggered without blocking the scheduler
+            def mark_triggered_safely():
+                try:
+                    update_note(note_data["id"], reminder_triggered=True)
+                except Exception:
+                    pass  # Silently fail on DB update error
+
+            # Schedule DB update for after idle (non-blocking)
+            self.root.after_idle(mark_triggered_safely)
+
         except Exception:
             pass  # Silently fail to avoid blocking UI
 

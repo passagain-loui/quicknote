@@ -1,8 +1,18 @@
-# QuickNote v2.5.9 — TRUE MODAL FIX: Main Window Disable (Proper Tkinter Modal)
+# QuickNote v2.6.0 — CRITICAL DEADLOCK FIX: Non-Blocking Notification + Safe DB Updates
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.9 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.6.0 Released 2026-08-20
+
+> **v2.6.0** แก้ไข **Event Loop Deadlock: Non-Blocking Notification + after_idle() Deferred Updates (Critical Freeze Fix)**
+>   - Problem: Application freezes when reminder notification triggers (user can't interact)
+>   - Root cause: Notification display + database update block the event loop synchronously
+>   - Solution 1: Defer notification display to root.after_idle() (non-blocking)
+>   - Solution 2: Defer database update to root.after_idle() (non-blocking)
+>   - Solution 3: Remove redundant DB update from _check_reminders (eliminate double-update)
+>   - Impact: Reminders trigger smoothly, app remains responsive, no GUI freeze ✅
+>   - Verification: Notifications appear, can click buttons, DB updates work ✅
+>   - Architecture: Event loop-safe reminder handling, deferred non-blocking operations
 
 > **v2.5.9** แก้ไข **True Modal: Disable Main Window + Scheduler Pause (Final Z-Order Fix)**
 >   - Problem: v2.5.8 ctypes solution had window manager conflicts, Z-order still jittery
@@ -695,7 +705,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.9  
+**Version:** 2.6.0  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -852,6 +862,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.9  
+**Version:** 2.6.0  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (True Modal Pattern — Main Window Disabled)
+**Status:** ✅ PRODUCTION-STABLE (Non-Blocking Event Loop + Thread-Safe Notifications)

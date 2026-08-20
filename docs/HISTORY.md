@@ -1,5 +1,62 @@
 # QuickNote Release History
 
+## v2.6.0 (2026-08-20) — CRITICAL DEADLOCK FIX: Thread-Safe Notification + Non-Blocking Updates
+
+### 🔧 GUI Freeze Prevention
+
+**Problem: Application Freeze When Reminders Trigger**
+- User sees notification but app becomes completely unresponsive
+- Can't click buttons, can't dismiss window, can't do anything
+- Root cause: Notification display and DB update block the event loop
+
+**Root Cause Analysis:**
+1. _check_reminders() runs every 5 seconds via root.after()
+2. When reminder triggers, calls _trigger_reminder() synchronously
+3. _trigger_reminder() creates NotificationPopup (blocks event loop)
+4. Then calls update_note() database update (blocks event loop)
+5. Event loop frozen → user can't interact with app
+
+**Solution: Non-Blocking Deferred Execution**
+- Use `root.after_idle()` to defer notification display
+- Use `root.after_idle()` to defer database update
+- Both operations now happen when event loop is idle (not blocking)
+- Event loop remains responsive to user input
+
+**Implementation:**
+```python
+def _trigger_reminder(self, note_data):
+    # Notification deferred to after_idle
+    def show_notification_safely():
+        NotificationPopup(...)  # Doesn't block anymore
+    self.root.after_idle(show_notification_safely)
+
+    # Database update deferred to after_idle
+    def mark_triggered_safely():
+        update_note(...)  # Doesn't block anymore
+    self.root.after_idle(mark_triggered_safely)
+```
+
+**Code Changes:**
+- `src/ui/board.py`:
+  * Rewrote _trigger_reminder() to use root.after_idle()
+  * Removed redundant update_note() from _check_reminders()
+  * Both notification and DB update now non-blocking
+- `src/core/constants.py`: Version bumped to 2.6.0
+
+**Verification:**
+- Notification appears without freezing app ✅
+- User can still click buttons while notification visible ✅
+- Database updates safely without blocking UI ✅
+- Event loop remains responsive ✅
+
+**Lesson Learned:**
+- Never block event loop in Tkinter callbacks
+- Use after() or after_idle() for long operations
+- Database operations can block — defer them
+- UI operations (like popups) can block — defer them
+
+---
+
 ## v2.5.9 (2026-08-20) — TRUE MODAL FIX: Main Window Disable + Scheduler Pause (Final Z-Order Fix)
 
 ### 🔧 TRUE MODAL Pattern (Simplest Solution)
