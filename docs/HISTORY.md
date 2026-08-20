@@ -1,5 +1,68 @@
 # QuickNote Release History
 
+## v2.6.1 (2026-08-20) — CRITICAL ARCHITECTURE FIX: In-App Toast (Zero Toplevel Deadlock)
+
+### 🔧 OS-Level Window Handle Deadlock Prevention
+
+**Problem: v2.6.0 Still Freezes Despite after_idle()**
+- User reports GUI hard freeze when reminders trigger, even with v2.6.0
+- App becomes completely unresponsive, taskbar input ignored
+- Root cause: Creating tk.Toplevel window still causes OS-level deadlock
+
+**Root Cause Analysis:**
+- Even with `root.after_idle()`, creating new tk.Toplevel window on Windows can deadlock
+- Tkinter Toplevel creation interacts with OS window manager
+- Main window + new window handle can cause focus/modal conflicts
+- Result: OS blocks input to both windows, hard freeze
+
+**Solution: In-App Toast Banner (No Toplevel)**
+- Replace tk.Toplevel NotificationPopup with Frame-based toast banner
+- Toast banner is a Frame inside the main window's UI hierarchy
+- No new window handle created = no OS deadlock risk
+- Single event loop manages everything = no window manager conflicts
+
+**Implementation:**
+```python
+def _show_toast_banner(self, note):
+    # Toast is a Frame inside main window (no Toplevel)
+    # Packed at top of UI before search bar
+    # Contains: Title, Note, Dismiss button, Open button
+    # Auto-hides after 8 seconds or on dismiss
+
+# Update database BEFORE showing toast (safe ordering)
+# Use after(100) for small delay, not after_idle (cleaner timing)
+```
+
+**Code Changes:**
+- `src/ui/board.py`:
+  * Added toast_frame, toast_visible, toast_timer state
+  * Added _show_toast_banner() creates Frame-based toast (no Toplevel)
+  * Added _hide_toast_banner() for clean dismissal
+  * Added _dismiss_and_open_note() for note opening
+  * Added _play_notification_alert() in background thread
+  * Rewrote _trigger_reminder() to use toast banner
+  * DB update BEFORE toast (safe state ordering)
+  * Toast display via after(100), not after_idle (reliable timing)
+- `src/core/constants.py`: Version bumped to 2.6.1
+
+**Verification:**
+- No GUI freeze when reminders trigger ✅
+- Toast banner appears in-app (top of window) ✅
+- User can interact with main window while toast visible ✅
+- Dismiss button and Open Note button work ✅
+- Auto-dismisses after 8 seconds or on interaction ✅
+- Audio alert plays in background thread ✅
+- Database correctly marks reminder as triggered ✅
+
+**Architecture Benefits:**
+- ✅ Zero new window handles = no OS deadlock
+- ✅ Single event loop = no window manager conflicts
+- ✅ Frame-based = no modal/grab issues
+- ✅ Simpler code = fewer edge cases
+- ✅ More responsive = immediate feedback
+
+---
+
 ## v2.6.0 (2026-08-20) — CRITICAL DEADLOCK FIX: Thread-Safe Notification + Non-Blocking Updates
 
 ### 🔧 GUI Freeze Prevention

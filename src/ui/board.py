@@ -73,9 +73,19 @@ class Board:
         self.titlebar.on_toggle_topmost = self._on_toggle_topmost  # v1.5.1: window pin
         self.titlebar.on_filter_changed = self._on_filter_changed
 
+        # v2.6.1: Toast banner state (in-app notification, no Toplevel)
+        self.toast_visible = False
+        self.toast_timer = None
+
         # Roll-up state
         self._rolled_up = False
         self._saved_height = 600
+
+        # v2.6.1: Toast banner (in-app notification, no Toplevel window)
+        # Hidden by default, shown only when reminder triggers
+        self.toast_frame = tk.Frame(self.root, bg="#FF3B30", highlightthickness=0)
+        # Don't pack by default — pack dynamically when shown
+        self.toast_content = {}  # Store toast message content
 
         # v2.3.0: Search Bar — Real-time note filtering
         # v2.3.2: Minimal icon redesign (thin line + muted gray)
@@ -692,47 +702,151 @@ class Board:
             self.root.after(5000, self._check_reminders)
 
     def _trigger_reminder(self, note_data: dict):
-        """v2.6.0: Show desktop notification + play audio alert (Non-blocking, thread-safe)
-        Uses root.after_idle() to defer notification display and DB update to prevent GUI freeze"""
+        """v2.6.1: Show in-app toast banner + play audio alert (No Toplevel, zero deadlock risk)
+        Toast banner is a Frame in the main window — no new window handles, no OS deadlock"""
         try:
             # Convert note_data dict to Note object
             from src.core.models import Note
             note_obj = Note.from_dict(note_data)
 
-            # v2.6.0: Defer notification display to after_idle to prevent blocking event loop
-            # This ensures the notification popup doesn't freeze the main UI thread
-            def show_notification_safely():
-                try:
-                    # Import notification popup
-                    from .notification import NotificationPopup
+            # v2.6.1: Update DB FIRST (before UI), then show toast safely
+            # This ensures DB state is correct before any UI interaction
+            try:
+                update_note(note_data["id"], reminder_triggered=True)
+            except Exception:
+                pass  # Silently fail on DB update error
 
-                    # Show notification popup at bottom-right corner
-                    NotificationPopup(
-                        self.root,
-                        note_obj,
-                        self.theme,
-                        on_dismiss=lambda: None,
-                        on_open=lambda: self._on_note_reminder_open(note_obj)
-                    )
+            # v2.6.1: Schedule toast display with small delay to let event loop breathe
+            # Using after(100) instead of after_idle to ensure clean timing
+            def show_toast_safely():
+                try:
+                    self._show_toast_banner(note_obj)
                 except Exception:
                     pass  # Silently fail to avoid blocking UI
 
-            # Schedule notification for after idle (non-blocking)
-            self.root.after_idle(show_notification_safely)
-
-            # v2.6.0: Defer database update to prevent blocking event loop
-            # Mark reminder as triggered without blocking the scheduler
-            def mark_triggered_safely():
-                try:
-                    update_note(note_data["id"], reminder_triggered=True)
-                except Exception:
-                    pass  # Silently fail on DB update error
-
-            # Schedule DB update for after idle (non-blocking)
-            self.root.after_idle(mark_triggered_safely)
+            self.root.after(100, show_toast_safely)
 
         except Exception:
             pass  # Silently fail to avoid blocking UI
+
+    def _show_toast_banner(self, note):
+        """v2.6.1: Display in-app toast notification banner (no Toplevel window)"""
+        try:
+            # Cancel any existing toast timer
+            if self.toast_timer:
+                self.root.after_cancel(self.toast_timer)
+                self.toast_timer = None
+
+            # Clear previous toast content
+            for widget in self.toast_frame.winfo_children():
+                widget.destroy()
+
+            # === Toast Header ===
+            header_frame = tk.Frame(self.toast_frame, bg="#FF3B30", highlightthickness=0)
+            header_frame.pack(side="top", fill="x", padx=12, pady=(8, 0))
+
+            title_label = tk.Label(
+                header_frame,
+                text="⏰ REMINDER",
+                bg="#FF3B30",
+                fg="#FFFFFF",
+                font=("Segoe UI", 9, "bold"),
+            )
+            title_label.pack(side="left")
+
+            # === Note Title ===
+            note_title_label = tk.Label(
+                self.toast_frame,
+                text=note.title[:50],
+                bg="#FF3B30",
+                fg="#FFFFFF",
+                font=("Segoe UI", 10, "bold"),
+                wraplength=350,
+                justify="left",
+            )
+            note_title_label.pack(side="top", anchor="w", padx=12, pady=(4, 2), fill="x")
+
+            # === Button Frame ===
+            btn_frame = tk.Frame(self.toast_frame, bg="#FF3B30", highlightthickness=0)
+            btn_frame.pack(side="top", fill="x", padx=12, pady=(2, 8))
+
+            # Dismiss button
+            btn_dismiss = tk.Button(
+                btn_frame,
+                text="Dismiss",
+                bg="#FFFFFF",
+                fg="#FF3B30",
+                font=("Segoe UI", 8),
+                bd=0,
+                relief="flat",
+                command=self._hide_toast_banner,
+                padx=10,
+                pady=4,
+                activebackground="#F5F5F7",
+                cursor="hand2",
+            )
+            btn_dismiss.pack(side="left", padx=(0, 6))
+
+            # Open Note button
+            btn_open = tk.Button(
+                btn_frame,
+                text="Open",
+                bg="#FFFFFF",
+                fg="#FF3B30",
+                font=("Segoe UI", 8, "bold"),
+                bd=0,
+                relief="flat",
+                command=lambda: self._dismiss_and_open_note(note),
+                padx=10,
+                pady=4,
+                activebackground="#F5F5F7",
+                cursor="hand2",
+            )
+            btn_open.pack(side="left")
+
+            # Play audio alert in background thread
+            import threading
+            threading.Thread(target=self._play_notification_alert, daemon=True).start()
+
+            # Show toast banner
+            self.toast_frame.pack(side="top", fill="x", before=self.search_frame)
+            self.toast_visible = True
+
+            # Auto-hide after 8 seconds
+            self.toast_timer = self.root.after(8000, self._hide_toast_banner)
+
+        except Exception:
+            pass  # Silently fail
+
+    def _hide_toast_banner(self):
+        """v2.6.1: Hide toast banner"""
+        try:
+            if self.toast_timer:
+                self.root.after_cancel(self.toast_timer)
+                self.toast_timer = None
+            self.toast_frame.pack_forget()
+            self.toast_visible = False
+        except Exception:
+            pass
+
+    def _dismiss_and_open_note(self, note):
+        """v2.6.1: Hide toast and open note"""
+        self._hide_toast_banner()
+        self._on_note_reminder_open(note)
+
+    def _play_notification_alert(self):
+        """v2.6.1: Play audio alert (background thread, non-blocking)"""
+        try:
+            import winsound
+            # Layer 1: System exclamation sound
+            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            # Layer 2: OS-level message beep
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            # Layer 3: Fallback beeps
+            winsound.Beep(1000, 500)
+            winsound.Beep(1000, 500)
+        except Exception:
+            pass
 
     def _on_note_reminder_open(self, note):
         """Callback when 'Open Note' clicked from reminder notification"""

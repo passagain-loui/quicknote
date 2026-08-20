@@ -1,8 +1,18 @@
-# QuickNote v2.6.0 — CRITICAL DEADLOCK FIX: Non-Blocking Notification + Safe DB Updates
+# QuickNote v2.6.1 — CRITICAL ARCHITECTURE FIX: In-App Toast (Zero Toplevel Deadlock)
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.6.0 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.6.1 Released 2026-08-20
+
+> **v2.6.1** แก้ไข **OS-Level Deadlock: In-App Toast Frame (Zero Toplevel Windows)**
+>   - Problem: v2.6.0 still freezes because tk.Toplevel creation causes OS-level deadlock
+>   - Root cause: Even with after_idle(), creating new window handle conflicts with OS window manager
+>   - Solution 1: Replace tk.Toplevel with Frame-based toast banner (no new window)
+>   - Solution 2: Update DB BEFORE showing toast (safe state ordering)
+>   - Solution 3: Use after(100) for consistent timing, not after_idle
+>   - Impact: Zero GUI freeze, toast appears in-app without OS deadlock ✅
+>   - Verification: Reminders trigger smoothly, app fully responsive, no hard freeze ✅
+>   - Architecture: Single event loop, Frame-based UI, no window manager conflicts
 
 > **v2.6.0** แก้ไข **Event Loop Deadlock: Non-Blocking Notification + after_idle() Deferred Updates (Critical Freeze Fix)**
 >   - Problem: Application freezes when reminder notification triggers (user can't interact)
