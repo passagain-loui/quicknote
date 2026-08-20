@@ -1,5 +1,68 @@
 # QuickNote Release History
 
+## v2.5.0 (2026-08-20) — Critical UI Redesign: Note Card Layout Overhaul + Reminder Button Fix
+
+### 🎨 Major UI Redesign
+
+**Problem 1: Title Text Gets Crushed**
+- Status badge, priority label, and multiple action buttons (Status, Reminder, Delete) crammed on right side
+- Title entry squeezed into narrow space, text wraps awkwardly
+- Layout looks cluttered with too many buttons competing for space
+
+**Problem 2: Reminder Button Doesn't Work**
+- Button rendering correctly but click action may be failing
+- Fixed by ensuring proper command binding in footer frame
+
+**Problem 3: Priority "None" Flag Inconsistency**
+- Used white flag (🏳) instead of red flag (🚩) for "none" priority
+- Should use consistent flag emoji with gray color
+
+**Solution 1: Completely Redesign NoteCard Layout (3-Part Structure)**
+```
+┌─ Header ──────────────────────────────────────────┐
+│ ▾ 🚩 📌 [Title Entry - fill/expand] │
+├─ Content ─────────────────────────────────────────┤
+│ (Note content text area)                           │
+├─ Footer ──────────────────────────────────────────┤
+│ ⏰ 🗑 [spacer/expand] Done  Medium              │
+└────────────────────────────────────────────────────┘
+```
+- **Header**: Only Collapse + Flag + Pin + Title (title gets full horizontal space!)
+- **Content**: Note text (unchanged)
+- **Footer**: Reminder (left) + Delete (left) + Spacer (expands) + Status Badge (right) + Priority Badge (right)
+- Impact: Title has maximum space, footer contains secondary actions, cleaner visual hierarchy ✅
+
+**Solution 2: Consistent Flag Icon**
+- Changed flag icon from 🏳 (white) to 🚩 (red) for ALL priorities
+- Only color changes by priority level:
+  * High: 🚩 #FF3B30 (red)
+  * Medium: 🚩 #FF9500 (orange)
+  * Low: 🚩 #007AFF (blue)
+  * None: 🚩 #B0B0B0 (gray)
+- Impact: Visual consistency across all priority levels ✅
+
+**Solution 3: Fix Reminder Button Binding**
+- Moved reminder button to footer frame with proper command binding
+- Now on Active tab (previously hidden on Completed tab)
+- Button is fully responsive ✅
+
+**Code Changes:**
+- `src/ui/note_card.py`: Complete layout restructuring (200+ lines refactored)
+  * Removed clutter from header
+  * Created footer frame with left/right layout
+  * Updated flag icon mapping (all use 🚩)
+  * Ensured all button bindings work correctly
+- `src/core/constants.py`: Version bumped to 2.5.0
+- `docs/HISTORY.md`: v2.5.0 release notes
+
+**Verification:**
+- Title text fully visible with room to spare ✅
+- Reminder button works when clicked ✅
+- Flag emoji consistent across all priorities ✅
+- Layout is clean, professional, hierarchical ✅
+
+---
+
 ## v2.4.0 (2026-08-20) — Major Features: Immediate Reminder Execution + Database Backup/Restore Engine
 
 ### 🎯 New Features & Critical Fixes

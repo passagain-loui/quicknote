@@ -48,104 +48,7 @@ class NoteCard(tk.Frame):
         # ✓ v1.4.2: Increased header padding for modern spacing
         header.pack(fill="x", padx=12, pady=10)
 
-        # v1.8.9: Pack right-side elements FIRST to reserve space, preventing title expansion overflow
-        # Status badge (Done / Active) — packed FIRST (right side)
-        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
-        status_frame = tk.Frame(header, bg=theme.c("note_bg"), highlightthickness=0)
-        status_frame.pack(side="right", padx=2)
-
-        if note.status == "completed":
-            badge_text = "Done"
-            badge_bg = "#D1FAE5"  # Light green
-            badge_fg = "#10B981"  # Green
-        else:
-            badge_text = "Active"
-            badge_bg = "#DBEAFE"  # Light blue
-            badge_fg = "#0EA5E9"  # Blue
-
-        self.status_badge = tk.Label(
-            status_frame,
-            text=badge_text,
-            bg=badge_bg,
-            fg=badge_fg,
-            font=("Segoe UI", 8, "bold"),
-            padx=6,
-            pady=2,
-        )
-        self.status_badge.pack(side="left", padx=2)
-
-        # Priority badge (v1.3.1) — Pill-shaped badge with priority level
-        # Only show if priority != "none"
-        self.priority_badge = None
-        if note.priority and note.priority != "none":
-            self._create_priority_badge(status_frame, theme)
-
-        # Control buttons (Status toggle + Reminder + Delete)
-        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
-        ctrl_frame = tk.Frame(header, bg=theme.c("note_bg"), highlightthickness=0)
-        ctrl_frame.pack(side="right", padx=2)
-
-        # Status toggle button (v1.3.8) — different icons based on tab
-        # Active tab: ✓ (Mark as Done) | Completed tab: ↩ (Restore to Active)
-        status_icon = "↩" if is_completed_tab else "✓"
-        self.btn_status = tk.Button(
-            ctrl_frame,
-            text=status_icon,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg"),
-            activebackground=theme.c("note_bg"),  # ✓ v1.3.3: Match background to prevent button shift
-            activeforeground=theme.c("fg"),
-            font=("Segoe UI", 10),
-            command=self._on_toggle_status,
-            padx=2,
-            pady=2,
-        )
-        self.btn_status.pack(side="left", padx=2)  # ✓ v1.3.5: Increased padding to prevent overlap
-
-        # Reminder button (v1.3.0) — ⏰ for setting reminder datetime
-        reminder_icon = "⏰" if note.reminder_datetime else "⏱"
-        self.btn_reminder = tk.Button(
-            ctrl_frame,
-            text=reminder_icon,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.priority_color("high") if note.reminder_datetime else theme.c("fg_muted"),
-            activebackground=theme.c("note_bg"),  # ✓ v1.3.3: Match background to prevent button shift
-            activeforeground=theme.c("fg"),
-            font=("Segoe UI", 10),
-            command=self._on_set_reminder,
-            padx=2,
-            pady=2,
-        )
-        # ✓ v1.3.8: Hide reminder button in Completed tab
-        if is_completed_tab:
-            self.btn_reminder.pack_forget()  # Hide completely
-        else:
-            self.btn_reminder.pack(side="left", padx=2)  # ✓ v1.3.5: Increased padding to prevent overlap
-
-        # Delete button (v1.3.8) — changed from ✕ to 🗑 (trash icon)
-        # v1.8.8: Ensure delete button is always visible on Active tab for quick note deletion
-        self.btn_delete = tk.Button(
-            ctrl_frame,
-            text="🗑",  # ✓ v1.3.8: Trash icon instead of ✕
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg_muted"),
-            activebackground=theme.c("note_bg"),
-            activeforeground="#EF4444",  # Red on hover
-            font=("Segoe UI", 10),
-            command=self._on_delete,
-            padx=2,
-            pady=2,
-        )
-        self.btn_delete.pack(side="left", padx=2)  # ✓ v1.8.8: Always show delete button on all tabs
+        # v2.5.0: Simplified header — no right-side elements, title gets full space
 
         # v1.8.9: NOW pack left-side elements (fold, priority, pin, title)
         # after right-side (status, control) have reserved their space
@@ -168,14 +71,14 @@ class NoteCard(tk.Frame):
         )
         self.btn_fold.pack(side="left", padx=2)
 
-        # Priority flag button (v1.3.4) — emoji flag with color coding
+        # v2.5.0: Priority flag button — always use 🚩, change color by priority
         priority_icon_map = {
-            "high": ("🚩", "#FF3B30"),
-            "medium": ("🚩", "#FF9500"),
-            "low": ("🚩", "#007AFF"),
-            "none": ("🏳", "#CCCCCC"),
+            "high": ("🚩", "#FF3B30"),      # Red
+            "medium": ("🚩", "#FF9500"),    # Orange
+            "low": ("🚩", "#007AFF"),       # Blue
+            "none": ("🚩", "#B0B0B0"),      # Gray
         }
-        flag_icon, flag_color = priority_icon_map.get(note.priority, ("🏳", "#CCCCCC"))
+        flag_icon, flag_color = priority_icon_map.get(note.priority, ("🚩", "#B0B0B0"))
 
         self.btn_priority = tk.Button(
             header,
@@ -238,6 +141,87 @@ class NoteCard(tk.Frame):
 
         # Apply strikethrough if completed
         self._update_strikethrough()
+
+        # === Footer Frame (v2.5.0: Actions + Status moved to bottom) ===
+        footer = tk.Frame(main_frame, bg=theme.c("note_bg"), highlightthickness=0)
+        footer.pack(fill="x", padx=12, pady=(0, 8))
+
+        # Left side: Reminder button + Delete button
+        left_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
+        left_frame.pack(side="left", fill="x", expand=False)
+
+        # Reminder button (v1.3.0) — ⏰ for setting reminder datetime
+        reminder_icon = "⏰" if note.reminder_datetime else "⏱"
+        self.btn_reminder = tk.Button(
+            left_frame,
+            text=reminder_icon,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=theme.priority_color("high") if note.reminder_datetime else theme.c("fg_muted"),
+            activebackground=theme.c("note_bg"),
+            activeforeground=theme.c("fg"),
+            font=("Segoe UI", 10),
+            command=self._on_set_reminder,
+            padx=2,
+            pady=2,
+        )
+        # v2.5.0: Show reminder button on all tabs (moved to footer)
+        self.btn_reminder.pack(side="left", padx=2)
+
+        # Delete button (v1.3.8) — changed from ✕ to 🗑 (trash icon)
+        self.btn_delete = tk.Button(
+            left_frame,
+            text="🗑",
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=theme.c("fg_muted"),
+            activebackground=theme.c("note_bg"),
+            activeforeground="#EF4444",  # Red on hover
+            font=("Segoe UI", 10),
+            command=self._on_delete,
+            padx=2,
+            pady=2,
+        )
+        self.btn_delete.pack(side="left", padx=2)
+
+        # Spacer (expands to push right-side elements to edge)
+        spacer = tk.Frame(footer, bg=theme.c("note_bg"))
+        spacer.pack(side="left", fill="x", expand=True)
+
+        # Right side: Status badge + Priority badge
+        right_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
+        right_frame.pack(side="right", fill="x", expand=False, padx=2)
+
+        # Status badge (Done / Active)
+        if note.status == "completed":
+            badge_text = "Done"
+            badge_bg = "#D1FAE5"  # Light green
+            badge_fg = "#10B981"  # Green
+        else:
+            badge_text = "Active"
+            badge_bg = "#DBEAFE"  # Light blue
+            badge_fg = "#0EA5E9"  # Blue
+
+        self.status_badge = tk.Label(
+            right_frame,
+            text=badge_text,
+            bg=badge_bg,
+            fg=badge_fg,
+            font=("Segoe UI", 8, "bold"),
+            padx=6,
+            pady=2,
+        )
+        self.status_badge.pack(side="left", padx=2)
+
+        # Priority badge (v1.3.1) — Pill-shaped badge with priority level
+        # Only show if priority != "none"
+        self.priority_badge = None
+        if note.priority and note.priority != "none":
+            self._create_priority_badge(right_frame, theme)
 
         # Callbacks
         self.on_update = lambda: None  # Title/content changes only

@@ -1,9 +1,20 @@
-# QuickNote v2.4.0 — Major Features: Immediate Reminder Execution + Database Backup/Restore Engine
+# QuickNote v2.5.0 — Critical UI Redesign: Note Card Layout Overhaul + Reminder Button Fix
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.4.0 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.0 Released 2026-08-20
 
+> **v2.5.0** แก้ไข **Note Card Layout Redesign + Reminder Button Fix + Flag Icon Consistency (Critical UI Overhaul)**
+>   - Problem 1: Title text crushed by too many buttons on right side (status, priority, reminder, delete)
+>   - Problem 2: Reminder button doesn't respond to clicks
+>   - Problem 3: Priority "None" uses white flag (🏳) instead of consistent red flag (🚩)
+>   - Solution 1: Complete layout redesign — Header (fold/flag/pin/title) + Content + Footer (reminder/delete/spacer/status/priority)
+>   - Solution 2: Moved reminder & delete buttons to footer frame with proper bindings
+>   - Solution 3: All priorities use 🚩, only color changes (red/orange/blue/gray)
+>   - Impact: Title has full space, cleaner layout, reminder button works, consistent flag styling
+>   - Verification: Title readable, buttons responsive, layout professional ✅
+>   - Architecture: 3-part card structure (header/content/footer), clear visual hierarchy
+>
 > **v2.4.0** เพิ่ม **Immediate Reminder Execution + Database Backup/Restore Engine (Major Features)**
 >   - Feature 1: Reminders trigger immediately when set (no 5-second wait for next cycle)
 >   - Feature 2: Full database backup/restore engine with file dialogs
@@ -599,9 +610,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.4.0  
+**Version:** 2.5.0  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Immediate Reminder Execution + Database Backup/Restore)
+**Status:** ✅ PRODUCTION-STABLE (Note Card Layout Redesign + Reminder Button Fix)
 
 ## 🔧 Build Workflow
 
@@ -756,6 +767,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.4.0  
+**Version:** 2.5.0  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Immediate Reminder Execution + Database Backup/Restore)
+**Status:** ✅ PRODUCTION-STABLE (Note Card Layout Redesign + Reminder Button Fix)
