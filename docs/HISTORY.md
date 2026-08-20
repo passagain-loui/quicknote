@@ -1,5 +1,50 @@
 # QuickNote Release History
 
+## v2.5.2 (2026-08-20) — UI Polish: Badge Typography Unification + Reminder Dialog Focus Fix
+
+### 🎨 UI Polish & Bug Fixes
+
+**Problem 1: Badge Typography Mismatch**
+- Status badge ("Active"/"Done") has different font size and padding than Priority badge (High/Medium/Low)
+- Status badge: Font 8pt, padx=6, pady=2
+- Priority badge: Font 7pt, padx=6, pady=1
+- Looks inconsistent and unprofessional
+
+**Problem 2: Reminder Dialog Not Showing**
+- Clicking reminder button (clock icon) doesn't display the dialog window
+- User sees no response, assumes button is broken
+- Dialog created but not displayed with proper focus
+
+**Solution 1: Unified Badge Typography & Styling**
+- Both status_badge AND priority_badge now use identical styling:
+  * Font: `("Segoe UI", 8, "bold")` (was 7 for priority)
+  * Padding: `padx=8, pady=2` (was 6/1 for priority)
+  * Relief: Flat (`bd=0`, `relief="flat"`)
+  * Alignment: Both pack in right_frame with `side="left", padx=2`
+- Result: Badges appear uniform and professional ✅
+
+**Solution 2: Enhanced Reminder Dialog Focus**
+- Added `transient()` call to establish proper parent-child relationship
+- Added `grab_set()` for true modal focus (forces user to interact with dialog)
+- Kept existing `-topmost` attribute for visibility guarantee
+- Maintained delayed lift() operations for Z-order security
+- Result: Dialog now displays prominently with guaranteed visibility ✅
+
+**Code Changes:**
+- `src/ui/note_card.py`: 
+  * Updated status_badge styling (padx=8 from 6)
+  * Updated priority_badge styling (font 8 from 7, padx=8 from 6, pady=2 from 1)
+  * Removed fixed width constraint from priority_badge for flexible sizing
+- `src/ui/reminder_dialog.py`: Added transient() and grab_set() for proper modal focus
+- `src/core/constants.py`: Version bumped to 2.5.2
+
+**Impact:**
+- Consistent professional badge styling across all note cards ✅
+- Reminder dialog appears immediately and captures focus ✅
+- User experience significantly improved ✅
+
+---
+
 ## v2.5.1 (2026-08-20) — EMERGENCY FIX: NoteCard Attribute Error Hotfix
 
 ### 🚨 Critical Bug Fix

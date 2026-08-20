@@ -203,14 +203,15 @@ class NoteCard(tk.Frame):
             badge_bg = "#DBEAFE"  # Light blue
             badge_fg = "#0EA5E9"  # Blue
 
+        # v2.5.2: Unified badge styling with priority badge
         self.status_badge = tk.Button(
             right_frame,
             text=badge_text,
             bg=badge_bg,
             fg=badge_fg,
-            font=("Segoe UI", 8, "bold"),
-            padx=6,
-            pady=2,
+            font=("Segoe UI", 8, "bold"),  # v2.5.2: Consistent with priority badge
+            padx=8,  # v2.5.2: Unified padding
+            pady=2,  # v2.5.2: Unified padding
             bd=0,
             relief="flat",
             command=self._on_toggle_status,
@@ -429,18 +430,18 @@ class NoteCard(tk.Frame):
         if self.priority_badge:
             self.priority_badge.destroy()
 
-        # Create pill badge with fixed width for alignment (v1.3.4)
+        # v2.5.2: Unified badge styling with status badge
         self.priority_badge = tk.Label(
             parent_frame,
             text=config["text"],
             bg=config["bg"],
             fg=config["fg"],
-            font=("Segoe UI", 7, "bold"),
-            padx=6,
-            pady=1,
+            font=("Segoe UI", 8, "bold"),  # v2.5.2: Consistent with status badge (was 7)
+            padx=8,  # v2.5.2: Unified padding (was 6)
+            pady=2,  # v2.5.2: Unified padding (was 1)
             relief="flat",
             bd=0,
-            width=8  # ✓ v1.3.4: Fixed width ensures all badges align (High/Medium/Low same width)
+            # Removed fixed width for better flex styling
         )
         self.priority_badge.pack(side="left", padx=2)
         self.priority_badge.bind("<Button-1>", lambda e: self._open_priority_menu(e))

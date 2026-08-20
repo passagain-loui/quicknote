@@ -1,9 +1,18 @@
-# QuickNote v2.5.1 — EMERGENCY HOTFIX: Attribute Error + Status Button Restoration
+# QuickNote v2.5.2 — UI Polish: Badge Typography Unification + Reminder Dialog Focus Fix
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.1 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.2 Released 2026-08-20
 
+> **v2.5.2** ปรับแต่ง **Badge Typography Unification + Reminder Dialog Focus (UI Polish)**
+>   - Problem 1: Status badge (Active/Done) has different font/padding than Priority badge (High/Medium/Low)
+>   - Problem 2: Reminder dialog doesn't display when reminder button is clicked
+>   - Solution 1: Unified badge styling — both use font 8pt, padx=8, pady=2, flat relief
+>   - Solution 2: Added transient() + grab_set() for proper modal focus and dialog visibility
+>   - Impact: Professional consistent badge styling, reminder dialog appears immediately
+>   - Verification: Badges aligned perfectly, dialog displays with focus ✅
+>   - Architecture: Consistent UI components, proper modal dialog pattern
+>
 > **v2.5.1** แก้ไข **EMERGENCY: NoteCard AttributeError + Status Button Restoration (Critical Hotfix)**
 >   - Problem: Application crashes on startup with `'NoteCard' object has no attribute 'status_badge'`
 >   - Root cause: v2.5.0 called `_update_strikethrough()` BEFORE `status_badge` was created (initialization order bug)
@@ -620,9 +629,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.1  
+**Version:** 2.5.2  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (EMERGENCY: AttributeError Hotfix)
+**Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
 ## 🔧 Build Workflow
 
@@ -777,6 +786,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.1  
+**Version:** 2.5.2  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (EMERGENCY: AttributeError Hotfix)
+**Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)

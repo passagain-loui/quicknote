@@ -49,19 +49,27 @@ class ReminderDialog:
 
         self.dialog.geometry(f"{dialog_w}x{dialog_h}+{x}+{y}")
 
-        # v2.0.3: ABSOLUTE FIX - No grab_set, pure non-modal topmost architecture
-        # 1. Force dialog to be topmost (absolute, never grab_set)
+        # v2.5.2: Enhanced focus management for reliable dialog visibility
+        # Use transient() to establish parent-child relationship
+        try:
+            self.dialog.transient(parent.winfo_toplevel())
+        except Exception:
+            pass
+
+        # v2.5.2: Use grab_set() for modal focus (forces user to interact with dialog)
+        try:
+            self.dialog.grab_set()
+        except Exception:
+            pass
+
+        # Ensure dialog is topmost
         self.dialog.attributes("-topmost", True)
 
-        # 2. v2.0.3: DO NOT use transient() and DO NOT use grab_set()
-        # Keep dialog as independent toplevel with continuous topmost enforcement
-
-        # 3. Use delayed lift operations to ensure Z-order victory
+        # Force dialog to front with multiple lift operations
         self.dialog.after(50, lambda: self.dialog.lift())              # Bring to front
         self.dialog.after(100, lambda: self.dialog.focus_force())      # Force focus
         self.dialog.after(150, lambda: self.dialog.lift())             # Re-lift for safety
 
-        # v2.0.3: NO grab_set() - dialog remains non-modal and fully responsive
         # v2.0.4: Using native OS titlebar - no custom header needed
 
         # === Content Frame ===
