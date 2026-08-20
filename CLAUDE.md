@@ -1,9 +1,19 @@
-# QuickNote v2.5.0 — Critical UI Redesign: Note Card Layout Overhaul + Reminder Button Fix
+# QuickNote v2.5.1 — EMERGENCY HOTFIX: Attribute Error + Status Button Restoration
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.0 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.1 Released 2026-08-20
 
+> **v2.5.1** แก้ไข **EMERGENCY: NoteCard AttributeError + Status Button Restoration (Critical Hotfix)**
+>   - Problem: Application crashes on startup with `'NoteCard' object has no attribute 'status_badge'`
+>   - Root cause: v2.5.0 called `_update_strikethrough()` BEFORE `status_badge` was created (initialization order bug)
+>   - Solution 1: Moved `_update_strikethrough()` call to AFTER footer frame and status_badge creation
+>   - Solution 2: Converted status_badge from Label to Button for status toggling functionality
+>   - Solution 3: Button binds to `_on_toggle_status()` for clickable status changes
+>   - Impact: Application boots successfully, no AttributeError, status is clickable ✅
+>   - Verification: Pre-build self-test passed, hard rebuild successful
+>   - Architecture: Proper initialization order, all attributes created before use
+>
 > **v2.5.0** แก้ไข **Note Card Layout Redesign + Reminder Button Fix + Flag Icon Consistency (Critical UI Overhaul)**
 >   - Problem 1: Title text crushed by too many buttons on right side (status, priority, reminder, delete)
 >   - Problem 2: Reminder button doesn't respond to clicks
@@ -610,9 +620,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.0  
+**Version:** 2.5.1  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Note Card Layout Redesign + Reminder Button Fix)
+**Status:** ✅ PRODUCTION-STABLE (EMERGENCY: AttributeError Hotfix)
 
 ## 🔧 Build Workflow
 
@@ -767,6 +777,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.0  
+**Version:** 2.5.1  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Note Card Layout Redesign + Reminder Button Fix)
+**Status:** ✅ PRODUCTION-STABLE (EMERGENCY: AttributeError Hotfix)

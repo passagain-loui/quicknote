@@ -139,9 +139,6 @@ class NoteCard(tk.Frame):
         if not note.collapsed:
             self._show_content()
 
-        # Apply strikethrough if completed
-        self._update_strikethrough()
-
         # === Footer Frame (v2.5.0: Actions + Status moved to bottom) ===
         footer = tk.Frame(main_frame, bg=theme.c("note_bg"), highlightthickness=0)
         footer.pack(fill="x", padx=12, pady=(0, 8))
@@ -196,7 +193,7 @@ class NoteCard(tk.Frame):
         right_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
         right_frame.pack(side="right", fill="x", expand=False, padx=2)
 
-        # Status badge (Done / Active)
+        # Status badge (Done / Active) — v2.5.1: Convert to Button for toggling
         if note.status == "completed":
             badge_text = "Done"
             badge_bg = "#D1FAE5"  # Light green
@@ -206,7 +203,7 @@ class NoteCard(tk.Frame):
             badge_bg = "#DBEAFE"  # Light blue
             badge_fg = "#0EA5E9"  # Blue
 
-        self.status_badge = tk.Label(
+        self.status_badge = tk.Button(
             right_frame,
             text=badge_text,
             bg=badge_bg,
@@ -214,6 +211,11 @@ class NoteCard(tk.Frame):
             font=("Segoe UI", 8, "bold"),
             padx=6,
             pady=2,
+            bd=0,
+            relief="flat",
+            command=self._on_toggle_status,
+            activebackground=badge_bg,
+            activeforeground=badge_fg,
         )
         self.status_badge.pack(side="left", padx=2)
 
@@ -222,6 +224,9 @@ class NoteCard(tk.Frame):
         self.priority_badge = None
         if note.priority and note.priority != "none":
             self._create_priority_badge(right_frame, theme)
+
+        # v2.5.1: Apply status styling AFTER status_badge is created
+        self._update_strikethrough()
 
         # Callbacks
         self.on_update = lambda: None  # Title/content changes only

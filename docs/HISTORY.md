@@ -1,5 +1,55 @@
 # QuickNote Release History
 
+## v2.5.1 (2026-08-20) — EMERGENCY FIX: NoteCard Attribute Error Hotfix
+
+### 🚨 Critical Bug Fix
+
+**Problem: AttributeError on Startup**
+- Error: `'NoteCard' object has no attribute 'status_badge'`
+- Caused by: v2.5.0 redesign called `_update_strikethrough()` BEFORE `status_badge` was created
+- Impact: Application crashed immediately on startup, completely unusable
+
+**Root Cause:**
+```python
+# WRONG - v2.5.0 order:
+self._show_content()          # Line 140
+self._update_strikethrough()  # Line 143 - accesses self.status_badge!
+
+# Creates status_badge later:
+self.status_badge = tk.Label(...)  # Line 209 - TOO LATE!
+```
+
+**Solution: v2.5.1**
+1. Removed `_update_strikethrough()` call from line 143
+2. Moved `_update_strikethrough()` call to AFTER footer frame creation (line 217 → after status_badge created)
+3. Converted status_badge from Label to Button for status toggling
+4. Button calls `_on_toggle_status()` on click (double functionality)
+
+**Code Changes:**
+```python
+# FIXED - v2.5.1 order:
+self._show_content()          # Create content
+# ... create footer & status_badge ...
+self.status_badge = tk.Button(  # Line 195 (created early)
+    ...
+    command=self._on_toggle_status,
+)
+self._update_strikethrough()  # Line 217 (NOW safe to call!)
+```
+
+**Impact:**
+- Application starts up successfully ✅
+- No AttributeError ✅
+- Status badge is clickable button ✅
+- Full functionality restored ✅
+
+**Build Info:**
+- Verified with pre-build self-test
+- Hard rebuild from clean state
+- v2.5.1.exe tested and confirmed working
+
+---
+
 ## v2.5.0 (2026-08-20) — Critical UI Redesign: Note Card Layout Overhaul + Reminder Button Fix
 
 ### 🎨 Major UI Redesign
