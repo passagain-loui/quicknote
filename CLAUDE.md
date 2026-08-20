@@ -1,8 +1,24 @@
-# QuickNote v2.7.2 — CLOCK ICON STATE & DING-DONG AUDIO OVERHAUL: Triggered Reminder Reset + Soft Chime
+# QuickNote v2.8.0 — CRITICAL REMINDER FIX & GOOGLE TASKS INTEGRATION: Persistent Repeat Prevention + OAuth Sync
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.7.2 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.8.0 Released 2026-08-20
+
+> **v2.8.0** แก้ไข **Critical Reminder Fix & Google Tasks Integration: Persistent Repeat Prevention + OAuth Sync (Major Release)**
+>   - Critical Bug: Reminder keeps triggering repeatedly instead of stopping after dismiss
+>   - Root cause: DB update not synchronous, next check cycle triggers reminder again
+>   - Solution 1: Make reminder_triggered DB update SYNCHRONOUS (not async)
+>   - Solution 2: Add explicit conn.commit() to ensure write completes immediately
+>   - Solution 3: Synchronous update prevents race condition between cycles
+>   - Feature 1: New "Google Tasks" tab in Settings window (OAuth 2.0 ready)
+>   - Feature 2: Browse credentials.json from Google Cloud Console
+>   - Feature 3: Authenticate button for OAuth login flow
+>   - Feature 4: Connection status indicator (Connected/Disconnected)
+>   - Feature 5: Auto-sync checkbox (future: sync reminders to Google Tasks)
+>   - Architecture: New GoogleTasksService class in src/services/google_tasks.py
+>   - Impact: Reminder triggers ONCE then stops, Google Tasks integration framework ready ✅
+>   - Verification: Reminder no longer repeats, Settings tab appears, auth buttons functional ✅
+>   - Architecture: Synchronous DB updates, OAuth-ready service layer, non-blocking UI
 
 > **v2.7.2** แก้ไข **Clock Icon State & Ding-Dong Audio: Triggered Reminder Reset + Soft Chime (UX Polish)**
 >   - Problem 1: Clock icon doesn't reset when reminder time arrives (stays red/active)

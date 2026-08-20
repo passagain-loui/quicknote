@@ -87,7 +87,11 @@ class SettingsWindow:
             # About Tab
             about_frame = tk.Frame(self.notebook, bg=theme.c("bg"))
             self.notebook.add(about_frame, text="About")
-            log.debug("[Settings] Tabs created")
+
+            # v2.8.0: Google Tasks Sync Tab
+            google_tasks_frame = tk.Frame(self.notebook, bg=theme.c("bg"))
+            self.notebook.add(google_tasks_frame, text="Google Tasks")
+            log.debug("[Settings] Tabs created (including Google Tasks)")
 
             # Main frame for settings
             main_frame = tk.Frame(settings_frame, bg=theme.c("bg"))
@@ -251,7 +255,92 @@ class SettingsWindow:
             )
             credits_label.pack(anchor="w")
 
-            log.info("[Settings] SettingsWindow initialized successfully")
+            # === Google Tasks Tab Content (v2.8.0) ===
+            google_tasks_inner = tk.Frame(google_tasks_frame, bg=theme.c("bg"))
+            google_tasks_inner.pack(fill="both", expand=True, padx=16, pady=16)
+
+            # Header
+            google_tasks_title = tk.Label(
+                google_tasks_inner,
+                text="Google Tasks Sync",
+                bg=theme.c("bg"),
+                fg=theme.c("fg"),
+                font=("Segoe UI", 12, "bold"),
+            )
+            google_tasks_title.pack(anchor="w", pady=(0, 8))
+
+            # Description
+            google_tasks_desc = tk.Label(
+                google_tasks_inner,
+                text="Sync reminders to Google Tasks automatically",
+                bg=theme.c("bg"),
+                fg=theme.c("fg_muted"),
+                font=("Segoe UI", 9),
+                wraplength=350,
+            )
+            google_tasks_desc.pack(anchor="w", pady=(0, 16))
+
+            # Credentials Section
+            creds_label = tk.Label(
+                google_tasks_inner,
+                text="Credentials Setup",
+                bg=theme.c("bg"),
+                fg=theme.c("fg"),
+                font=("Segoe UI", 10, "bold"),
+            )
+            creds_label.pack(anchor="w", pady=(8, 8))
+
+            creds_btn_frame = tk.Frame(google_tasks_inner, bg=theme.c("bg"))
+            creds_btn_frame.pack(fill="x", pady=8)
+
+            self.btn_browse_creds = tk.Button(
+                creds_btn_frame,
+                text="📁 Browse credentials.json",
+                bg="#007AFF",
+                fg="#FFFFFF",
+                font=("Segoe UI", 9),
+                bd=0,
+                relief="flat",
+                command=self._on_browse_google_creds,
+            )
+            self.btn_browse_creds.pack(side="left", padx=2)
+
+            self.btn_google_auth = tk.Button(
+                creds_btn_frame,
+                text="🔐 Authenticate",
+                bg="#34C759",
+                fg="#FFFFFF",
+                font=("Segoe UI", 9),
+                bd=0,
+                relief="flat",
+                command=self._on_google_authenticate,
+            )
+            self.btn_google_auth.pack(side="left", padx=2)
+
+            # Status Label
+            self.google_status_label = tk.Label(
+                google_tasks_inner,
+                text="Status: Disconnected",
+                bg=theme.c("bg"),
+                fg=theme.c("fg_muted"),
+                font=("Segoe UI", 9),
+            )
+            self.google_status_label.pack(anchor="w", pady=(8, 0))
+
+            # Auto-sync Checkbox
+            self.google_autosync_var = tk.BooleanVar(value=False)
+            self.checkbox_autosync = tk.Checkbutton(
+                google_tasks_inner,
+                text="Auto-sync reminders to Google Tasks",
+                variable=self.google_autosync_var,
+                bg=theme.c("bg"),
+                fg=theme.c("fg"),
+                font=("Segoe UI", 9),
+                highlightthickness=0,
+            )
+            self.checkbox_autosync.pack(anchor="w", pady=(16, 0))
+
+            log.info("[Settings] SettingsWindow initialized successfully (including Google Tasks)")
         except Exception as e:
             log.error(f"[Settings] Failed to initialize: {e}")
             import traceback
@@ -401,6 +490,58 @@ class SettingsWindow:
             try:
                 from tkinter import messagebox
                 messagebox.showerror("Error", f"Restore failed: {e}")
+            except Exception:
+                pass
+
+    def _on_browse_google_creds(self):
+        """v2.8.0: Browse and select Google credentials.json file"""
+        try:
+            from tkinter import filedialog, messagebox
+            from ..services.google_tasks import get_google_tasks_service
+
+            # Open file dialog
+            file_path = filedialog.askopenfilename(
+                title="Select Google credentials.json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+            )
+
+            if file_path:
+                # Set credentials path in service
+                service = get_google_tasks_service()
+                if service.set_credentials_path(file_path):
+                    messagebox.showinfo("Success", "Credentials loaded successfully")
+                    self.google_status_label.config(text="Status: Ready to authenticate")
+                    log.info(f"[Settings] Google credentials set: {file_path}")
+                else:
+                    messagebox.showerror("Error", "Failed to load credentials file")
+        except Exception as e:
+            log.error(f"[Settings] Browse credentials error: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("Error", f"Failed to browse credentials: {e}")
+            except Exception:
+                pass
+
+    def _on_google_authenticate(self):
+        """v2.8.0: Authenticate with Google Tasks API"""
+        try:
+            from tkinter import messagebox
+            from ..services.google_tasks import get_google_tasks_service
+
+            service = get_google_tasks_service()
+            if service.authenticate():
+                service.is_authenticated = True
+                messagebox.showinfo("Success", "Authenticated with Google Tasks successfully")
+                self.google_status_label.config(text="Status: Connected ✓")
+                log.info("[Settings] Google Tasks authentication successful")
+            else:
+                messagebox.showerror("Error", "Failed to authenticate with Google Tasks")
+                self.google_status_label.config(text="Status: Authentication failed")
+        except Exception as e:
+            log.error(f"[Settings] Google authentication error: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("Error", f"Authentication failed: {e}")
             except Exception:
                 pass
 

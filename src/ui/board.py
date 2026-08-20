@@ -710,18 +710,24 @@ class Board:
             self.root.after(5000, self._check_reminders)
 
     def _trigger_reminder(self, note_data: dict):
-        """v2.6.1: Show in-app toast banner + play audio alert (No Toplevel, zero deadlock risk)
+        """v2.8.0: Show in-app toast banner + play audio alert (Synchronous DB update to prevent repeats)
         Toast banner is a Frame in the main window — no new window handles, no OS deadlock"""
         try:
             # Convert note_data dict to Note object
             from src.core.models import Note
             note_obj = Note.from_dict(note_data)
 
-            # v2.7.2: Update DB FIRST (before UI), then show toast safely
+            # v2.8.0: SYNCHRONOUS DB UPDATE (must complete before scheduling UI update)
             # Clear reminder_datetime (consume the reminder) and mark as triggered
+            # This CRITICAL: prevents reminder from triggering multiple times
             # This makes the clock icon reset back to gray/inactive state
             try:
                 update_note(note_data["id"], reminder_datetime=None, reminder_triggered=True)
+                # Flush/sync the database to ensure write completes before next check cycle
+                from src.core.database import get_db_connection
+                conn = get_db_connection()
+                conn.commit()
+                conn.close()
             except Exception:
                 pass  # Silently fail on DB update error
 

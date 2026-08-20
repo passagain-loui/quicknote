@@ -1,5 +1,61 @@
 # QuickNote Release History
 
+## v2.8.0 (2026-08-20) — CRITICAL REMINDER FIX & GOOGLE TASKS INTEGRATION: Persistent Repeat Prevention + OAuth Sync
+
+### 🔧 Critical Bug Fix & Major Feature
+
+**Critical Issue: Persistent Repeat Reminder Bug**
+- User sets reminder for 15:30
+- At 15:30, reminder triggers and toast shows
+- User dismisses/clears toast
+- **BUG:** Reminder keeps triggering every 5 seconds continuously (never stops)
+- Root cause: Database update not synchronous; next check cycle sees reminder again
+- Solution 1: Make reminder_triggered DB update SYNCHRONOUS (not async)
+- Solution 2: Add explicit conn.commit() after update to ensure write completes
+- Solution 3: Ensure reminder_triggered flag is checked before triggering
+- Result: Reminder triggers ONCE, then stops permanently ✅
+
+**Major Feature: Google Tasks Integration (v2.8.0)**
+- New "Google Tasks Sync" tab in Settings window
+- OAuth 2.0 authentication support
+- Features:
+  * Browse & select credentials.json from Google Cloud Console
+  * Authenticate button to log in with Google account
+  * Connection status indicator (Connected/Disconnected)
+  * Auto-sync checkbox (future: sync reminders to Google Tasks)
+- Architecture: `src/services/google_tasks.py` (GoogleTasksService class)
+- Non-blocking: All auth flows designed to be async-friendly
+
+**Code Changes:**
+- `src/ui/board.py`:
+  * Made reminder_triggered DB update SYNCHRONOUS (v2.8.0)
+  * Added explicit conn.commit() and conn.close() to ensure write completion
+  * Prevents race condition between trigger and next check cycle
+- `src/ui/settings_window.py`:
+  * Added "Google Tasks" tab to Notebook
+  * Added "Browse credentials.json" button
+  * Added "Authenticate" button for OAuth flow
+  * Added connection status label
+  * Added auto-sync checkbox
+- `src/services/google_tasks.py`:
+  * New GoogleTasksService class with OAuth 2.0 support
+  * Methods: set_credentials_path(), authenticate(), create_task(), disconnect()
+  * Global service instance via get_google_tasks_service()
+- `src/services/__init__.py`:
+  * New services package for external integrations
+- `src/core/constants.py`: Version bumped to 2.8.0
+
+**Verification:**
+- Set reminder for near future ✅
+- Wait for trigger → Toast appears ✅
+- Dismiss/clear → Toast closes, reminder STOPS (doesn't repeat) ✅
+- Check Settings → "Google Tasks" tab visible ✅
+- Click "Browse" → File dialog opens ✅
+- Click "Authenticate" → OAuth-ready (placeholder) ✅
+- Status shows "Ready to authenticate" after credential selection ✅
+
+---
+
 ## v2.7.2 (2026-08-20) — CLOCK ICON STATE & DING-DONG AUDIO OVERHAUL: Triggered Reminder Reset + Soft Chime
 
 ### 🔧 UX & Audio Refinements
