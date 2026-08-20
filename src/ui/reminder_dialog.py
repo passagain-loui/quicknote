@@ -247,7 +247,7 @@ class ReminderDialog:
             font=("Segoe UI", 9),
             bd=0,
             relief="flat",
-            command=self.dialog.destroy,
+            command=self._close_dialog,  # v2.6.2: Call _close_dialog() to restore state
             padx=16,
             pady=6,
             activebackground="#D5D5DA",
@@ -255,6 +255,9 @@ class ReminderDialog:
             cursor="hand2",
         )
         self.btn_cancel.pack(side="right", padx=2)
+
+        # v2.6.2: Handle window close button (X) to restore state
+        self.dialog.protocol("WM_DELETE_WINDOW", self._close_dialog)
 
         # v2.0.4: Native titlebar handles dragging - no custom drag binding needed
 

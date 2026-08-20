@@ -1,5 +1,46 @@
 # QuickNote Release History
 
+## v2.6.2 (2026-08-20) — CRITICAL STATE RESTORATION FIX: Cancel Button & Footer Clipping
+
+### 🔧 State Restoration on Dialog Close
+
+**Problem 1: Cancel Button Causes State Deadlock**
+- When user clicks Cancel in Reminder dialog, main window stays disabled
+- Scheduler remains paused even after dialog closes
+- Root cause: Cancel button directly calls `self.dialog.destroy()`, bypassing `_close_dialog()`
+
+**Problem 2: Footer Text Clipped**
+- Scheduler heartbeat text cut off on right side
+- Example: "● Scheduler: 23:16:44 | Next: 2026-08-20 23:..." gets clipped
+- Root cause: Footer label doesn't expand, timestamp format too long
+
+**Solution 1: Restore State on All Close Paths**
+- Changed Cancel button to call `_close_dialog()` instead of `dialog.destroy()`
+- Added WM_DELETE_WINDOW protocol to catch X button close
+- Both paths now properly restore: main window enable, scheduler resume, dialog cleanup
+
+**Solution 2: Shorten Footer Text & Expand Label**
+- Changed heartbeat_label to use `fill="x", expand=True` 
+- Shortened date format to time-only: "2026-08-20 HH:MM" → "HH:MM"
+- Text now fits without clipping
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`:
+  * Line 250: Changed `command=self.dialog.destroy` → `command=self._close_dialog`
+  * Added WM_DELETE_WINDOW protocol handler for X button
+- `src/ui/board.py`:
+  * Changed heartbeat_label pack to `fill="x", expand=True, anchor="e"`
+  * Modified timestamp extraction to show only "HH:MM" part
+- `src/core/constants.py`: Version bumped to 2.6.2
+
+**Verification:**
+- Cancel button restores main window and resumes scheduler ✅
+- X button (close) also restores state properly ✅
+- Footer text no longer clipped ✅
+- Heartbeat timestamp displays "HH:MM:SS | Next: HH:MM" ✅
+
+---
+
 ## v2.6.1 (2026-08-20) — CRITICAL ARCHITECTURE FIX: In-App Toast (Zero Toplevel Deadlock)
 
 ### 🔧 OS-Level Window Handle Deadlock Prevention

@@ -1,8 +1,21 @@
-# QuickNote v2.6.1 — CRITICAL ARCHITECTURE FIX: In-App Toast (Zero Toplevel Deadlock)
+# QuickNote v2.6.2 — CRITICAL STATE RESTORATION FIX: Cancel Button & Footer Clipping
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.6.1 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.6.2 Released 2026-08-20
+
+> **v2.6.2** แก้ไข **State Restoration: Cancel Button Bypass + Footer Text Clipping (Critical State Lock Fix)**
+>   - Problem 1: Cancel button bypassed _close_dialog(), leaving main window disabled & scheduler paused
+>   - Problem 2: Footer scheduler text clipped on right side (long date format)
+>   - Root cause 1: Cancel button directly called dialog.destroy(), skipping state restoration
+>   - Root cause 2: heartbeat_label didn't expand, timestamp format too long
+>   - Solution 1: Cancel button now calls _close_dialog() for proper state restoration
+>   - Solution 2: Added WM_DELETE_WINDOW protocol to catch X button close
+>   - Solution 3: heartbeat_label now expands with right-aligned text
+>   - Solution 4: Shortened date format to time-only (HH:MM instead of YYYY-MM-DD HH:MM)
+>   - Impact: Dialog close always restores state 100%, footer displays without clipping ✅
+>   - Verification: Cancel/X close properly, main window responsive, scheduler resumes, text visible ✅
+>   - Architecture: All close paths converge on _close_dialog(), proper state consistency
 
 > **v2.6.1** แก้ไข **OS-Level Deadlock: In-App Toast Frame (Zero Toplevel Windows)**
 >   - Problem: v2.6.0 still freezes because tk.Toplevel creation causes OS-level deadlock

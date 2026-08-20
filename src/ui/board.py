@@ -181,14 +181,16 @@ class Board:
         self.footer_label.pack(side="left")
 
         # Heartbeat indicator (v2.2.2) — shows scheduler is running
+        # v2.6.2: Make label expand to fill available space, right-align text to prevent clipping
         self.heartbeat_label = tk.Label(
             footer_frame,
             text="● Scheduler: Running",
             bg=self.theme.c("bg"),
             fg="#4CAF50",  # Green for active
             font=("Segoe UI", 7),
+            justify="right",
         )
-        self.heartbeat_label.pack(side="right", padx=(8, 0))
+        self.heartbeat_label.pack(side="right", fill="x", expand=True, padx=(8, 0), anchor="e")
 
         # Settings button (⚙) — right side of footer
         self.btn_settings = tk.Button(
@@ -644,10 +646,16 @@ class Board:
                 return
 
             # Update heartbeat indicator with next due reminder (v2.2.3)
+            # v2.6.2: Shorten date format to time-only to prevent footer clipping
             try:
                 timestamp = datetime.now().strftime("%H:%M:%S")
                 next_reminder = get_next_due_reminder()
-                next_text = next_reminder if next_reminder else "None"
+                # Extract time-only part (HH:MM) from next_reminder if available
+                if next_reminder:
+                    # Format: "YYYY-MM-DD HH:MM" — extract just "HH:MM"
+                    next_text = next_reminder.split()[-1] if " " in next_reminder else next_reminder
+                else:
+                    next_text = "None"
                 self.heartbeat_label.config(
                     text=f"● Scheduler: {timestamp} | Next: {next_text}"
                 )
