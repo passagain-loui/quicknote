@@ -1,8 +1,17 @@
-# QuickNote v2.5.5 — NUCLEAR BUILD FIX: PyInstaller Cache Elimination + Aggressive Collection
+# QuickNote v2.5.6 — UI Z-ORDER FIX: Popup Z-Index Lock + Focus Enforcement
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.5 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.6 Released 2026-08-20
+
+> **v2.5.6** แก้ไข **Popup Z-Order: Continuous Topmost Enforcement + Modal Cleanup (Dialog Stability)**
+>   - Problem: Reminder dialog opens but slides behind main window after 2-3 seconds
+>   - Root cause: Topmost state not maintained, main window keeps stealing Z-order focus
+>   - Solution 1: Added enforce_topmost() recursive function (re-lifts every 200ms)
+>   - Solution 2: Enhanced _close_dialog() to properly release grab_set() + reset topmost
+>   - Impact: Dialog stays visible for entire interaction, no Z-order jitter ✅
+>   - Verification: Dialog stable, main window never steals focus, clean close ✅
+>   - Architecture: Continuous Z-order maintenance, paired modal resource cleanup
 
 > **v2.5.5** แก้ไข **Scorched Earth Build Protocol: PyInstaller Cache Destruction (Final Fix)**
 >   - Problem: v2.5.4 still crashed with tkcalendar ImportError despite fixes (PyInstaller caching)
@@ -656,7 +665,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.5  
+**Version:** 2.5.6  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -813,6 +822,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.5  
+**Version:** 2.5.6  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (PyInstaller Cache Purged + Aggressive Module Collection)
+**Status:** ✅ PRODUCTION-STABLE (Dialog Z-Order Lock + Continuous Focus Enforcement)

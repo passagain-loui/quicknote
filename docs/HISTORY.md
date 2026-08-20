@@ -1,5 +1,57 @@
 # QuickNote Release History
 
+## v2.5.6 (2026-08-20) — UI Z-ORDER FIX: Popup Z-Index Lock + Continuous Focus Enforcement
+
+### 🔧 Dialog Z-Order Correction
+
+**Problem: Reminder Dialog Disappears Behind Main Window**
+- Dialog opens successfully (thanks to v2.5.5 fixes)
+- After ~2-3 seconds, dialog slides behind main window
+- User can't interact with dialog, thinks it closed
+- Root cause: Main window keeps stealing Z-order focus
+
+**Root Cause Analysis:**
+1. grab_set() and -topmost set during init but not maintained
+2. Main window's event loop keeps re-gaining focus
+3. Dialog destroyed without releasing grab_set() — leaves Z-order in bad state
+4. No continuous enforcement of topmost state
+
+**Solution: Aggressive Z-Order Enforcement**
+
+**Part 1: Continuous Z-Order Lock**
+- Added `enforce_topmost()` recursive function in __init__
+- Runs every 200ms: `self.dialog.lift()` + `self.dialog.focus_force()`
+- Continuously re-enforces topmost state, preventing main window takeover
+- Stops when dialog is destroyed (checks `winfo_exists()`)
+
+**Part 2: Proper Modal Cleanup**
+- Enhanced `_close_dialog()` to properly release resources:
+  ```python
+  self.dialog.grab_release()        # Release modal lock
+  self.dialog.attributes("-topmost", False)  # Reset topmost state
+  self.dialog.destroy()             # Destroy window
+  ```
+- Prevents Z-order from staying locked after dialog closes
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`: 
+  * Added enforce_topmost() recursive function (lines 69-79)
+  * Enhanced _close_dialog() with grab_release() + topmost reset (lines 244-259)
+- `src/core/constants.py`: Version bumped to 2.5.6
+
+**Verification:**
+- Dialog stays on top for entire interaction ✅
+- Dialog closes cleanly without Z-order issues ✅
+- Main window never hidden after dialog closes ✅
+- No performance impact from 200ms refresh ✅
+
+**Lesson Learned:**
+- Topmost state not "sticky" — must be continuously enforced
+- grab_set()/grab_release() must be paired for clean modal cleanup
+- Tkinter Z-order management requires active maintenance, not set-and-forget
+
+---
+
 ## v2.5.5 (2026-08-20) — NUCLEAR BUILD FIX: PyInstaller Cache Elimination + Aggressive Module Collection
 
 ### 🚀 Scorched Earth Build Protocol

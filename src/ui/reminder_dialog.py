@@ -49,26 +49,39 @@ class ReminderDialog:
 
         self.dialog.geometry(f"{dialog_w}x{dialog_h}+{x}+{y}")
 
-        # v2.5.2: Enhanced focus management for reliable dialog visibility
-        # Use transient() to establish parent-child relationship
+        # v2.5.6: STRICT MODAL ENFORCEMENT — Z-order lock + continuous focus management
+        # Establish parent-child relationship
         try:
             self.dialog.transient(parent.winfo_toplevel())
         except Exception:
             pass
 
-        # v2.5.2: Use grab_set() for modal focus (forces user to interact with dialog)
+        # Lock focus to dialog (true modal behavior)
         try:
             self.dialog.grab_set()
         except Exception:
             pass
 
-        # Ensure dialog is topmost
+        # Force topmost state
         self.dialog.attributes("-topmost", True)
 
-        # Force dialog to front with multiple lift operations
-        self.dialog.after(50, lambda: self.dialog.lift())              # Bring to front
-        self.dialog.after(100, lambda: self.dialog.focus_force())      # Force focus
-        self.dialog.after(150, lambda: self.dialog.lift())             # Re-lift for safety
+        # Force dialog to front with multiple lift + focus operations
+        self.dialog.after(50, lambda: self.dialog.lift())
+        self.dialog.after(100, lambda: self.dialog.focus_force())
+        self.dialog.after(150, lambda: self.dialog.lift())
+
+        # v2.5.6: Continuous Z-order enforcement — re-lift every 200ms to prevent main window from stealing focus
+        def enforce_topmost():
+            """Continuously enforce Z-order to prevent dialog from hiding behind main window"""
+            try:
+                if self.dialog.winfo_exists():
+                    self.dialog.lift()
+                    self.dialog.focus_force()
+                    self.dialog.after(200, enforce_topmost)  # Re-check every 200ms
+            except Exception:
+                pass
+
+        self.dialog.after(200, enforce_topmost)
 
         # v2.0.4: Using native OS titlebar - no custom header needed
 
@@ -242,8 +255,21 @@ class ReminderDialog:
         # v2.0.4: Native titlebar handles dragging - no custom drag binding needed
 
     def _close_dialog(self):
-        """v2.0.3: Simple non-modal dialog close (no grab handling needed)"""
+        """v2.5.6: Proper modal cleanup — release grab + reset topmost before destroy"""
         try:
+            # Release modal lock before destroying
+            self.dialog.grab_release()
+        except Exception:
+            pass
+
+        try:
+            # Reset topmost to prevent main window from staying hidden
+            self.dialog.attributes("-topmost", False)
+        except Exception:
+            pass
+
+        try:
+            # Destroy dialog
             self.dialog.destroy()
         except Exception:
             pass
