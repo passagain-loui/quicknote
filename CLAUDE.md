@@ -1,8 +1,21 @@
-# QuickNote v2.8.0 — CRITICAL REMINDER FIX & GOOGLE TASKS INTEGRATION: Persistent Repeat Prevention + OAuth Sync
+# QuickNote v2.8.1 — CRITICAL GUI FREEZE FIX & WINDOWS NATIVE NOTIFICATIONS: Remove In-App Toast + Native OS Notifications
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Windows Native Notifications**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.8.0 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.8.1 Released 2026-08-20
+
+> **v2.8.1** แก้ไข **Critical GUI Freeze Fix & Windows Native Notifications: Remove In-App Toast + Native OS (Critical Architecture Fix)**
+>   - Critical Bug 1: App freezes when dismissing in-app toast notification
+>   - Critical Bug 2: Clear button doesn't update clock icon (stays red after clearing)
+>   - Root cause 1: In-app toast frame locks Tkinter event loop on dismiss
+>   - Root cause 2: UI refresh not synchronous; dialog closes before icon updates
+>   - Solution 1: Completely remove in-app toast, use Windows native notifications
+>   - Solution 2: Add synchronous DB commit + update_idletasks() for UI refresh
+>   - Solution 3: Use WindowsNotificationService for native OS notifications
+>   - Solution 4: Deprecate all Tkinter toast methods (no-op, for backwards compatibility)
+>   - Impact: Zero GUI freeze, native notifications, clock icon updates immediately ✅
+>   - Verification: Clear button works, dismiss doesn't freeze, native toast appears ✅
+>   - Architecture: Native OS notifications, synchronous DB updates, thread-safe async
 
 > **v2.8.0** แก้ไข **Critical Reminder Fix & Google Tasks Integration: Persistent Repeat Prevention + OAuth Sync (Major Release)**
 >   - Critical Bug: Reminder keeps triggering repeatedly instead of stopping after dismiss

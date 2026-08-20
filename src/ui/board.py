@@ -710,17 +710,16 @@ class Board:
             self.root.after(5000, self._check_reminders)
 
     def _trigger_reminder(self, note_data: dict):
-        """v2.8.0: Show in-app toast banner + play audio alert (Synchronous DB update to prevent repeats)
-        Toast banner is a Frame in the main window — no new window handles, no OS deadlock"""
+        """v2.8.1: Windows native notification (no in-app GUI, zero freeze risk)
+        Use OS native toast notifications to Action Center — non-blocking, no Tkinter involvement"""
         try:
             # Convert note_data dict to Note object
             from src.core.models import Note
             note_obj = Note.from_dict(note_data)
 
-            # v2.8.0: SYNCHRONOUS DB UPDATE (must complete before scheduling UI update)
+            # v2.8.0: SYNCHRONOUS DB UPDATE (must complete before notification)
             # Clear reminder_datetime (consume the reminder) and mark as triggered
             # This CRITICAL: prevents reminder from triggering multiple times
-            # This makes the clock icon reset back to gray/inactive state
             try:
                 update_note(note_data["id"], reminder_datetime=None, reminder_triggered=True)
                 # Flush/sync the database to ensure write completes before next check cycle
@@ -731,130 +730,61 @@ class Board:
             except Exception:
                 pass  # Silently fail on DB update error
 
-            # v2.6.1: Schedule toast display with small delay to let event loop breathe
-            # Using after(100) instead of after_idle to ensure clean timing
-            def show_toast_safely():
+            # v2.8.1: Show Windows native notification (not Tkinter in-app toast)
+            # This completely avoids GUI freeze by using OS notification system
+            def show_native_notification():
                 try:
-                    self._show_toast_banner(note_obj)
+                    from src.services.notification import get_notification_service
+                    service = get_notification_service()
+
+                    # Create callback for when user clicks notification
+                    def on_notification_click():
+                        try:
+                            self._on_note_reminder_open(note_obj)
+                        except Exception:
+                            pass
+
+                    # Show Windows native toast notification
+                    service.show_reminder_notification(
+                        note_title=note_obj.title[:50],
+                        note_content=note_obj.content[:100] if note_obj.content else "Reminder triggered",
+                        on_click=on_notification_click,
+                        duration=8
+                    )
+
+                    # Also play notification sound
+                    service.play_notification_sound()
+
+                    # Refresh note cards to update UI state
+                    try:
+                        self._load_notes()
+                    except Exception:
+                        pass
                 except Exception:
                     pass  # Silently fail to avoid blocking UI
 
-            self.root.after(100, show_toast_safely)
+            # Run notification in background to avoid any UI blocking
+            import threading
+            thread = threading.Thread(target=show_native_notification, daemon=True)
+            thread.start()
 
         except Exception:
             pass  # Silently fail to avoid blocking UI
 
     def _show_toast_banner(self, note):
-        """v2.6.1: Display in-app toast notification banner (no Toplevel window)"""
-        try:
-            # Cancel any existing toast timer
-            if self.toast_timer:
-                self.root.after_cancel(self.toast_timer)
-                self.toast_timer = None
-
-            # Clear previous toast content
-            for widget in self.toast_frame.winfo_children():
-                widget.destroy()
-
-            # === Toast Header ===
-            header_frame = tk.Frame(self.toast_frame, bg="#FF3B30", highlightthickness=0)
-            header_frame.pack(side="top", fill="x", padx=12, pady=(8, 0))
-
-            title_label = tk.Label(
-                header_frame,
-                text="⏰ REMINDER",
-                bg="#FF3B30",
-                fg="#FFFFFF",
-                font=("Segoe UI", 9, "bold"),
-            )
-            title_label.pack(side="left")
-
-            # === Note Title ===
-            note_title_label = tk.Label(
-                self.toast_frame,
-                text=note.title[:50],
-                bg="#FF3B30",
-                fg="#FFFFFF",
-                font=("Segoe UI", 10, "bold"),
-                wraplength=350,
-                justify="left",
-            )
-            note_title_label.pack(side="top", anchor="w", padx=12, pady=(4, 2), fill="x")
-
-            # === Button Frame ===
-            btn_frame = tk.Frame(self.toast_frame, bg="#FF3B30", highlightthickness=0)
-            btn_frame.pack(side="top", fill="x", padx=12, pady=(2, 8))
-
-            # Dismiss button
-            btn_dismiss = tk.Button(
-                btn_frame,
-                text="Dismiss",
-                bg="#FFFFFF",
-                fg="#FF3B30",
-                font=("Segoe UI", 8),
-                bd=0,
-                relief="flat",
-                command=self._hide_toast_banner,
-                padx=10,
-                pady=4,
-                activebackground="#F5F5F7",
-                cursor="hand2",
-            )
-            btn_dismiss.pack(side="left", padx=(0, 6))
-
-            # Open Note button
-            btn_open = tk.Button(
-                btn_frame,
-                text="Open",
-                bg="#FFFFFF",
-                fg="#FF3B30",
-                font=("Segoe UI", 8, "bold"),
-                bd=0,
-                relief="flat",
-                command=lambda: self._dismiss_and_open_note(note),
-                padx=10,
-                pady=4,
-                activebackground="#F5F5F7",
-                cursor="hand2",
-            )
-            btn_open.pack(side="left")
-
-            # Play audio alert in background thread
-            import threading
-            threading.Thread(target=self._play_notification_alert, daemon=True).start()
-
-            # Show toast banner
-            self.toast_frame.pack(side="top", fill="x", before=self.search_frame)
-            self.toast_visible = True
-
-            # v2.7.2: Refresh note cards to update clock icon state (reminder_triggered changed in DB)
-            # This ensures the clock icon reflects the new reminder state immediately
-            try:
-                self._load_notes()
-            except Exception:
-                pass  # Silently fail if refresh doesn't work
-
-            # Auto-hide after 8 seconds
-            self.toast_timer = self.root.after(8000, self._hide_toast_banner)
-
-        except Exception:
-            pass  # Silently fail
+        """v2.8.1: DEPRECATED — Use Windows native notifications instead
+        This method is kept for backwards compatibility but does nothing"""
+        pass  # No-op: Native Windows notifications used instead
 
     def _hide_toast_banner(self):
-        """v2.6.1: Hide toast banner"""
-        try:
-            if self.toast_timer:
-                self.root.after_cancel(self.toast_timer)
-                self.toast_timer = None
-            self.toast_frame.pack_forget()
-            self.toast_visible = False
-        except Exception:
-            pass
+        """v2.8.1: DEPRECATED — Use Windows native notifications instead
+        This method is kept for backwards compatibility but does nothing"""
+        pass  # No-op: Native Windows notifications used instead
 
     def _dismiss_and_open_note(self, note):
-        """v2.6.1: Hide toast and open note"""
-        self._hide_toast_banner()
-        self._on_note_reminder_open(note)
+        """v2.8.1: DEPRECATED — Use Windows native notification click handler instead
+        This method is kept for backwards compatibility but does nothing"""
+        pass  # No-op: Native notification click handler used instead
 
     def _play_notification_alert(self):
         """v2.7.2: Play soft Ding-Dong audio alert (softer than notification, non-jarring)"""

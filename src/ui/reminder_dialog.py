@@ -370,19 +370,30 @@ class ReminderDialog:
             self._close_dialog()
 
     def _clear_reminder(self):
-        """v2.3.2: Clear reminder with direct database persistence"""
-        # v2.3.2: Direct database persistence (no callback chain)
-        update_note(self.note.id,
-                   reminder_datetime=None,
-                   reminder_triggered=False)
+        """v2.8.1: Clear reminder with direct database persistence + synchronous UI refresh"""
+        # v2.8.1: SYNCHRONOUS DB update (ensure write completes before UI refresh)
+        try:
+            update_note(self.note.id,
+                       reminder_datetime=None,
+                       reminder_triggered=False)
+            # Ensure write completes before UI refresh
+            from src.core.database import get_db_connection
+            conn = get_db_connection()
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
         # Update note object
         self.note.reminder_datetime = None
         self.note.reminder_triggered = False
 
-        # Refresh UI immediately
+        # v2.8.1: FORCE immediate UI refresh BEFORE closing dialog
+        # This ensures the clock icon changes color back to gray BEFORE the dialog closes
         if hasattr(self.parent, '_load_notes') and callable(self.parent._load_notes):
             self.parent._load_notes()
+            # Force Tkinter to process the UI update immediately
+            self.parent.update_idletasks()
 
         # v2.4.0: Trigger reminder check immediately (no 5-second wait)
         if hasattr(self.parent, '_check_reminders') and callable(self.parent._check_reminders):
@@ -390,6 +401,8 @@ class ReminderDialog:
 
         # Legacy callback for compatibility
         self.on_clear()
+
+        # v2.8.1: Close dialog AFTER UI refresh completes
         self._close_dialog()
 
     def _set_today(self):

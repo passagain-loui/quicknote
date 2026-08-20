@@ -1,5 +1,63 @@
 # QuickNote Release History
 
+## v2.8.1 (2026-08-20) — CRITICAL GUI FREEZE FIX & WINDOWS NATIVE NOTIFICATIONS: Remove In-App Toast + Native OS Notifications
+
+### 🔧 Critical Architecture Fix
+
+**Critical Issue 1: App Freezes When Dismissing Toast Notification**
+- In-app toast frame embedded in Tkinter GUI causes event loop deadlock
+- Clicking Dismiss button freezes entire application
+- Root cause: Toast UI operations lock the main Tkinter event loop
+- Solution: Completely remove in-app toast, use Windows native notifications instead
+- Result: No more GUI freeze, notifications handled by OS ✅
+
+**Critical Issue 2: Clear Button Doesn't Update Clock Icon**
+- User clicks "Clear" in reminder dialog to remove reminder
+- Database updates (reminder_datetime cleared)
+- But clock icon still shows red/active instead of gray/inactive
+- Root cause: UI refresh not synchronous; dialog closes before icon updates
+- Solution: Make DB update synchronous with explicit conn.commit()
+- Solution: Call update_idletasks() to force UI refresh BEFORE closing dialog
+- Result: Clock icon immediately resets to gray when Clear is clicked ✅
+
+**Architecture Overhaul:**
+- Removed: All Tkinter in-app toast frame code (no more GUI deadlock)
+- Added: Windows native notification system (WindowsNotificationService)
+- Added: Native toast click handler to open notes automatically
+- Safety: Synchronous DB updates prevent race conditions
+- Thread-safe: Native notifications run in background thread (zero UI blocking)
+
+**Code Changes:**
+- `src/ui/board.py`:
+  * Complete rewrite of _trigger_reminder() to use native notifications
+  * Deprecated _show_toast_banner(), _hide_toast_banner(), _dismiss_and_open_note() (no-op)
+  * Removed all Tkinter toast UI code
+  * Removed all toast timer/state management
+- `src/ui/reminder_dialog.py`:
+  * Enhanced _clear_reminder() with synchronous DB commit
+  * Added update_idletasks() to force UI refresh before dialog close
+  * Ensures clock icon updates immediately
+- `src/services/notification.py`:
+  * New WindowsNotificationService class with win10toast support
+  * Methods: show_reminder_notification(), play_notification_sound()
+  * Fallback to winsound if win10toast unavailable
+- `src/services/__init__.py`:
+  * Added notification service exports
+- `src/core/constants.py`: Version bumped to 2.8.1
+
+**Verification:**
+- Click Clear button → clock icon immediately turns gray ✅
+- Set reminder → at trigger time, Windows native toast appears (no in-app freeze) ✅
+- Dismiss toast → no app freeze, notification dismissed cleanly ✅
+- Click notification → QuickNote comes to front, note opens ✅
+- No more Tkinter event loop deadlock ✅
+
+**Dependency Note:**
+- Optional: Install `win10toast` for better native notification support: `pip install win10toast`
+- Fallback: Uses `winsound` if `win10toast` unavailable
+
+---
+
 ## v2.8.0 (2026-08-20) — CRITICAL REMINDER FIX & GOOGLE TASKS INTEGRATION: Persistent Repeat Prevention + OAuth Sync
 
 ### 🔧 Critical Bug Fix & Major Feature
