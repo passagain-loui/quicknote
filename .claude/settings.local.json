@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:/Users/Passagain/.claude/projects/\" 2>/dev/null | head -30; echo \"=== memory dir ===\"; ls -la \"C:/Users/Passagain/.claude/projects/D--AI-OpenCode-CPU-Monitor/memory/\" 2>/dev/null)",
+      "Bash(mkdir -p \"C:/Users/Passagain/.claude/projects/D--AI-OpenCode-Noted-Planing-and-Record/memory\" && echo created)",
+      "Bash(ls -la \"C:/Users/Passagain/.claude/skills/\" 2>/dev/null || echo \"NO personal skills dir\")",
+      "Bash(python -m py_compile src/core/models.py src/core/paths.py src/core/store.py src/core/settings.py src/ui/theme.py src/ui/tooltip.py src/ui/titlebar.py)",
+      "Bash(python -m py_compile \"C:/Users/Passagain/.claude/skills/windows-python-desktop-app/assets/build_windows.py\")",
+      "Bash(python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)"
+    ]
+  }
+}
