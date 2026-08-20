@@ -1,9 +1,20 @@
-# QuickNote v2.3.0 — Layout Gap Fix + Real-Time Search Bar + Data Persistence Guaranteed
+# QuickNote v2.3.1 — Critical Fixes: Reminder Callback + Note Sorting + Data Persistence Guaranteed
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.3.0 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.3.1 Released 2026-08-20
 
+> **v2.3.1** แก้ไข **Reminder Callback + Note Sorting (Critical Architecture Fixes)**
+>   - Problem 1: Reminder callback doesn't save (on_update called with no arguments)
+>   - Problem 2: New notes appear at bottom instead of top (no reload after create)
+>   - Root cause 1: Callback lambda expects explicit note argument (late binding issue)
+>   - Root cause 2: Manual pack() bypasses database sorting order
+>   - Solution 1: Pass self.note explicitly to all on_update() calls
+>   - Solution 2: Call _load_notes() after note creation to respect sorting
+>   - Impact: Reminder data saves correctly, new notes appear in sorted position
+>   - Verification: Callback binding works, sorting respected ✅
+>   - Architecture: Explicit argument passing, database-driven UI ordering
+>
 > **v2.3.0** แก้ไข **Layout Gap Fix & Real-Time Search Bar (Critical UI + UX Enhancements)**
 >   - Problem: Placeholder text "ยังไม่มีโน้ต" creates large white gap at top even when notes exist
 >   - Root cause: `pack_forget()` hides visually but reserves layout space
@@ -568,9 +579,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.3.0  
+**Version:** 2.3.1  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Layout Gap Fixed + Real-Time Search)
+**Status:** ✅ PRODUCTION-STABLE (Reminder Callback Fixed + Note Sorting Fixed)
 
 ## 🔧 Build Workflow
 
@@ -725,6 +736,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.3.0  
+**Version:** 2.3.1  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Layout Gap Fixed + Real-Time Search + Data Persistence Guaranteed)
+**Status:** ✅ PRODUCTION-STABLE (Reminder Callback Fixed + Note Sorting Fixed + Data Persistence Guaranteed)

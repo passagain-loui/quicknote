@@ -1,17 +1,18 @@
 """NoteCard widget — macOS Pastel style card ด้วย rounded corners + color bar"""
 
 import tkinter as tk
-from .theme import Theme, FONT_UI, PASTEL_PALETTE
+from .theme import Theme, PASTEL_PALETTE
 from ..core.models import Note
 
 
 class NoteCard(tk.Frame):
-    """การ์ดโน้ตแบบ macOS Pastel — color bar + rounded style + strikethrough"""
+    """การ์ดโน้ตแบบ macOS Pastel — color bar + status badge + modern buttons"""
 
-    def __init__(self, master, note: Note, theme: Theme, **kwargs):
+    def __init__(self, master, note: Note, theme: Theme, is_completed_tab: bool = False, **kwargs):
         super().__init__(master, **kwargs)
         self.note = note
         self.theme = theme
+        self.is_completed_tab = is_completed_tab  # ✓ v1.3.8: Track which tab we're in
 
         # สีพาสเทลแบบสุ่ม (หรือตั้งเอง)
         color_list = list(PASTEL_PALETTE.values())
@@ -19,12 +20,15 @@ class NoteCard(tk.Frame):
         self.card_color = color_list[self.color_idx]
 
         # Card frame (white background สำหรับ light mode)
+        # ✓ v1.3.5: Add visible border for Light Theme contrast
+        # ✓ v1.4.2: Modern card styling — softer borders + modern spacing
         self.config(
             bg=theme.c("note_bg"),
-            highlightthickness=0,
+            highlightthickness=2,  # ✓ v1.4.2: Slightly thicker border for definition
+            highlightbackground=theme.c("note_border_soft"),  # ✓ v1.4.2: Softer, lighter border (modern look)
             relief="flat",
-            padx=0,
-            pady=0,
+            padx=12,  # ✓ v1.4.2: Increased padding for spacious, modern appearance
+            pady=10,  # ✓ v1.4.2: Increased padding for better breathing room
         )
 
         # Left color bar (thin pastel stripe)
@@ -32,15 +36,121 @@ class NoteCard(tk.Frame):
         color_bar.pack(side="left", fill="y", padx=0, pady=0)
         color_bar.pack_propagate(False)
 
-        # Main content frame
-        main_frame = tk.Frame(self, bg=theme.c("note_bg"))
+        # Main content frame — แยกจาก Header และ Content
+        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
+        main_frame = tk.Frame(self, bg=theme.c("note_bg"), highlightthickness=0)
         main_frame.pack(side="left", fill="both", expand=True)
 
-        # === Header ===
-        header = tk.Frame(main_frame, bg=theme.c("note_bg"))
-        header.pack(fill="x", padx=8, pady=4)
+        # === Header (ปุ่มควบคุม) ===
+        # v1.8.9: Reorganized packing order to prevent button overflow
+        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
+        header = tk.Frame(main_frame, bg=theme.c("note_bg"), highlightthickness=0)
+        # ✓ v1.4.2: Increased header padding for modern spacing
+        header.pack(fill="x", padx=12, pady=10)
 
-        # Fold button
+        # v1.8.9: Pack right-side elements FIRST to reserve space, preventing title expansion overflow
+        # Status badge (Done / Active) — packed FIRST (right side)
+        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
+        status_frame = tk.Frame(header, bg=theme.c("note_bg"), highlightthickness=0)
+        status_frame.pack(side="right", padx=2)
+
+        if note.status == "completed":
+            badge_text = "Done"
+            badge_bg = "#D1FAE5"  # Light green
+            badge_fg = "#10B981"  # Green
+        else:
+            badge_text = "Active"
+            badge_bg = "#DBEAFE"  # Light blue
+            badge_fg = "#0EA5E9"  # Blue
+
+        self.status_badge = tk.Label(
+            status_frame,
+            text=badge_text,
+            bg=badge_bg,
+            fg=badge_fg,
+            font=("Segoe UI", 8, "bold"),
+            padx=6,
+            pady=2,
+        )
+        self.status_badge.pack(side="left", padx=2)
+
+        # Priority badge (v1.3.1) — Pill-shaped badge with priority level
+        # Only show if priority != "none"
+        self.priority_badge = None
+        if note.priority and note.priority != "none":
+            self._create_priority_badge(status_frame, theme)
+
+        # Control buttons (Status toggle + Reminder + Delete)
+        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
+        ctrl_frame = tk.Frame(header, bg=theme.c("note_bg"), highlightthickness=0)
+        ctrl_frame.pack(side="right", padx=2)
+
+        # Status toggle button (v1.3.8) — different icons based on tab
+        # Active tab: ✓ (Mark as Done) | Completed tab: ↩ (Restore to Active)
+        status_icon = "↩" if is_completed_tab else "✓"
+        self.btn_status = tk.Button(
+            ctrl_frame,
+            text=status_icon,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=theme.c("fg"),
+            activebackground=theme.c("note_bg"),  # ✓ v1.3.3: Match background to prevent button shift
+            activeforeground=theme.c("fg"),
+            font=("Segoe UI", 10),
+            command=self._on_toggle_status,
+            padx=2,
+            pady=2,
+        )
+        self.btn_status.pack(side="left", padx=2)  # ✓ v1.3.5: Increased padding to prevent overlap
+
+        # Reminder button (v1.3.0) — ⏰ for setting reminder datetime
+        reminder_icon = "⏰" if note.reminder_datetime else "⏱"
+        self.btn_reminder = tk.Button(
+            ctrl_frame,
+            text=reminder_icon,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=theme.priority_color("high") if note.reminder_datetime else theme.c("fg_muted"),
+            activebackground=theme.c("note_bg"),  # ✓ v1.3.3: Match background to prevent button shift
+            activeforeground=theme.c("fg"),
+            font=("Segoe UI", 10),
+            command=self._on_set_reminder,
+            padx=2,
+            pady=2,
+        )
+        # ✓ v1.3.8: Hide reminder button in Completed tab
+        if is_completed_tab:
+            self.btn_reminder.pack_forget()  # Hide completely
+        else:
+            self.btn_reminder.pack(side="left", padx=2)  # ✓ v1.3.5: Increased padding to prevent overlap
+
+        # Delete button (v1.3.8) — changed from ✕ to 🗑 (trash icon)
+        # v1.8.8: Ensure delete button is always visible on Active tab for quick note deletion
+        self.btn_delete = tk.Button(
+            ctrl_frame,
+            text="🗑",  # ✓ v1.3.8: Trash icon instead of ✕
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=theme.c("fg_muted"),
+            activebackground=theme.c("note_bg"),
+            activeforeground="#EF4444",  # Red on hover
+            font=("Segoe UI", 10),
+            command=self._on_delete,
+            padx=2,
+            pady=2,
+        )
+        self.btn_delete.pack(side="left", padx=2)  # ✓ v1.8.8: Always show delete button on all tabs
+
+        # v1.8.9: NOW pack left-side elements (fold, priority, pin, title)
+        # after right-side (status, control) have reserved their space
+
+        # Fold button (collapse/expand)
         fold_text = "▾" if not note.collapsed else "▸"
         self.btn_fold = tk.Button(
             header,
@@ -50,60 +160,79 @@ class NoteCard(tk.Frame):
             bd=0,
             bg=theme.c("note_bg"),
             fg=theme.c("fg"),
-            activebackground=theme.c("bg_hover"),
-            font=FONT_UI,
+            activebackground=theme.c("note_bg"),
+            font=("Segoe UI", 9),
             command=self._on_toggle_fold,
+            padx=2,
+            pady=2,
         )
         self.btn_fold.pack(side="left", padx=2)
 
-        # Title (with strikethrough effect when completed)
+        # Priority flag button (v1.3.4) — emoji flag with color coding
+        priority_icon_map = {
+            "high": ("🚩", "#FF3B30"),
+            "medium": ("🚩", "#FF9500"),
+            "low": ("🚩", "#007AFF"),
+            "none": ("🏳", "#CCCCCC"),
+        }
+        flag_icon, flag_color = priority_icon_map.get(note.priority, ("🏳", "#CCCCCC"))
+
+        self.btn_priority = tk.Button(
+            header,
+            text=flag_icon,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=flag_color,
+            activebackground=theme.c("note_bg"),
+            activeforeground=flag_color,
+            font=("Segoe UI", 10),
+            command=self._on_priority_clicked,
+            padx=2,
+            pady=2,
+        )
+        self.btn_priority.pack(side="left", padx=2)
+        self.priority_icon_map = priority_icon_map
+
+        # Pin button (v1.5.0)
+        pin_icon = "📌" if note.is_pinned else "📍"
+        self.btn_pin = tk.Button(
+            header,
+            text=pin_icon,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg="#FF6B6B" if note.is_pinned else theme.c("fg_muted"),
+            activebackground=theme.c("note_bg"),
+            activeforeground="#FF6B6B",
+            font=("Segoe UI", 10),
+            command=self._on_toggle_pin,
+            padx=2,
+            pady=2,
+        )
+        self.btn_pin.pack(side="left", padx=2)
+
+        # v1.8.9: Title entry — now only expands into remaining space (not pushing buttons off)
         self.title_var = tk.StringVar(value=note.title)
         self.title_entry = tk.Entry(
             header,
             textvariable=self.title_var,
             bg=theme.c("note_bg"),
             fg=theme.c("fg"),
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 9, "bold"),
             bd=0,
             relief="flat",
         )
         self.title_entry.pack(side="left", padx=4, fill="x", expand=True)
         self.title_entry.bind("<FocusOut>", self._on_title_change)
 
-        # Status button (○ = active, ✓ = completed)
-        status_text = "✓" if note.status == "completed" else "○"
-        self.btn_status = tk.Button(
-            header,
-            text=status_text,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg"),
-            activebackground=theme.c("bg_hover"),
-            font=FONT_UI,
-            command=self._on_toggle_status,
-        )
-        self.btn_status.pack(side="right", padx=2)
-
-        # Delete button
-        self.btn_delete = tk.Button(
-            header,
-            text="✕",
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg"),
-            activebackground=theme.c("bg_hover"),
-            font=FONT_UI,
-            command=self._on_delete,
-        )
-        self.btn_delete.pack(side="right", padx=2)
-
-        # === Content area ===
+        # === Content area (stored for toggle) ===
         self.content_frame = None
         self.content_text = None
+        self._main_frame_ref = main_frame  # เก็บ reference เพื่อให้ content_frame pack ลงใน main_frame
+        # v1.4.0: Always display content if not collapsed (ensures payload persistence across tabs)
         if not note.collapsed:
             self._show_content()
 
@@ -111,29 +240,40 @@ class NoteCard(tk.Frame):
         self._update_strikethrough()
 
         # Callbacks
-        self.on_update = lambda: None
+        self.on_update = lambda: None  # Title/content changes only
+        self.on_status_update = lambda: None  # Status changes only (v1.3.9: prevent title corruption)
+        self.on_pin_change = lambda: None  # Pin state changed (v1.5.0: trigger board re-sort)
         self.on_delete_note = lambda: None
 
     def _show_content(self):
-        """แสดง content area"""
+        """แสดง content area — pack ลงใน main_frame ด้านล่าง header"""
         if self.content_frame is not None:
+            # v1.4.0: Sync content from note object if already shown
+            if self.content_text:
+                self.content_text.config(state="normal")
+                self.content_text.delete("1.0", "end")
+                self.content_text.insert("1.0", self.note.content)
             return
 
-        self.content_frame = tk.Frame(self, bg=self.theme.c("note_bg"))
-        self.content_frame.pack(fill="both", expand=True, padx=8, pady=4)
+        self.content_frame = tk.Frame(self._main_frame_ref, bg=self.theme.c("note_bg"), highlightthickness=0)  # v1.6.1
+        # ✓ v1.4.2: Increased content padding for modern spacing
+        self.content_frame.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
         self.content_text = tk.Text(
             self.content_frame,
             height=4,
-            width=40,
-            bg=self.theme.c("bg"),
+            width=50,
+            bg=self.theme.c("note_bg"),  # v1.6.1: Use note_bg instead of main bg to match card
             fg=self.theme.c("fg"),
-            font=("Consolas", 9),
+            font=("Segoe UI", 9),
             wrap="word",
             relief="flat",
             bd=0,
+            highlightthickness=0,  # v1.6.1: Remove default border
         )
-        self.content_text.insert("1.0", self.note.content)
+        # v1.4.0: Guarantee content is always displayed (never empty payload)
+        content_to_show = self.note.content if self.note.content else ""
+        self.content_text.insert("1.0", content_to_show)
         self.content_text.pack(fill="both", expand=True)
         self.content_text.bind("<FocusOut>", self._on_content_change)
 
@@ -145,13 +285,17 @@ class NoteCard(tk.Frame):
             self.content_text = None
 
     def _update_strikethrough(self):
-        """ใส่/เอา strikethrough ตามสถานะ"""
+        """ปรับ status badge ไม่ใช้ strikethrough (v1.3.2) — ข้อความต้องอ่านได้ชัดเจน"""
         if self.note.status == "completed":
-            # Add strikethrough
-            self.title_entry.config(font=("Segoe UI", 10, "bold overstrike"))
+            # Keep font normal, no strikethrough for readability (v1.3.2)
+            self.title_entry.config(font=("Segoe UI", 9, "bold"))
+            # Update status badge
+            self.status_badge.config(text="Done", bg="#D1FAE5", fg="#10B981")
         else:
-            # Remove strikethrough
-            self.title_entry.config(font=("Segoe UI", 10, "bold"))
+            # Keep font normal
+            self.title_entry.config(font=("Segoe UI", 9, "bold"))
+            # Update status badge
+            self.status_badge.config(text="Active", bg="#DBEAFE", fg="#0EA5E9")
 
     def _on_toggle_fold(self):
         """ปุ่มพับ/กาง"""
@@ -164,45 +308,248 @@ class NoteCard(tk.Frame):
             self._show_content()
             self.btn_fold.config(text="▾")
 
-        self.on_update()
+        self.on_update(self.note)
 
     def _on_toggle_status(self):
-        """ปุ่ม status (○ ↔ ✓) — อัปเดต note object แล้วเรียก callback"""
+        """ปุ่ม status (✓) — toggle note status ONLY (v1.3.9: no title/content modification)"""
+        # v1.4.1: Force flush of unsaved UI changes BEFORE status change
+        # If user typed but didn't click out, FocusOut event never fired, so changes are still in Widget only
+        title_changed = False
+        content_changed = False
+
+        # Sync title from Entry widget (might not have triggered FocusOut yet)
+        if self.title_entry:
+            latest_title = self.title_entry.get().strip()
+            if latest_title and latest_title != self.note.title:
+                self.note.title = latest_title
+                title_changed = True
+
+        # Sync content from Text widget (might not have triggered FocusOut yet)
+        if self.content_text:
+            latest_content = self.content_text.get("1.0", "end-1c")
+            if latest_content != self.note.content:
+                self.note.content = latest_content
+                content_changed = True
+
+        # Save any pending changes to DB BEFORE status change
+        if title_changed or content_changed:
+            self.on_update(self.note)
+
+        # Now change status
         if self.note.status == "active":
             self.note.mark_done()
-            self.btn_status.config(text="✓")
         else:
             self.note.mark_active()
-            self.btn_status.config(text="○")
 
         self._update_strikethrough()
-        self.on_update()
+        # v1.3.9: Call status-only update to prevent title corruption — v2.3.1: Pass note explicitly
+        if hasattr(self, 'on_status_update') and callable(self.on_status_update):
+            self.on_status_update(self.note)
+        else:
+            self.on_update(self.note)
+
+    def _on_toggle_pin(self):
+        """ปุ่ม pin (📌/📍) — toggle note pinning (v1.5.0)"""
+        self.note.is_pinned = not self.note.is_pinned
+
+        # Update button appearance
+        pin_icon = "📌" if self.note.is_pinned else "📍"
+        pin_color = "#FF6B6B" if self.note.is_pinned else self.theme.c("fg_muted")
+        self.btn_pin.config(text=pin_icon, fg=pin_color, activeforeground=pin_color)
+
+        # Save to database
+        from ..core.database import update_note
+        update_note(self.note.id, is_pinned=self.note.is_pinned)
+
+        # Trigger board refresh to re-sort notes
+        if hasattr(self, 'on_pin_change') and callable(self.on_pin_change):
+            self.on_pin_change()
 
     def _on_title_change(self, event):
         """เมื่อเปลี่ยน title จากช่อง Entry"""
         new_title = self.title_var.get().strip()
         if new_title:
             self.note.title = new_title
-            self.on_update()
+            self.on_update(self.note)
 
     def _on_content_change(self, event):
         """เมื่อเปลี่ยน content จากช่อง Text"""
         new_content = self.content_text.get("1.0", "end-1c")
         self.note.content = new_content
-        self.on_update()
+        self.on_update(self.note)
 
     def _on_delete(self):
         """ปุ่ม delete"""
         self.on_delete_note()
+
+    def _on_priority_clicked(self):
+        """เปิด priority menu เมื่อคลิกปุ่ม flag (v1.3.3) — improved visual labels"""
+        menu = tk.Menu(self, tearoff=False)
+
+        priorities = [
+            ("🔴 P1 — High Priority", "high"),
+            ("🟠 P2 — Medium Priority", "medium"),
+            ("🔵 P3 — Low Priority", "low"),
+            ("⚪ --- — No Priority", "none"),
+        ]
+
+        for label, priority_val in priorities:
+            menu.add_command(
+                label=label,
+                command=lambda p=priority_val: self._set_priority(p)
+            )
+
+        # Position menu at button location
+        try:
+            x = self.btn_priority.winfo_rootx()
+            y = self.btn_priority.winfo_rooty() + self.btn_priority.winfo_height()
+            menu.post(x, y)
+        except tk.TclError:
+            pass
+
+    def _open_priority_menu(self, event):
+        """เปิด priority menu เมื่อคลิกที่ priority indicator (v1.3.0) — deprecated in v1.3.2"""
+        self._on_priority_clicked()
+
+    def _create_priority_badge(self, parent_frame, theme):
+        """Create Pill-shaped priority badge (v1.3.1)"""
+        # Priority color palette (light background + dark text)
+        badge_config = {
+            "high": {
+                "bg": "#FFE5E5",  # Light red (#FF3B30 at 15% alpha)
+                "fg": "#C41C00",  # Dark red text
+                "text": "High"
+            },
+            "medium": {
+                "bg": "#FFF4E5",  # Light orange (#FF9500 at 15% alpha)
+                "fg": "#CC6600",  # Dark orange text
+                "text": "Medium"
+            },
+            "low": {
+                "bg": "#E5F2FF",  # Light blue (#007AFF at 15% alpha)
+                "fg": "#003399",  # Dark blue text
+                "text": "Low"
+            }
+        }
+
+        config = badge_config.get(self.note.priority, {})
+        if not config:
+            return
+
+        # Destroy old badge if exists
+        if self.priority_badge:
+            self.priority_badge.destroy()
+
+        # Create pill badge with fixed width for alignment (v1.3.4)
+        self.priority_badge = tk.Label(
+            parent_frame,
+            text=config["text"],
+            bg=config["bg"],
+            fg=config["fg"],
+            font=("Segoe UI", 7, "bold"),
+            padx=6,
+            pady=1,
+            relief="flat",
+            bd=0,
+            width=8  # ✓ v1.3.4: Fixed width ensures all badges align (High/Medium/Low same width)
+        )
+        self.priority_badge.pack(side="left", padx=2)
+        self.priority_badge.bind("<Button-1>", lambda e: self._open_priority_menu(e))
+
+    def _set_priority(self, priority: str):
+        """อัปเดต priority + update flag button color (v1.3.4) — emoji flag with color"""
+        self.note.priority = priority
+
+        # Update flag button (v1.3.4) — back to emoji flag (🚩) with color coding
+        try:
+            flag_icon, flag_color = self.priority_icon_map.get(priority, ("🏳", "#CCCCCC"))
+            self.btn_priority.config(text=flag_icon, fg=flag_color, activeforeground=flag_color)
+            # Force immediate redraw of button
+            self.btn_priority.update_idletasks()
+        except Exception:
+            pass
+
+        # Find status_frame to recreate badge
+        # Navigate up to find the header/status frame
+        try:
+            # Get the parent frame of status badge
+            status_frame = self.status_badge.master
+
+            # Recreate badge
+            if priority and priority != "none":
+                self._create_priority_badge(status_frame, self.theme)
+            else:
+                # Destroy badge if priority is "none"
+                if self.priority_badge:
+                    self.priority_badge.destroy()
+                    self.priority_badge = None
+        except Exception:
+            pass
+
+        self.on_update(self.note)
+
+    def _on_set_reminder(self):
+        """เปิด DateTime picker dialog สำหรับตั้ง reminder — v1.7.2: Movable dialog with modern styling
+        v1.9.0: Ensure callback triggers immediate UI update with explicit refresh"""
+        from .reminder_dialog import ReminderDialog
+
+        reminder_dialog = ReminderDialog(self, self.note, self.theme)
+
+        def on_save_callback():
+            """v1.9.0: Force immediate UI update when reminder is set"""
+            # Update button appearance
+            self.btn_reminder.config(fg=self.theme.priority_color("high"), text="⏰")
+            # Force immediate visual refresh (prevents UI lag)
+            self.btn_reminder.update_idletasks()
+            # Save to database — v2.3.1: Pass note object explicitly
+            self.on_update(self.note)
+
+        def on_clear_callback():
+            """v1.9.0: Force immediate UI update when reminder is cleared"""
+            # Reset button appearance
+            self.btn_reminder.config(fg=self.theme.c("fg_muted"), text="⏱")
+            # Force immediate visual refresh (prevents UI lag)
+            self.btn_reminder.update_idletasks()
+            # Save to database — v2.3.1: Pass note object explicitly
+            self.on_update(self.note)
+
+        reminder_dialog.on_save = on_save_callback
+        reminder_dialog.on_clear = on_clear_callback
 
     def apply_theme(self, theme: Theme):
         """เปลี่ยนธีมตอนโปรแกรมทำงาน"""
         self.theme = theme
         self.config(bg=theme.c("note_bg"))
 
-        for btn in [self.btn_fold, self.btn_status, self.btn_delete]:
-            btn.config(bg=theme.c("note_bg"), fg=theme.c("fg"),
-                      activebackground=theme.c("bg_hover"))
+        # ✓ v1.3.3: Fixed button alignment — activebackground matches background to prevent shift
+        for btn in [self.btn_fold, self.btn_status, self.btn_delete, self.btn_reminder, self.btn_priority]:
+            btn.config(bg=theme.c("note_bg"), activebackground=theme.c("note_bg"))
+
+        # Update priority button color based on current priority
+        try:
+            flag_icon, flag_color = self.priority_icon_map.get(self.note.priority, ("🏳", "#CCCCCC"))
+            self.btn_priority.config(fg=flag_color, activeforeground=flag_color)
+        except Exception:
+            pass
+
+        # Update other buttons
+        self.btn_fold.config(fg=theme.c("fg"))
+        self.btn_status.config(fg=theme.c("fg"))
+        self.btn_delete.config(fg=theme.c("fg_muted"))
+
+        # Update reminder button color based on state
+        if self.note.reminder_datetime:
+            self.btn_reminder.config(fg=theme.priority_color("high"))
+        else:
+            self.btn_reminder.config(fg=theme.c("fg_muted"))
+
+        # Recreate priority badge to ensure theme colors apply
+        if self.priority_badge and self.note.priority and self.note.priority != "none":
+            try:
+                status_frame = self.status_badge.master
+                self._create_priority_badge(status_frame, theme)
+            except Exception:
+                pass
 
         self.title_entry.config(bg=theme.c("note_bg"), fg=theme.c("fg"))
 

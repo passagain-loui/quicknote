@@ -516,27 +516,15 @@ class Board:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _on_new(self):
-        """ปุ่ม + เพิ่มโน้ตใหม่"""
+        """ปุ่ม + เพิ่มโน้ตใหม่ — v2.3.1: Reload to respect sorting (newest notes first)"""
         note_id = create_note(title="New Note", content="")
-        note = Note.from_dict({
-            "id": note_id,
-            "title": "New Note",
-            "content": "",
-            "status": "active",
-            "collapsed": False,
-        })
-        # ✓ v1.3.8: Pass tab info (new notes always start in active tab)
-        card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=False)
-        card.on_update = lambda n=note: self._on_note_update(n)
-        card.on_status_update = lambda n=note: self._on_note_status_update(n)  # v1.3.9: status-only
-        card.on_pin_change = lambda: self._load_notes()  # v1.5.0: Re-sort on pin change
-        card.on_delete_note = lambda n=note: self._on_note_delete(n)
-        card.pack(fill="x", padx=4, pady=4)
-        self.note_cards[note.id] = card
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        # Focus on title field
-        card.title_entry.focus()
-        card.title_entry.select_range(0, tk.END)
+        # v2.3.1: Reload all notes to respect sorting order (newest first)
+        self._load_notes()
+        # Focus on newly created note's title field (should be first in list)
+        if note_id in self.note_cards:
+            card = self.note_cards[note_id]
+            card.title_entry.focus()
+            card.title_entry.select_range(0, tk.END)
 
     def _on_minimize(self):
         """ปุ่มสีเหลือง — ถ้าไม่ได้ roll up ให้ withdraw ลง tray — ถ้า roll up แล้วให้ restore"""

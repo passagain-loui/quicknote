@@ -1,5 +1,69 @@
 # QuickNote Release History
 
+## v2.3.1 (2026-08-20) — Critical Fixes: Reminder Callback + Note Sorting
+
+### 🔧 Critical Architecture Fixes: Reminder Save + Proper Note Order
+
+**Problem 1: Reminder Dialog Callback Not Saving**
+- User sets reminder via dialog and clicks "Set"
+- Callback executes but on_update() called with no arguments
+- Lambda expects note argument (with default), but Python late binding issues
+- Result: Reminder fields not properly saved to database
+
+**Problem 2: New Notes Appear at Bottom Instead of Top**
+- When user clicks + button to create new note
+- Note appears at bottom of list instead of top (newest first)
+- Manual pack() doesn't respect database sorting order
+- Needs complete reload to apply sort by created_at DESC
+
+**Solutions (v2.3.1):**
+
+**1. Fix Reminder Dialog Callback — Pass Note Explicitly**
+```python
+# Old (v2.3.0): Called with no arguments (lazy default)
+self.on_update()
+
+# New (v2.3.1): Pass note explicitly to ensure correct binding
+self.on_update(self.note)
+```
+- Fixed in: _on_set_reminder() callback, _on_title_change(), _on_content_change(), _on_toggle_status()
+- All on_update() calls now pass self.note to ensure proper lambda execution
+- Reminder fields now guaranteed to save correctly to database
+
+**2. Fix Note Sorting — Reload After Create**
+```python
+# Old (v2.3.0): Manual pack() at end (always bottom)
+card = NoteCard(...)
+card.pack(fill="x", padx=4, pady=4)
+
+# New (v2.3.1): Reload from database (respects sorting)
+note_id = create_note(title="New Note", content="")
+self._load_notes()  # Sorts by created_at DESC (newest first)
+```
+- New notes now appear in correct position based on database sorting
+- Respects pinning and priority levels
+- _load_notes() reapplies full sort order (pinned → priority → newest first)
+
+**Code Changes:**
+- `src/ui/note_card.py`: All on_update() calls now pass self.note explicitly (6 fixes)
+- `src/ui/board.py`: _on_new() now calls _load_notes() for proper sorting
+- `src/core/constants.py`: Version bumped to 2.3.1
+
+**Verification:**
+- Reminder callback receives note correctly ✅
+- Reminder data saves to database ✅
+- New notes appear at top (in sorted position) ✅
+- Pinned notes stay pinned when creating new notes ✅
+- Priority-based sorting preserved ✅
+
+**Architecture Impact:**
+- Callback lambdas now receive explicit arguments (no implicit defaults)
+- Note creation respects full database sorting order
+- No more manual pack() bypassing sort logic
+- Complete data consistency between database and UI
+
+---
+
 ## v2.3.0 (2026-08-20) — UI: Layout Gap Fix & Real-Time Search Bar
 
 ### ✨ Critical UI Repairs: Zero Whitespace + Search Functionality
