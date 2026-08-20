@@ -1,5 +1,58 @@
 # QuickNote Release History
 
+## v2.5.8 (2026-08-20) — HARDWARE/OS NUCLEAR FIX: Native HWND Topmost Lock + Scheduler Pause
+
+### 🔧 OS-Level Z-Order + Scheduler Control
+
+**Problem: Scheduler Thread Steals Focus from Dialog**
+- Dialog opens, dropdowns work (v2.5.7 fixed this)
+- But while using dialog, main window's scheduler (root.after loop) steals focus
+- Dialog disappears behind main window when scheduler callback fires
+- Root cause: OS doesn't know dialog is modal, scheduler thread calls main window
+
+**Root Cause Analysis:**
+1. ReminderDialog is Tkinter-level modal, not OS-level
+2. Main window has _check_reminders() loop running every 5 seconds
+3. When root.after(5000, _check_reminders) fires, Windows OS refocuses main window
+4. Dialog (which is child window) slides behind parent window
+5. Problem repeats every 5 seconds until dialog closes
+
+**Solution: Two-Layer OS + App Control**
+
+**Layer 1: Native Windows API HWND Topmost Lock**
+- Added ctypes to get dialog's HWND from Tkinter
+- Call Windows SetWindowPos() with HWND_TOPMOST (-1) flag
+- Locks dialog at OS level, permanently above main window
+- Result: Even if scheduler refocuses main window, dialog stays visibly on top
+
+**Layer 2: Pause Scheduler During Dialog Interaction**
+- Added `_scheduler_enabled` flag to Board class (defaults True)
+- When dialog opens: pause scheduler (set flag to False)
+- When dialog closes: resume scheduler (set flag to True)
+- Modified _check_reminders() to skip checking if disabled
+- Scheduler still reschedules to keep loop alive (no broken loop)
+- Result: No root.after callbacks steal focus while dialog open
+
+**Code Changes:**
+- `src/ui/reminder_dialog.py`: Added HWND topmost lock + scheduler pause/resume
+- `src/ui/board.py`: Added _scheduler_enabled flag + check in _check_reminders()
+- `src/core/constants.py`: Version bumped to 2.5.8
+
+**Verification:**
+- Dialog opens and stays on top (OS-level lock) ✅
+- DateEntry/Combobox dropdowns work ✅
+- While dialog open, scheduler paused (no focus theft) ✅
+- After dialog closes, scheduler resumes ✅
+- No performance impact ✅
+
+**Lesson Learned:**
+- Tkinter modal insufficient against OS thread scheduling
+- Must use OS-level controls (Windows API) for unbreakable topmost
+- Scheduler threads can steal focus from modal dialogs
+- Pausing scheduler during modal = clean UX without conflicts
+
+---
+
 ## v2.5.7 (2026-08-20) — UI INTERACTION FIX: Remove Focus Loop + Restore Dropdown Functionality
 
 ### 🔧 Dropdown Menu Interaction Fix

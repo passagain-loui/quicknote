@@ -38,6 +38,7 @@ class Board:
         self.note_cards = {}  # id → NoteCard widget
         self.current_filter = "active"  # 'active' or 'completed'
         self.settings_window_instance = None  # Singleton Settings window
+        self._scheduler_enabled = True  # v2.5.8: Flag to pause scheduler when dialog open
 
         # Create window
         self.root = tk.Tk()
@@ -619,10 +620,18 @@ class Board:
         self.root.after(3000, self._reapply_topmost)
 
     def _check_reminders(self):
-        """v2.2.3: Unbreakable reminder scheduler with visual debug (next reminder display)"""
+        """v2.2.3: Unbreakable reminder scheduler with visual debug (next reminder display)
+        v2.5.8: Check if scheduler is paused (dialog open) — if so, skip but reschedule anyway"""
         try:
             from datetime import datetime
             from src.core.database import get_next_due_reminder
+
+            # v2.5.8: Skip checking reminders if scheduler is paused (dialog open)
+            # Still reschedule to keep loop alive
+            if not getattr(self, '_scheduler_enabled', True):
+                # Scheduler is paused, just reschedule and return
+                self.root.after(5000, self._check_reminders)
+                return
 
             # Update heartbeat indicator with next due reminder (v2.2.3)
             try:

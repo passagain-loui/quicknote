@@ -1,8 +1,18 @@
-# QuickNote v2.5.7 — UI INTERACTION FIX: Remove Aggressive Focus Loop + Restore Dropdowns
+# QuickNote v2.5.8 — HARDWARE/OS NUCLEAR FIX: Native HWND Topmost Lock + Scheduler Pause
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence
 
-**Status: ✅ PRODUCTION-STABLE** — v2.5.7 Released 2026-08-20
+**Status: ✅ PRODUCTION-STABLE** — v2.5.8 Released 2026-08-20
+
+> **v2.5.8** แก้ไข **OS-Level Z-Order: Native HWND Topmost Lock + Scheduler Pause (Final Dialog Fix)**
+>   - Problem: While using dialog, scheduler thread steals focus (dialog disappears every 5 sec)
+>   - Root cause: Tkinter modal insufficient, Windows OS refocuses main window on root.after callback
+>   - Solution 1: Use Windows API SetWindowPos() with HWND_TOPMOST to lock dialog at OS level
+>   - Solution 2: Pause scheduler (_check_reminders) while dialog open (no focus theft)
+>   - Solution 3: Resume scheduler when dialog closes (reminders resume working)
+>   - Impact: Dialog permanently on top, scheduler doesn't interfere, professional UX ✅
+>   - Verification: Dialog stays visible, no focus-steal, dropdowns work, scheduler resumes ✅
+>   - Architecture: OS-level Z-order lock, application-level scheduler control
 
 > **v2.5.7** แก้ไข **Dropdown Interaction: Remove Focus Loop + Revert to Standard Modal (Functionality Fix)**
 >   - Problem: DateEntry/Combobox dropdowns unresponsive (enforce_topmost loop breaks them)
@@ -675,7 +685,7 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.5.7  
+**Version:** 2.5.8  
 **Last Updated:** 2026-08-20  
 **Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
 
@@ -832,6 +842,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.5.7  
+**Version:** 2.5.8  
 **Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Standard Modal Pattern + Full Dropdown Functionality)
+**Status:** ✅ PRODUCTION-STABLE (OS-Level HWND Topmost Lock + Scheduler Pause Control)

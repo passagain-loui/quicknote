@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from tkcalendar import DateEntry
 from .theme import Theme
 from ..core.database import update_note  # v2.3.2: Direct database persistence
+import ctypes  # v2.5.8: Native Windows API for HWND topmost lock
 
 
 class ReminderDialog:
@@ -68,6 +69,26 @@ class ReminderDialog:
         # Initial lift to front (one-time, not continuous loop)
         self.dialog.lift()
         self.dialog.focus_set()  # Use focus_set() instead of focus_force() (gentler)
+
+        # v2.5.8: NATIVE WINDOWS API HWND TOPMOST LOCK — Prevent scheduler thread from stealing focus
+        # Use OS-level SetWindowPos with HWND_TOPMOST (-1) to lock dialog above all windows
+        try:
+            hwnd = ctypes.windll.user32.GetParent(self.dialog.winfo_id())
+            if not hwnd:  # If no parent, use dialog's own HWND
+                hwnd = self.dialog.winfo_id()
+            # SetWindowPos(hWnd, hWndInsertAfter, x, y, cx, cy, uFlags)
+            # HWND_TOPMOST = -1, SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001
+            ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002)
+        except Exception:
+            pass  # Graceful fallback if SetWindowPos fails
+
+        # v2.5.8: PAUSE SCHEDULER — Prevent root.after() callback from stealing focus while dialog open
+        # Store reference to parent's scheduler state so we can pause it
+        self.parent_root = parent.winfo_toplevel()
+        self.scheduler_was_running = False
+        if hasattr(self.parent_root, '_scheduler_enabled'):
+            self.scheduler_was_running = self.parent_root._scheduler_enabled
+            self.parent_root._scheduler_enabled = False  # Pause reminder scheduler
 
         # v2.0.4: Using native OS titlebar - no custom header needed
 
@@ -241,7 +262,14 @@ class ReminderDialog:
         # v2.0.4: Native titlebar handles dragging - no custom drag binding needed
 
     def _close_dialog(self):
-        """v2.5.6: Proper modal cleanup — release grab + reset topmost before destroy"""
+        """v2.5.8: Proper modal cleanup — release grab, reset topmost, resume scheduler"""
+        # v2.5.8: Resume scheduler if it was paused
+        try:
+            if hasattr(self.parent_root, '_scheduler_enabled') and self.scheduler_was_running:
+                self.parent_root._scheduler_enabled = True  # Resume reminder scheduler
+        except Exception:
+            pass
+
         try:
             # Release modal lock before destroying
             self.dialog.grab_release()
