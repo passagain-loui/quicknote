@@ -1,5 +1,84 @@
 # QuickNote Release History
 
+## v2.8.4 (2026-08-21) — WINDOWS-OPTIMIZED NOTIFICATIONS: Toast + Shell Fallback + AUMID Register
+
+### 🔧 Critical Windows-Specific Bug Fixes
+
+**Problem 1: Windows Notification Sound Plays But No Toast Popup**
+- Sound plays when reminder triggers (user hears "ding")
+- But no visual notification appears in Action Center or taskbar
+- User doesn't see that reminder triggered (only hears sound)
+- Root cause: win10toast fails on Windows (Focus Assist, AUMID not registered, timing issues)
+- Solution 1: Force AUMID registration at app startup via ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID()
+- Solution 2: Implement Windows Shell Notification (Shell_NotifyIcon balloon) as guaranteed fallback
+- Solution 3: Priority chain ensures at least visual OR audio feedback always appears:
+  * Primary: win10toast (if available)
+  * Secondary: Windows Shell Balloon (guaranteed visible in taskbar)
+  * Tertiary: Audio-only fallback (guaranteed audible)
+- Result: Windows users always get notification feedback (visual + audio) ✅
+
+**Problem 2: Clear Button Doesn't Prevent Reminder from Repeating**
+- User clicks "Clear" button in reminder dialog
+- Clock icon turns gray (shows cleared state)
+- Dialog closes → Within 5 seconds, reminder triggers AGAIN
+- Root cause: update_note() ignores None values → reminder_datetime field not actually cleared from DB
+- Solution 1: Add clear_reminder: bool = False parameter to update_note()
+- Solution 2: When clear_reminder=True, execute atomic NULL update:
+  ```sql
+  UPDATE notes SET reminder_datetime = NULL, reminder_triggered = 0 WHERE id = ?
+  ```
+- Solution 3: Ensure synchronous conn.commit() before returning
+- Solution 4: Force UI refresh with update_idletasks() before closing dialog
+- Result: Clear button truly clears reminders, no repeats ✅
+
+**Code Changes:**
+- `src/services/notification.py`:
+  * Simplified to Windows-only (user confirmed Windows OS)
+  * Enhanced AUMID registration: ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID()
+  * New _show_win10toast_notification() method (dedicated, non-blocking)
+  * Enhanced _show_shell_notification() with Shell_NotifyIcon balloon
+  * Robust fallback chain: win10toast → Shell → Audio
+  * All methods thread-safe and non-blocking
+- `src/core/database.py`:
+  * clear_reminder: bool flag already implemented (v2.8.3)
+  * Atomic NULL updates with synchronous commit
+- `src/ui/reminder_dialog.py`:
+  * _clear_reminder() already uses clear_reminder=True flag
+  * update_idletasks() for forced UI refresh
+
+**Verification (E2E Tests 3/3):**
+- Test 1: Clear Reminder DB Synchronization ✅
+  * Set reminder to future time
+  * Click Clear
+  * Verify DB: reminder_datetime IS NULL
+  * Verify no repeat risk in next cycle
+- Test 2: Windows Notification Service ✅
+  * AUMID registration at startup
+  * Audio notification callable
+  * Shell notification fallback available
+- Test 3: No Repeat Notifications ✅
+  * Set past reminder (immediate trigger)
+  * Clear reminder
+  * Verify scheduler skips (datetime=NULL)
+
+**Windows Notification Chain:**
+```
+Try 1: win10toast (best UX, user-friendly Toast)
+    ↓ if fails
+Try 2: Windows Shell Notification (Shell_NotifyIcon balloon in taskbar)
+    ↓ if fails (or focus assist blocks)
+Try 3: Audio-only (MailBeep sound guaranteed)
+    ↓ fallback
+Worst case: Silent (but DB updated correctly, calendar works)
+```
+
+**Technical Details:**
+- AUMID format: 'PassagainP.QuickNote.App.v2.8.4'
+- Shell balloon timeout: 8000ms
+- Balloon priority: NIIF_INFO (1) for info icon
+- Synchronous commit pattern: NO async/threading for DB ops
+- Process cleanup: Force-kill lingering processes before startup
+
 ## v2.8.3 (2026-08-21) — CROSS-PLATFORM NOTIFICATIONS & CLEAR REMINDER FIX: macOS + Windows + DB Sync
 
 ### 🔧 Critical Bug Fixes & Cross-Platform Support

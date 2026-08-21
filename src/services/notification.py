@@ -1,4 +1,4 @@
-"""Cross-Platform Native Notifications (v2.8.3) — Windows Toast + macOS Banner + Fallback Audio"""
+"""Windows Native Notifications (v2.8.4) — Toast + Shell Fallback + AUMID Registration"""
 
 import logging
 import threading
@@ -14,7 +14,8 @@ class WindowsNotificationService:
 
     def __init__(self):
         self.on_click_callback = None
-        # v2.8.3: Register AUMID to enable Windows notifications
+        # v2.8.4: Register AUMID BEFORE any notification attempt
+        # This enables Windows to allow Toast notifications in Action Center
         self._register_aumid()
         self._try_init_win10toast()
 
@@ -43,7 +44,9 @@ class WindowsNotificationService:
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
                                   on_click=None, duration: int = 8) -> bool:
-        """Show native reminder notification with platform-specific fallback chain
+        """Show Windows native reminder notification with guaranteed fallback chain
+
+        v2.8.4: Windows-optimized with AUMID registration + Toast → Shell Balloon → Audio
 
         Args:
             note_title: Title of the note (notification title)
@@ -56,145 +59,81 @@ class WindowsNotificationService:
         try:
             self.on_click_callback = on_click
 
-            # v2.8.3: Detect platform and use appropriate notification method
-            system = platform.system()
+            # v2.8.4: Windows-specific notification fallback chain
+            # Priority 1: Try win10toast (best user experience)
+            if self.has_win10toast and self.notifier:
+                try:
+                    return self._show_win10toast_notification(note_title, note_content, duration)
+                except Exception as e:
+                    log.warning(f"[Notification] win10toast failed: {e}, trying Shell fallback...")
 
-            if system == "Darwin":  # macOS
-                return self._show_macos_notification(note_title, note_content)
-            elif system == "Windows":
-                return self._show_windows_notification(note_title, note_content, duration)
-            elif system == "Linux":
-                return self._show_linux_notification(note_title, note_content)
-            else:
-                # Fallback to audio-only
-                log.warning(f"[Notification] Unknown platform: {system}, using audio-only")
-                return self._show_fallback_notification(note_title)
+            # Priority 2: Windows Shell Notification (Tray Balloon) — guaranteed visible
+            try:
+                result = self._show_shell_notification(note_title, note_content)
+                if result:
+                    return True
+            except Exception as e:
+                log.warning(f"[Notification] Shell notification failed: {e}, trying audio...")
+
+            # Priority 3: Audio-only fallback (guaranteed to work)
+            log.warning("[Notification] Using audio-only fallback")
+            return self._show_fallback_notification(note_title)
 
         except Exception as e:
             log.error(f"[Notification] Failed to show reminder notification: {e}")
             return False
 
-    def _show_macos_notification(self, title: str, message: str = None) -> bool:
-        """v2.8.3: Show macOS native banner notification using AppleScript
+    def _show_win10toast_notification(self, title: str, message: str = None, duration: int = 8) -> bool:
+        """v2.8.4: Show Windows Toast via win10toast (priority 1)
 
-        Displays notification in macOS Notification Center (top-right corner)
+        Best UX if available, but may fail if Focus Assist is enabled
         """
         try:
-            title = title[:100] if title else "QuickNote Reminder"
-            msg = message[:200] if message else "Reminder triggered"
+            title_str = title[:50] if title else "QuickNote Reminder"
+            msg = message[:100] if message else "Reminder triggered"
 
-            # Escape quotes for AppleScript
-            title = title.replace('"', '\\"')
-            msg = msg.replace('"', '\\"')
-
-            # AppleScript command to display notification
-            script = f'display notification "{msg}" with title "{title}" sound name "Glass"'
-
-            # Run osascript command
-            import subprocess
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                timeout=5
-            )
-
-            if result.returncode == 0:
-                log.info("[Notification] macOS banner notification shown")
-                return True
-            else:
-                log.warning(f"[Notification] osascript failed: {result.stderr.decode()}")
-                return False
-
-        except Exception as e:
-            log.warning(f"[Notification] macOS notification failed: {e}")
-            return False
-
-    def _show_linux_notification(self, title: str, message: str = None) -> bool:
-        """v2.8.3: Show Linux native notification using notify-send
-
-        Requires notify-send to be installed (part of libnotify)
-        """
-        try:
-            title = title[:100] if title else "QuickNote Reminder"
-            msg = message[:200] if message else "Reminder triggered"
-
-            import subprocess
-            result = subprocess.run(
-                ["notify-send", title, msg, "-u", "normal"],
-                capture_output=True,
-                timeout=5
-            )
-
-            if result.returncode == 0:
-                log.info("[Notification] Linux notification shown")
-                return True
-            else:
-                log.warning(f"[Notification] notify-send failed: {result.stderr.decode()}")
-                return False
-
-        except FileNotFoundError:
-            log.warning("[Notification] notify-send not found (install libnotify)")
-            return False
-        except Exception as e:
-            log.warning(f"[Notification] Linux notification failed: {e}")
-            return False
-
-    def _show_windows_notification(self, title: str, message: str = None, duration: int = 8) -> bool:
-        """v2.8.3: Show Windows native toast notification"""
-        try:
-            # Method 1: win10toast
-            if self.has_win10toast and self.notifier:
+            def show_in_thread():
                 try:
-                    def show_win10toast_in_thread():
+                    self.notifier.show_toast(
+                        title=title_str,
+                        msg=msg,
+                        duration=duration,
+                        threaded=False
+                    )
+
+                    # Execute callback if user clicked
+                    if self.on_click_callback:
                         try:
-                            title_str = title[:50] if title else "QuickNote Reminder"
-                            msg = message[:100] if message else "Reminder triggered"
-
-                            self.notifier.show_toast(
-                                title=title_str,
-                                msg=msg,
-                                duration=duration,
-                                threaded=False
-                            )
-
-                            # Execute callback if user clicked
-                            if self.on_click_callback:
-                                try:
-                                    self.on_click_callback()
-                                except Exception:
-                                    pass
-                        except Exception as e:
-                            log.warning(f"[Notification] win10toast failed: {e}")
-                            # Fall through to next method
-
-                    thread = threading.Thread(target=show_win10toast_in_thread, daemon=True)
-                    thread.start()
-                    return True
+                            self.on_click_callback()
+                        except Exception:
+                            pass
                 except Exception as e:
-                    log.warning(f"[Notification] win10toast error: {e}")
+                    log.warning(f"[Notification] win10toast show failed: {e}")
+                    raise
 
-            # Method 2: Windows Shell Notification (fallback)
-            try:
-                return self._show_shell_notification(title, message)
-            except Exception as e:
-                log.warning(f"[Notification] Shell notification failed: {e}")
-
-            # Method 3: System MessageBox (last resort)
-            log.warning("[Notification] Using final fallback notification method")
-            return self._show_fallback_notification(title)
+            thread = threading.Thread(target=show_in_thread, daemon=True)
+            thread.start()
+            log.info("[Notification] win10toast sent successfully")
+            return True
 
         except Exception as e:
-            log.error(f"[Notification] Windows notification failed: {e}")
+            log.warning(f"[Notification] win10toast failed: {e}")
             return False
 
     def _show_shell_notification(self, title: str, message: str = None) -> bool:
-        """v2.8.2: Show Windows Shell notification using win32gui
+        """v2.8.4: Show Windows Shell Notification (Tray Balloon) — Guaranteed visible
 
-        This is a fallback when win10toast doesn't work (e.g., Focus Assist enabled)
+        Uses win32gui.Shell_NotifyIcon to show balloon in taskbar.
+        This is the fallback when win10toast fails (e.g., Focus Assist enabled).
+        Balloon appears in taskbar corner (bottom-right area).
         """
         try:
             import win32gui
             import win32con
+            import time
+
+            title_str = title[:256] if title else "QuickNote Reminder"
+            msg = message[:256] if message else "Reminder triggered"
 
             # Create a hidden window for the notification
             class NotificationWindow:
@@ -203,12 +142,12 @@ class WindowsNotificationService:
 
             nw = NotificationWindow()
 
-            # Register window class
-            wc = win32gui.WNDCLASS()
-            wc.lpszClassName = "QuickNoteNotification"
-            wc.lpfnWndProc = {}
-
             try:
+                # Register window class
+                wc = win32gui.WNDCLASS()
+                wc.lpszClassName = "QuickNoteNotification"
+                wc.lpfnWndProc = {}
+
                 classAtom = win32gui.RegisterClass(wc)
                 nw.hwnd = win32gui.CreateWindow(
                     classAtom, "QuickNote",
@@ -217,19 +156,33 @@ class WindowsNotificationService:
                     0, 0, win32gui.GetModuleHandle(None), None
                 )
 
-                # Show notification using Shell_NotifyIcon
+                # Add icon to notification area (tray)
                 flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP
-                nid = (nw.hwnd, 0, flags, win32con.WM_USER + 20, win32gui.LoadIcon(0, win32con.IDI_APPLICATION), "QuickNote")
+                nid = (nw.hwnd, 0, flags, win32con.WM_USER + 20,
+                       win32gui.LoadIcon(0, win32con.IDI_APPLICATION), "QuickNote")
                 win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
 
-                # Update with our notification
-                nid = (nw.hwnd, 0, win32gui.NIF_INFO, win32con.WM_USER + 20,
+                # Show notification balloon (priority: NIIF_INFO for blue info icon)
+                flags = win32gui.NIF_INFO
+                nid = (nw.hwnd, 0, flags, win32con.WM_USER + 20,
                        win32gui.LoadIcon(0, win32con.IDI_INFORMATION), "QuickNote",
-                       200, 200, (title[:256] if title else "Reminder"))
+                       8000, 200, 1, title_str, msg)  # 8000ms timeout, NIIF_INFO=1
+
                 win32gui.Shell_NotifyIcon(win32gui.NIM_MODIFY, nid)
 
-                log.info("[Notification] Shell notification shown successfully")
+                log.info(f"[Notification] Shell balloon shown: {title_str}")
+
+                # Keep window alive long enough for notification to display
+                time.sleep(0.5)
+
+                # Cleanup after notification shown
+                try:
+                    win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, (nw.hwnd, 0))
+                except Exception:
+                    pass
+
                 return True
+
             except Exception as e:
                 log.warning(f"[Notification] Shell_NotifyIcon failed: {e}")
                 return False

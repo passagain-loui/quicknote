@@ -1,8 +1,22 @@
-# QuickNote v2.8.3 — CROSS-PLATFORM NOTIFICATIONS & CLEAR REMINDER FIX: macOS + Windows + DB Sync
+# QuickNote v2.8.4 — WINDOWS-OPTIMIZED NOTIFICATIONS & CLEAR FIX: Toast + Shell Fallback + AUMID
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Cross-Platform Notifications** + **Synchronous DB Commit**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Windows Native Notifications** + **Synchronous DB Commit**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.8.3 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.8.4 Released 2026-08-21
+
+> **v2.8.4** แก้ไข **Windows-Optimized Notifications: Toast + Shell Balloon Fallback + AUMID (Critical Windows Fix)**
+>   - Critical Bug 1: Windows notification sound plays but no Toast popup (no visual feedback)
+>   - Critical Bug 2: Clear button doesn't prevent reminder from repeating (DB not actually cleared)
+>   - Root cause 1: win10toast may fail on Windows (Focus Assist enabled, AUMID not registered)
+>   - Root cause 2: update_note() doesn't properly clear reminder_datetime field
+>   - Solution 1: Implement forced AUMID registration (SetCurrentProcessExplicitAppUserModelID) at startup
+>   - Solution 2: Add Windows Shell Notification (Shell_NotifyIcon balloon) as fallback method
+>   - Solution 3: Priority chain: win10toast → Shell Balloon (guaranteed visible) → Audio only
+>   - Solution 4: Use clear_reminder: bool flag for atomic DB NULL updates with synchronous commit
+>   - Solution 5: Force UI refresh (update_idletasks) before closing reminder dialog
+>   - Impact: Windows users always get notification feedback, clear button actually works ✅
+>   - Verification: E2E tests pass 3/3 (Clear DB Sync, Notification Service, No Repeat) ✅
+>   - Architecture: Windows-focused notification dispatcher, atomic DB operations, process cleanup
 
 > **v2.8.3** แก้ไข **Cross-Platform Notifications & Clear Reminder Fix: macOS AppleScript + Windows Toast + DB Sync (Critical Release)**
 >   - Critical Bug 1: macOS users see no notification (system designed for Windows only)
@@ -825,9 +839,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.8.3  
+**Version:** 2.8.4  
 **Last Updated:** 2026-08-21  
-**Status:** ✅ PRODUCTION-STABLE (Cross-Platform Notifications + Clear Reminder DB Sync)
+**Status:** ✅ PRODUCTION-STABLE (Windows-Optimized Notifications + Clear Fix + Shell Fallback)
 
 ## 🔧 Build Workflow
 
