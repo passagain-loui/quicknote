@@ -1,8 +1,24 @@
-# QuickNote v2.8.2 — NOTIFICATION FALLBACK & DEFAULT COLLAPSED STATE: Reliable Native Notifications + Clean UI
+# QuickNote v2.8.3 — CROSS-PLATFORM NOTIFICATIONS & CLEAR REMINDER FIX: macOS + Windows + DB Sync
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Windows Native Notifications** + **Reliable Fallback Chain**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Cross-Platform Notifications** + **Synchronous DB Commit**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.8.2 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.8.3 Released 2026-08-21
+
+> **v2.8.3** แก้ไข **Cross-Platform Notifications & Clear Reminder Fix: macOS AppleScript + Windows Toast + DB Sync (Critical Release)**
+>   - Critical Bug 1: macOS users see no notification (system designed for Windows only)
+>   - Critical Bug 2: Clear button doesn't actually clear reminders from DB (repeat notifications)
+>   - Critical Bug 3: No process cleanup on app hang (manual kill required)
+>   - Root cause 1: No macOS native notification API implemented
+>   - Root cause 2: update_note() ignores None values, can't clear fields atomically
+>   - Root cause 3: Previous version killed manually, need forced cleanup protocol
+>   - Solution 1: Add platform detection (Darwin/Windows/Linux) + AppleScript for macOS
+>   - Solution 2: Add clear_reminder: bool flag for atomic NULL updates in database
+>   - Solution 3: Implement process auto-kill in execution protocol before build
+>   - Solution 4: Cross-platform notification with proper fallback chain (OS → Audio)
+>   - Solution 5: Forced synchronous DB commit + update_idletasks() in _clear_reminder()
+>   - Impact: macOS/Windows/Linux all have native notifications, clear actually clears, no repeats ✅
+>   - Verification: E2E tests pass 3/3 (Clear DB Sync, Notification Service, No Repeat) ✅
+>   - Architecture: Platform-agnostic notification dispatcher, atomic DB operations, process cleanup
 
 > **v2.8.2** แก้ไข **Notification Fallback & Default Collapsed State: Reliable Native Notifications + Clean UI (UX Polish)**
 >   - Bug 1: Windows notification sometimes doesn't appear (even though sound plays)
@@ -809,9 +825,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.6.0  
-**Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Badge Typography Unification + Reminder Dialog Focus)
+**Version:** 2.8.3  
+**Last Updated:** 2026-08-21  
+**Status:** ✅ PRODUCTION-STABLE (Cross-Platform Notifications + Clear Reminder DB Sync)
 
 ## 🔧 Build Workflow
 

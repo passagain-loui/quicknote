@@ -370,17 +370,11 @@ class ReminderDialog:
             self._close_dialog()
 
     def _clear_reminder(self):
-        """v2.8.1: Clear reminder with direct database persistence + synchronous UI refresh"""
-        # v2.8.1: SYNCHRONOUS DB update (ensure write completes before UI refresh)
+        """v2.8.3: Clear reminder with explicit DB flag + synchronous UI refresh"""
+        # v2.8.3: SYNCHRONOUS DB update using clear_reminder flag
+        # This ensures reminder_datetime and reminder_triggered are both cleared
         try:
-            update_note(self.note.id,
-                       reminder_datetime=None,
-                       reminder_triggered=False)
-            # Ensure write completes before UI refresh
-            from src.core.database import get_db_connection
-            conn = get_db_connection()
-            conn.commit()
-            conn.close()
+            update_note(self.note.id, clear_reminder=True)
         except Exception:
             pass
 

@@ -1,7 +1,9 @@
-"""Windows Native Toast Notification Service (v2.8.1) — Replace Tkinter Toast with OS notifications"""
+"""Cross-Platform Native Notifications (v2.8.3) — Windows Toast + macOS Banner + Fallback Audio"""
 
 import logging
 import threading
+import platform
+import os
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -12,7 +14,20 @@ class WindowsNotificationService:
 
     def __init__(self):
         self.on_click_callback = None
+        # v2.8.3: Register AUMID to enable Windows notifications
+        self._register_aumid()
         self._try_init_win10toast()
+
+    def _register_aumid(self):
+        """v2.8.3: Register Application User Model ID with Windows for proper notification delivery"""
+        try:
+            import ctypes
+            # App AUMID must match any shortcuts created
+            aumid = 'PassagainP.QuickNote.v2.8.3'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(aumid)
+            log.info(f"[Notification] AUMID registered: {aumid}")
+        except Exception as e:
+            log.warning(f"[Notification] Failed to register AUMID: {e}")
 
     def _try_init_win10toast(self):
         """Try to import win10toast library"""
@@ -28,7 +43,7 @@ class WindowsNotificationService:
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
                                   on_click=None, duration: int = 8) -> bool:
-        """Show Windows native reminder notification with fallback chain
+        """Show native reminder notification with platform-specific fallback chain
 
         Args:
             note_title: Title of the note (notification title)
@@ -41,17 +56,102 @@ class WindowsNotificationService:
         try:
             self.on_click_callback = on_click
 
-            # v2.8.2: Try multiple notification methods with fallback chain
+            # v2.8.3: Detect platform and use appropriate notification method
+            system = platform.system()
+
+            if system == "Darwin":  # macOS
+                return self._show_macos_notification(note_title, note_content)
+            elif system == "Windows":
+                return self._show_windows_notification(note_title, note_content, duration)
+            elif system == "Linux":
+                return self._show_linux_notification(note_title, note_content)
+            else:
+                # Fallback to audio-only
+                log.warning(f"[Notification] Unknown platform: {system}, using audio-only")
+                return self._show_fallback_notification(note_title)
+
+        except Exception as e:
+            log.error(f"[Notification] Failed to show reminder notification: {e}")
+            return False
+
+    def _show_macos_notification(self, title: str, message: str = None) -> bool:
+        """v2.8.3: Show macOS native banner notification using AppleScript
+
+        Displays notification in macOS Notification Center (top-right corner)
+        """
+        try:
+            title = title[:100] if title else "QuickNote Reminder"
+            msg = message[:200] if message else "Reminder triggered"
+
+            # Escape quotes for AppleScript
+            title = title.replace('"', '\\"')
+            msg = msg.replace('"', '\\"')
+
+            # AppleScript command to display notification
+            script = f'display notification "{msg}" with title "{title}" sound name "Glass"'
+
+            # Run osascript command
+            import subprocess
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                log.info("[Notification] macOS banner notification shown")
+                return True
+            else:
+                log.warning(f"[Notification] osascript failed: {result.stderr.decode()}")
+                return False
+
+        except Exception as e:
+            log.warning(f"[Notification] macOS notification failed: {e}")
+            return False
+
+    def _show_linux_notification(self, title: str, message: str = None) -> bool:
+        """v2.8.3: Show Linux native notification using notify-send
+
+        Requires notify-send to be installed (part of libnotify)
+        """
+        try:
+            title = title[:100] if title else "QuickNote Reminder"
+            msg = message[:200] if message else "Reminder triggered"
+
+            import subprocess
+            result = subprocess.run(
+                ["notify-send", title, msg, "-u", "normal"],
+                capture_output=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                log.info("[Notification] Linux notification shown")
+                return True
+            else:
+                log.warning(f"[Notification] notify-send failed: {result.stderr.decode()}")
+                return False
+
+        except FileNotFoundError:
+            log.warning("[Notification] notify-send not found (install libnotify)")
+            return False
+        except Exception as e:
+            log.warning(f"[Notification] Linux notification failed: {e}")
+            return False
+
+    def _show_windows_notification(self, title: str, message: str = None, duration: int = 8) -> bool:
+        """v2.8.3: Show Windows native toast notification"""
+        try:
             # Method 1: win10toast
             if self.has_win10toast and self.notifier:
                 try:
                     def show_win10toast_in_thread():
                         try:
-                            title = note_title[:50] if note_title else "QuickNote Reminder"
-                            msg = note_content[:100] if note_content else "Reminder triggered"
+                            title_str = title[:50] if title else "QuickNote Reminder"
+                            msg = message[:100] if message else "Reminder triggered"
 
                             self.notifier.show_toast(
-                                title=title,
+                                title=title_str,
                                 msg=msg,
                                 duration=duration,
                                 threaded=False
@@ -75,16 +175,16 @@ class WindowsNotificationService:
 
             # Method 2: Windows Shell Notification (fallback)
             try:
-                return self._show_shell_notification(note_title, note_content)
+                return self._show_shell_notification(title, message)
             except Exception as e:
                 log.warning(f"[Notification] Shell notification failed: {e}")
 
             # Method 3: System MessageBox (last resort)
             log.warning("[Notification] Using final fallback notification method")
-            return self._show_fallback_notification(note_title)
+            return self._show_fallback_notification(title)
 
         except Exception as e:
-            log.error(f"[Notification] Failed to show reminder notification: {e}")
+            log.error(f"[Notification] Windows notification failed: {e}")
             return False
 
     def _show_shell_notification(self, title: str, message: str = None) -> bool:

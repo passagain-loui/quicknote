@@ -128,8 +128,9 @@ def update_note(note_id: str, title: Optional[str] = None,
                 collapsed: Optional[bool] = None, priority: Optional[str] = None,
                 reminder_datetime: Optional[str] = None,
                 reminder_triggered: Optional[bool] = None,
-                is_pinned: Optional[bool] = None) -> None:
-    """อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (v1.5.0: supports pinning)"""
+                is_pinned: Optional[bool] = None,
+                clear_reminder: bool = False) -> None:
+    """อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (v2.8.3: added clear_reminder flag)"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
@@ -154,10 +155,14 @@ def update_note(note_id: str, title: Optional[str] = None,
     if priority is not None:
         updates.append("priority = ?")
         params.append(priority)
-    if reminder_datetime is not None:
+    # v2.8.3: Handle reminder_datetime clearing
+    if clear_reminder:
+        updates.append("reminder_datetime = NULL")
+        updates.append("reminder_triggered = 0")
+    elif reminder_datetime is not None:
         updates.append("reminder_datetime = ?")
         params.append(reminder_datetime)
-    if reminder_triggered is not None:
+    if reminder_triggered is not None and not clear_reminder:
         updates.append("reminder_triggered = ?")
         params.append(reminder_triggered)
     if is_pinned is not None:

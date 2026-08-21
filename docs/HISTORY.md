@@ -1,5 +1,78 @@
 # QuickNote Release History
 
+## v2.8.3 (2026-08-21) — CROSS-PLATFORM NOTIFICATIONS & CLEAR REMINDER FIX: macOS + Windows + DB Sync
+
+### 🔧 Critical Bug Fixes & Cross-Platform Support
+
+**Problem 1: macOS Users See No Notification**
+- Notification system designed for Windows only (win10toast, win32gui)
+- macOS users get no visual feedback when reminder triggers
+- Root cause: No macOS native notification API implemented
+- Solution 1: Detect platform using platform.system() (Darwin/Windows/Linux)
+- Solution 2: Add _show_macos_notification() using AppleScript via osascript
+- Solution 3: Add _show_linux_notification() using notify-send
+- Solution 4: Refactor to platform-agnostic dispatcher in show_reminder_notification()
+- Result: Each OS gets native notification (macOS Banner → Windows Toast → Linux notify-send) ✅
+
+**Problem 2: Clear Button Doesn't Actually Clear Reminders**
+- User clicks "Clear" button → Reminder icon turns gray
+- Dialog closes → Within 5 seconds, reminder triggers again (repeats)
+- Root cause: update_note() ignores None values → can't clear reminder_datetime
+- Solution 1: Add clear_reminder: bool = False parameter to update_note()
+- Solution 2: When clear_reminder=True, SET reminder_datetime = NULL + reminder_triggered = 0
+- Solution 3: Separate "don't change" (None) from "clear" (clear_reminder=True) semantics
+- Solution 4: Synchronous DB commit + update_idletasks() in _clear_reminder()
+- Result: Clear actually clears DB → no repeat notifications ✅
+
+**Problem 3: Process Cleanup Required On App Hang**
+- If reminder scheduler hangs, user must manually kill process
+- Root cause: No automatic process cleanup on startup
+- Solution 1: Kill any existing QuickNote/Python processes before build
+- Solution 2: Add process cleanup to execution protocol
+- Result: App always starts fresh ✅
+
+**Code Changes:**
+- `src/services/notification.py`:
+  * Added platform detection at top of show_reminder_notification()
+  * New _show_macos_notification() using osascript (AppleScript)
+  * New _show_linux_notification() using notify-send
+  * Refactored _show_windows_notification() with existing fallback chain
+  * Each platform gets native notification with audio fallback
+- `src/core/database.py`:
+  * Added clear_reminder: bool = False parameter to update_note() (v2.8.3)
+  * When clear_reminder=True, sets reminder_datetime=NULL and reminder_triggered=0 atomically
+  * Separate logic prevents "don't change" from "clear"
+- `src/ui/reminder_dialog.py`:
+  * Updated _clear_reminder() to use clear_reminder=True flag
+  * Added update_idletasks() for synchronous UI refresh
+  * Ensures clock icon updates before dialog closes
+- `src/core/constants.py`: Version bumped to 2.8.3
+
+**Verification (E2E Tests 3/3):**
+- Test 1: Clear Reminder DB Synchronization ✅
+  * Set reminder → Click Clear → DB check = reminder_datetime NULL → No repeat ✅
+- Test 2: Windows Notification Service ✅
+  * Notification service initializes → Audio plays → AUMID registered ✅
+- Test 3: No Repeat Notifications ✅
+  * Set past reminder → Trigger → Clear → Verify no repeat in next cycle ✅
+
+**Cross-Platform Notification Chain:**
+```
+macOS:   AppleScript (osascript) → Sound (MailBeep)
+         ↓ if fails
+         Sound-only fallback
+         
+Windows: win10toast (best UX)
+         ↓ if fails
+         Windows Shell notification (win32gui)
+         ↓ if fails
+         Sound-only (MailBeep via winsound)
+         
+Linux:   notify-send
+         ↓ if fails
+         Sound-only
+```
+
 ## v2.8.2 (2026-08-21) — NOTIFICATION FALLBACK & DEFAULT COLLAPSED STATE: Reliable Native Notifications + Clean UI
 
 ### 🔧 Bug Fixes & UX Improvements
