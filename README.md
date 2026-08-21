@@ -1,25 +1,31 @@
-# QuickNote v2.2.3 — Notes Always on Top + Calendar Reminders + Desktop Notifications
+# QuickNote v2.9.4 — Notes Always on Top + Native Windows Notifications + Click Callbacks
 
-โปรแกรมจดโน้ตเบา ๆ ที่ค้างอยู่บนหน้าจอตลอดเวลา — สไตล์ macOS Pastel สำหรับ Windows
+โปรแกรมจดโน้ตเบา ๆ ที่ค้างอยู่บนหน้าจอตลอดเวลา — สไตล์ macOS Pastel สำหรับ Windows + Native Windows Notifications
 
-**Status:** ✅ v2.2.3 RELEASED — SQLite Commits Fixed + Next Reminder Visual Debug
+**Status:** ✅ v2.9.4 PRODUCTION-STABLE — Native Windows Notifications + Click Callbacks + Foreground Activation
 
 ![QuickNote Screenshot](docs/screenshot.png)
 
 ---
 
-## ✨ ฟีเจอร์ (v1.3.0)
+## ✨ ฟีเจอร์ (v2.9.4)
 
 - **ค้างบนหน้าจอ (Always-on-Top)** — เห็นโน้ตตลอดเวลาโดยไม่ต้องสลับหน้าต่าง
+- **Native Windows Notifications** — ใช้ native OS notifications (win10toast_click) แทน custom overlay
+- **Notification Click Callbacks** — คลิกที่ notification เพื่อเปิด app และหา note ทันที
+- **Foreground Activation** — Win32 API + Tkinter dual-strategy เพื่อค้นน app มาด้านหน้า
 - **Reminder Alerts** — ตั้งเวลาแจ้งเตือนสำหรับแต่ละโน้ต (แบบ non-blocking, ไม่ติดขัด UI)
-- **Priority Flags** — ทำเครื่องหมายเร่งด่วน (🚩 High / 🚩 Medium / 🚩 Low / 🏳 None) ด้วยสีเด่นชัด (v1.3.4)
+- **Priority Flags** — ทำเครื่องหมายเร่งด่วน (🚩 High / 🚩 Medium / 🚩 Low / 🏳 None) ด้วยสีเด่นชัด
 - **Quick Filter Toggle** — สลับ Active/Completed notes โดยตรงจาก titlebar
 - **Status Badge** — Done (สีเขียว) / Active (สีฟ้า) ดูสวยเรียบร้อย
 - **Modern UI** — macOS Pastel Design System แถบหัวลากได้ ปุ่มควบคุมชัดเจน
 - **System Tray** — ซ่อนลง tray แล้วเรียกกลับได้ง่าย ๆ
 - **Global Hotkey** — `Ctrl+Alt+N` สร้างโน้ตใหม่ / `Ctrl+Alt+S` toggle show/hide
 - **Dark Mode** — ธีมสีเข้ม ปรับได้แบบ Real-time
-- **Version & Credit** — Footer แสดง v1.3.0 + Developer (About tab)
+- **Snooze 5m** — เลื่อน reminder ไป 5 นาที โดยการคลิกปุ่มบน toast (v2.9.0)
+- **Real-Time Search** — ค้นหา note โดยพิมพ์ (title หรือ content)
+- **Database Backup/Restore** — อัพแบ็กอัพและกู้คืนข้อมูลได้ทันที
+- **Version & Credit** — Footer แสดง v2.9.4 + Developer (About tab)
 - **Local Database** — เก็บข้อมูลใน `~/.quicknote/` เท่านั้น ไม่มี cloud sync
 
 ---
