@@ -252,6 +252,9 @@ class Board:
         # v2.8.6: Start notification queue checker — non-blocking, runs every 500ms
         self._check_notification_queue()
 
+        # v2.9.3: Bind custom event for immediate notification processing (thread-safe wake-up)
+        self.root.bind("<<NewNotification>>", lambda e: self._on_new_notification_event())
+
     def _get_safe_geometry(self, geometry: str) -> str:
         """ตรวจสอบ geometry — ถ้าไม่ปลอดภัยให้ center ที่จอ"""
         # Parse geometry string: "WxH+X+Y" or default
@@ -891,6 +894,30 @@ class Board:
         finally:
             # Reschedule to check queue again in 500ms
             self.root.after(500, self._check_notification_queue)
+
+    def _on_new_notification_event(self):
+        """v2.9.3: Event-based handler for immediate notification processing (thread-safe)"""
+        try:
+            # Force main window to foreground
+            self._force_main_window_foreground()
+            # Process queue immediately
+            self._check_notification_queue()
+        except Exception:
+            pass
+
+    def _force_main_window_foreground(self):
+        """v2.9.3: Bring main window to foreground when notification arrives"""
+        try:
+            if self.root.winfo_exists():
+                self.root.deiconify()
+                self.root.state('normal')
+                self.root.attributes('-topmost', True)
+                self.root.lift()
+                self.root.focus_force()
+                # Release topmost after 1 second (allow user to use other apps)
+                self.root.after(1000, lambda: self.root.attributes('-topmost', False) if self.root.winfo_exists() else None)
+        except Exception:
+            pass
 
     def _on_open_note_from_notification(self, note_id: str):
         """Open note when user clicks [Open] on custom notification"""

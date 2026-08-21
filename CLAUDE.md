@@ -1050,6 +1050,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.9.2  
+**Version:** 2.9.3  
 **Last Updated:** 2026-08-21  
-**Status:** ✅ PRODUCTION-STABLE (Center Screen + Pure Logical Coordinates)
+**Status:** ✅ PRODUCTION-STABLE (Main Window Foreground + Event-Based Unfreeze)

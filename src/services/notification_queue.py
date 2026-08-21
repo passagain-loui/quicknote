@@ -28,14 +28,16 @@ class NotificationQueue:
     threads try to call Tkinter UI operations directly.
     """
 
-    def __init__(self, maxsize: int = 100):
+    def __init__(self, maxsize: int = 100, on_notification: Optional[Callable] = None):
         """Initialize notification queue
 
         Args:
             maxsize: Maximum queue size (default 100 notifications)
+            on_notification: Optional callback triggered when notification arrives (v2.9.3)
         """
         self._queue = queue.Queue(maxsize=maxsize)
         self._processing = False
+        self._on_notification_callback = on_notification
 
     def put_notification(self, message: NotificationMessage) -> bool:
         """Add notification to queue (non-blocking)
@@ -51,6 +53,12 @@ class NotificationQueue:
         try:
             self._queue.put_nowait(message)
             log.debug(f"[Queue] Notification queued: {message.title}")
+            # v2.9.3: Trigger event-based wake-up (if callback provided)
+            if self._on_notification_callback:
+                try:
+                    self._on_notification_callback()
+                except Exception as e:
+                    log.warning(f"[Queue] Callback error: {e}")
             return True
         except queue.Full:
             log.warning(f"[Queue] Notification queue full, dropped: {message.title}")
