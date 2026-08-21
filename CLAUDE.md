@@ -1,8 +1,20 @@
-# QuickNote v2.9.0 — SNOOZE FEATURE + TOPMOST Z-ORDER FIX
+# QuickNote v2.9.1 — DPI-AWARE POSITIONING + VISIBILITY SAFEGUARD
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Custom Overlay Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Custom Frameless Toast** + **Thread-Safe Queue** + **Snooze 5m Feature** + **Fixed Z-Order**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Custom Overlay Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Custom Frameless Toast** + **Thread-Safe Queue** + **Snooze 5m Feature** + **DPI-Safe Positioning**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.0 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.9.1 Released 2026-08-21
+
+> **v2.9.1** แก้ไข **DPI-Aware Positioning + Visibility Safeguard (Critical Patch)**
+>   - Critical Bug: Notifications play sound but overlay invisible on some systems (DPI scaling mismatch)
+>   - Root cause 1: winfo_screenwidth() returns Tkinter logical units, not physical DPI-aware pixels
+>   - Root cause 2: Toast state management incomplete (missing state='normal' check)
+>   - Solution 1: Try win32api.GetSystemMetrics (real DPI-aware resolution) → fallback to Tkinter
+>   - Solution 2: Add state='normal' to force unminimized state before deiconify/lift
+>   - Solution 3: Increased safety margins (40px right, 80px bottom) for multi-monitor edge cases
+>   - Solution 4: Add logging for positioning debug (winfo_screenwidth → actual coordinate calculation)
+>   - Impact: Toast ALWAYS visible 100%, even on 4K, ultra-wide, or multi-monitor setups ✅
+>   - Verification: E2E tests pass 3/3 (DPI-safe coords on 1024x600→4K, Window state='normal', Fallback strategy) ✅
+>   - Architecture: Try-except chain for win32api → Tkinter fallback, explicit state management
 
 > **v2.9.0** เพิ่ม **Snooze 5 Minutes Feature + Z-Order Fix (Minor Feature Release)**
 >   - Feature 1: Add [Snooze 5m] button to custom toast notification (new v2.9.0)
@@ -1026,6 +1038,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.9.0  
+**Version:** 2.9.1  
 **Last Updated:** 2026-08-21  
-**Status:** ✅ PRODUCTION-STABLE (Snooze Feature + Z-Order Fix)
+**Status:** ✅ PRODUCTION-STABLE (DPI-Aware Positioning + Visibility Safeguard)

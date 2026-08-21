@@ -52,7 +52,7 @@ class CustomToastNotification:
         threading.Thread(target=self._play_audio, daemon=True).start()
 
     def _create_notification(self):
-        """Create frameless overlay window at bottom-right corner"""
+        """Create frameless overlay window at bottom-right corner (v2.9.1: DPI-aware positioning)"""
         try:
             # Create toplevel without decorations
             self.toast_window = tk.Toplevel(self.parent_root)
@@ -71,21 +71,43 @@ class CustomToastNotification:
             toast_width = 360
             toast_height = 150
 
-            # v2.8.2: Get screen dimensions AFTER update_idletasks (accurate after scaling)
-            screen_width = self.parent_root.winfo_screenwidth()
-            screen_height = self.parent_root.winfo_screenheight()
+            # v2.9.1: Get screen dimensions with multi-monitor DPI-aware fallback
+            screen_width = None
+            screen_height = None
 
-            # v2.8.2: Position at bottom-right corner with safe margins (prevent off-screen)
-            # Ensure coordinates stay within screen bounds
-            x = int(max(0, screen_width - toast_width - 50))  # 50px margin from right edge
-            y = int(max(0, screen_height - toast_height - 100))  # 100px margin from bottom (taskbar)
+            # Try win32api first (more accurate for DPI-aware resolution)
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                user32.SetProcessDpiAwareness(1)  # Enable DPI awareness
+                screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+                screen_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+                log.info(f"[Toast] Screen bounds from win32api: {screen_width}x{screen_height}")
+            except Exception as e:
+                log.warning(f"[Toast] win32api failed, using Tkinter fallback: {e}")
 
-            # Ensure not larger than screen
-            x = int(min(x, screen_width - 100))
-            y = int(min(y, screen_height - 100))
+            # Fallback to Tkinter if win32api fails
+            if not screen_width or not screen_height:
+                screen_width = self.parent_root.winfo_screenwidth()
+                screen_height = self.parent_root.winfo_screenheight()
+                log.info(f"[Toast] Screen bounds from Tkinter: {screen_width}x{screen_height}")
+
+            # v2.9.1: Position at bottom-right corner with safe margins (prevent off-screen)
+            # Ensure coordinates stay within screen bounds with larger safety margins
+            x = max(20, screen_width - toast_width - 40)   # 40px margin from right edge (safety)
+            y = max(20, screen_height - toast_height - 80)  # 80px margin from bottom (taskbar safety)
+
+            # Clamp to safe area
+            x = min(x, screen_width - 100)
+            y = min(y, screen_height - 100)
+
+            log.info(f"[Toast] Position calculated: {x}+{y} (screen: {screen_width}x{screen_height})")
 
             # v2.9.0: Z-order sequence - geometry before deiconify
             self.toast_window.geometry(f"{toast_width}x{toast_height}+{x}+{y}")
+
+            # v2.9.1: Force visibility with proper state management
+            self.toast_window.state('normal')  # Ensure normal state (not minimized)
             self.toast_window.deiconify()  # Show window
             self.toast_window.attributes("-topmost", True)  # Always on top
             self.toast_window.attributes("-alpha", 0.98)    # Slightly transparent
