@@ -1,8 +1,40 @@
-# QuickNote v2.9.33 — ELEVATED BOTTOM-RIGHT TOAST MARGIN (UX Polish)
+# QuickNote v2.9.34 — MODERN SETTINGS UI & GOOGLE TASKS OAUTH CONNECT (UX Polish)
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Elevated Toast Margin** + **1-Inch Taskbar Clearance** + **Strict Corner Position Lock** + **Center Override Removal** + **Bottom-Right Toast Positioning** + **Toast Notification Positioning** + **Bottom-Right Corner Layout** + **Screen Margin Handling** + **Taskbar Clearance** + **Non-Blocking Z-Order Lock** + **Transient Dialog Architecture** + **FocusOut Event Handler** + **OS-Level Z-Order Management** + **Main Thread UI Dispatch** + **Modal Deadlock Prevention** + **Daemon Thread Removal** + **Recently Dismissed Pinning** + **Settings Window Resize** + **Dismiss Timestamp Tracking** + **Snooze Duration UI Widget** + **Strict Topmost Lock** + **Grab Input Focus** + **Global Mouse Wheel Scrolling** + **Custom Snooze Duration** + **Complete Dismiss State Clearance** + **Configurable Alarm Duration** + **Dynamic Button Text** + **Selective Datetime Clearing** + **Alarm State Lock** + **Immediate Trigger Clamp** + **No Repeat Alarms** + **Red Border on Trigger** + **Isolated Test Database** + **Production DB Protection** + **Test Data Cleanup** + **Flicker-Free Topmost** + **Event-Based Focus Restoration** + **Immediate Board Re-render** + **Scheduler Triggers UI Refresh** + **Red Border Persistence** + **Alarm Task Sorting** + **Index 0 Guarantee** + **SQLite WAL Mode** + **Thread-Safe Concurrent Access** + **UI Refresh Debouncer** + **Tkinter Freeze Prevention** + **Active Alarm Highlight Frame** + **Dynamic Red Border** + **Real-Time Visual Feedback** + **Unified Queue Callback Architecture** + **Dialog-Only Delegation** + **No Direct DB Operations in Dialog** + **Fail-Safe Exception Isolation** + **DB Commit-First Logic** + **Fresh Data Fetches** + **No Object References in Queue** + **PyWinCtl Window Activation** + **5s Debounce Alarm Prevention** + **Modern OS-Level API** + **Scheduler Grace Period** + **Native Shell-Level Restore** + **WM_SYSCOMMAND** + **FlashWindow** + **Command Queue Pattern** + **Single-Thread DB Access** + **Cross-Thread Safe** + **Synchronous DB Commit** + **Task Highlight** + **Type-Safe Object Access** + **Startup Stability** + **Forced UI Re-render** + **Icon State Sync** + **Thread-Safe Custom Dialog** + **Database State Sync** + **Startup Alarm Storm Prevention** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Modern Settings Redesign** + **Google Tasks OAuth Integration** + **Tab Reordering** + **Minimal UI Styling** + **Connection Status Display** + **Elevated Toast Margin** + **1-Inch Taskbar Clearance** + **Strict Corner Position Lock** + **Center Override Removal** + **Bottom-Right Toast Positioning** + **Toast Notification Positioning** + **Bottom-Right Corner Layout** + **Screen Margin Handling** + **Taskbar Clearance** + **Non-Blocking Z-Order Lock** + **Transient Dialog Architecture** + **FocusOut Event Handler** + **OS-Level Z-Order Management** + **Main Thread UI Dispatch** + **Modal Deadlock Prevention** + **Daemon Thread Removal** + **Recently Dismissed Pinning** + **Settings Window Resize** + **Dismiss Timestamp Tracking** + **Snooze Duration UI Widget** + **Strict Topmost Lock** + **Grab Input Focus** + **Global Mouse Wheel Scrolling** + **Custom Snooze Duration** + **Complete Dismiss State Clearance** + **Configurable Alarm Duration** + **Dynamic Button Text** + **Selective Datetime Clearing** + **Alarm State Lock** + **Immediate Trigger Clamp** + **No Repeat Alarms** + **Red Border on Trigger** + **Isolated Test Database** + **Production DB Protection** + **Test Data Cleanup** + **Flicker-Free Topmost** + **Event-Based Focus Restoration** + **Immediate Board Re-render** + **Scheduler Triggers UI Refresh** + **Red Border Persistence** + **Alarm Task Sorting** + **Index 0 Guarantee** + **SQLite WAL Mode** + **Thread-Safe Concurrent Access** + **UI Refresh Debouncer** + **Tkinter Freeze Prevention** + **Active Alarm Highlight Frame** + **Dynamic Red Border** + **Real-Time Visual Feedback** + **Unified Queue Callback Architecture** + **Dialog-Only Delegation** + **No Direct DB Operations in Dialog** + **Fail-Safe Exception Isolation** + **DB Commit-First Logic** + **Fresh Data Fetches** + **No Object References in Queue** + **PyWinCtl Window Activation** + **5s Debounce Alarm Prevention** + **Modern OS-Level API** + **Scheduler Grace Period** + **Native Shell-Level Restore** + **WM_SYSCOMMAND** + **FlashWindow** + **Command Queue Pattern** + **Single-Thread DB Access** + **Cross-Thread Safe** + **Synchronous DB Commit** + **Task Highlight** + **Type-Safe Object Access** + **Startup Stability** + **Forced UI Re-render** + **Icon State Sync** + **Thread-Safe Custom Dialog** + **Database State Sync** + **Startup Alarm Storm Prevention** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.33 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.9.34 Released 2026-08-22
+
+> **v2.9.34** เพิ่ม **Modern Settings UI & Google Tasks OAuth Connect (UX Polish)**
+>   - Feature: Complete Settings window redesign with modern minimal aesthetic
+>   - User Experience: Better organization, intuitive OAuth integration, professional appearance
+>   - Problem (v2.9.33): Settings UI had outdated styling, incomplete Google Tasks integration, confusing tab order
+>   - Solution: Full redesign with tab reordering, modern styling, and complete OAuth UI
+>     * Tab Reordering: Settings → Google Tasks → About (was About in middle)
+>     * Modern Styling: Soft gray buttons, muted colors, theme-consistent design
+>     * OAuth Integration: Status card, Connect/Disconnect buttons, sync options
+>     * Window Sizing: 420x520 → 440x560 (better spacing and layout)
+>   - Implementation:
+>     * src/ui/settings_window.py: Complete redesign with modern styling and OAuth UI
+>       - Reordered tabs: General Settings → Google Tasks → About
+>       - Updated Backup/Restore buttons: Soft gray (#E8E8E8/#3C3C3E) with borders (not harsh blue/orange)
+>       - New Google Tasks section: Connection status card with full OAuth UI
+>       - Connect Account button: Primary blue action, enables sync options
+>       - Disconnect button: Gray secondary action, disables sync options when not connected
+>       - Status Indicator: Color-coded (gray #999999 / green #34C759 / red #FF3B30)
+>       - Auto-sync Checkbox: Enabled only when connected
+>       - Sync Now Button: Green immediate sync trigger (state-managed)
+>     * src/core/constants.py: Updated APP_VERSION to "2.9.34"
+>     * tests/test_e2e_v2934.py: New 5-test suite (version, tab order, OAuth UI, styling, dimensions)
+>   - Architecture:
+>     ```
+>     Before (v2.9.33):           After (v2.9.34):
+>     Settings | About | Google   General | Google | About
+>     Harsh colors               Muted colors
+>     Incomplete OAuth UI        Full OAuth UI with status
+>     420x520 size               440x560 size
+>     ```
+>   - Impact: Settings window now modern + professional + intuitive OAuth integration ✅
+>   - Verification: E2E tests pass 5/5 (version, tab order, OAuth UI, styling, dimensions) ✅
 
 > **v2.9.33** เพิ่ม **Elevated Bottom-Right Toast Margin (UX Polish)**
 >   - Feature: Raise notification toast position higher from taskbar (1-inch elevation)
