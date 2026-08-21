@@ -99,16 +99,18 @@ def get_all_notes() -> list[dict]:
 
 
 def get_notes_by_status(status: str) -> list[dict]:
-    """อ่านโน้ตตามสถานะ (active/completed) — v2.8.1: sorted by reminder triggered, pinned, priority"""
+    """อ่านโน้ตตามสถานะ (active/completed) — v2.8.2: Absolute sort by newest triggered reminder"""
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # v2.8.1: Sort by reminder_triggered DESC (triggered tasks on top), then pinned, then priority
+    # v2.8.2: Sort by reminder_triggered DESC, then by reminder_datetime DESC (newest triggered on top)
+    # Then pinned, priority, created_at for stable secondary ordering
     c.execute("""
         SELECT * FROM notes
         WHERE status = ?
         ORDER BY reminder_triggered DESC,
+                 reminder_datetime DESC,
                  is_pinned DESC,
                  CASE priority
                    WHEN 'high' THEN 0

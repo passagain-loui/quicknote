@@ -56,17 +56,25 @@ class CustomToastNotification:
             # v2.8.5: Windows 11-style notification styling
             self.toast_window.config(bg="#F3F3F3")  # Light gray background
 
-            # Get screen dimensions for positioning
-            screen_width = self.parent_root.winfo_screenwidth()
-            screen_height = self.parent_root.winfo_screenheight()
+            # v2.8.2: Force geometry calculation BEFORE positioning (DPI/scaling fix)
+            self.toast_window.update_idletasks()
 
             # Notification dimensions
             toast_width = 360
             toast_height = 120
 
-            # Position at bottom-right corner (with margins)
-            x = screen_width - toast_width - 20
-            y = screen_height - toast_height - 80  # Leave space for taskbar
+            # v2.8.2: Get screen dimensions AFTER update_idletasks (accurate after scaling)
+            screen_width = self.parent_root.winfo_screenwidth()
+            screen_height = self.parent_root.winfo_screenheight()
+
+            # v2.8.2: Position at bottom-right corner with safe margins (prevent off-screen)
+            # Ensure coordinates stay within screen bounds
+            x = int(max(0, screen_width - toast_width - 50))  # 50px margin from right edge
+            y = int(max(0, screen_height - toast_height - 100))  # 100px margin from bottom (taskbar)
+
+            # Ensure not larger than screen
+            x = int(min(x, screen_width - 100))
+            y = int(min(y, screen_height - 100))
 
             self.toast_window.geometry(f"{toast_width}x{toast_height}+{x}+{y}")
             self.toast_window.attributes("-topmost", True)  # Always on top
