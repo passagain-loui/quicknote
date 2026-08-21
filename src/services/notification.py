@@ -52,21 +52,45 @@ class WindowsNotificationService:
                 self.has_win10toast = False
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
-                                  on_click=None, duration: int = 8) -> bool:
-        """Show Windows native reminder notification with click callback (v2.9.6)
+                                  on_click=None, on_snooze=None, on_dismiss=None,
+                                  stop_alarm=None, parent_root=None, duration: int = 8) -> bool:
+        """Show Windows native reminder notification with click callback (v2.9.7)
 
-        v2.9.6: Priority chain with Win32 MessageBox as nuclear option
+        v2.9.7: Priority chain with unblockable custom dialog at Priority -1
 
         Args:
             note_title: Title of the note (notification title)
             note_content: Note content preview (notification message, optional)
             on_click: Callback function when notification is clicked
+            on_snooze: Callback when Snooze button clicked
+            on_dismiss: Callback when Dismiss button clicked
+            stop_alarm: Callback to stop alarm sound
+            parent_root: Parent Tk root window for dialog
             duration: Duration in seconds to show notification (default 8)
 
         Returns True if notification shown successfully, False otherwise
         """
         try:
             self.on_click_callback = on_click
+
+            # v2.9.7: Priority -1: Unblockable Custom Dialog (ULTIMATE OPTION)
+            if parent_root:
+                try:
+                    from ..ui.unblockable_dialog import UnblockableCustomDialog
+                    dialog = UnblockableCustomDialog(
+                        parent_root,
+                        title=note_title,
+                        message=note_content if note_content else "Reminder triggered",
+                        on_dismiss=on_dismiss,
+                        on_snooze=on_snooze,
+                        on_open=on_click,
+                        stop_alarm=stop_alarm
+                    )
+                    dialog.center_on_screen()
+                    log.info("[Notification] Unblockable custom dialog shown")
+                    return True
+                except Exception as e:
+                    log.debug(f"[Notification] Unblockable dialog failed: {e}")
 
             # v2.9.6: Priority 0: Win32 Native MessageBox (NUCLEAR OPTION - unblockable)
             try:
