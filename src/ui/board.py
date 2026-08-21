@@ -41,6 +41,7 @@ class Board:
         self.current_filter = "active"  # 'active' or 'completed'
         self.settings_window_instance = None  # Singleton Settings window
         self._scheduler_enabled = True  # v2.5.8: Flag to pause scheduler when dialog open
+        self.active_toasts = []  # v2.8.1: Keep references to prevent GC from destroying Toplevel windows
 
         # Create window
         self.root = tk.Tk()
@@ -834,14 +835,20 @@ class Board:
             pass
 
     def _check_notification_queue(self):
-        """v2.8.6: Check notification queue and display custom overlay toasts
+        """v2.8.1: Check notification queue and display custom overlay toasts
 
-        Background scheduler enqueues notifications, main thread dequeues and displays.
-        This runs every 500ms to process queued notifications.
+        v2.8.1 Critical Fix:
+        - Keep references to toasts to prevent GC from destroying Toplevel windows
+        - Re-render board after notification to move triggered tasks to top
         """
         try:
+            # Clean up closed toasts (those that were destroyed)
+            self.active_toasts = [t for t in self.active_toasts if t.toast_window and t.toast_window.winfo_exists()]
+
             # Process all queued notifications (can be multiple)
             notification_queue = get_notification_queue()
+            notifications_shown = False
+
             while not notification_queue.is_empty():
                 msg = notification_queue.get_next_notification()
                 if msg:
@@ -856,15 +863,25 @@ class Board:
                             # Bring main window to front and highlight the note
                             self._on_open_note_from_notification(msg.note_id)
 
-                        CustomToastNotification(
+                        # v2.8.1: Create toast and keep reference (prevent GC)
+                        toast = CustomToastNotification(
                             self.root,
                             title=msg.title,
                             message=msg.content,
                             on_open=on_open_callback,
                             on_dismiss=None
                         )
+                        self.active_toasts.append(toast)  # v2.8.1: Keep reference
+                        notifications_shown = True
                     except Exception:
                         pass  # Silently fail to avoid blocking UI
+
+            # v2.8.1: Re-render board to move triggered tasks to top (dynamic sorting)
+            if notifications_shown:
+                try:
+                    self._load_notes()
+                except Exception:
+                    pass
 
         except Exception:
             pass  # Silently fail
