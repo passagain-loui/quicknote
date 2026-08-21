@@ -863,13 +863,15 @@ class Board:
                             # Bring main window to front and highlight the note
                             self._on_open_note_from_notification(msg.note_id)
 
-                        # v2.8.1: Create toast and keep reference (prevent GC)
+                        # v2.9.0: Create toast with snooze support and keep reference (prevent GC)
                         toast = CustomToastNotification(
                             self.root,
                             title=msg.title,
                             message=msg.content,
                             on_open=on_open_callback,
-                            on_dismiss=None
+                            on_dismiss=None,
+                            note_id=msg.note_id,  # v2.9.0: Enable snooze feature
+                            board=self  # v2.9.0: Allow re-render after snooze
                         )
                         self.active_toasts.append(toast)  # v2.8.1: Keep reference
                         notifications_shown = True

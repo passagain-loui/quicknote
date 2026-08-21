@@ -1,8 +1,23 @@
-# QuickNote v2.8.5 — UNBLOCKABLE CUSTOM OVERLAY NOTIFICATIONS: Thread-Safe Queue + Frameless Toast
+# QuickNote v2.9.0 — SNOOZE FEATURE + TOPMOST Z-ORDER FIX
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Custom Overlay Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Custom Frameless Toast** + **Thread-Safe Queue**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Custom Overlay Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Custom Frameless Toast** + **Thread-Safe Queue** + **Snooze 5m Feature** + **Fixed Z-Order**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.8.5 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.9.0 Released 2026-08-21
+
+> **v2.9.0** เพิ่ม **Snooze 5 Minutes Feature + Z-Order Fix (Minor Feature Release)**
+>   - Feature 1: Add [Snooze 5m] button to custom toast notification (new v2.9.0)
+>   - Feature 2: Click snooze → calculate new_time = now + 5 minutes, update DB, reset reminder_triggered=0
+>   - Feature 3: After snooze, call board._load_notes() to re-render UI immediately (clock icon resets)
+>   - Bugfix 1: Toast window Z-order issue (disappears behind main window) — fixed with proper sequence
+>   - Bugfix 2: Implement absolute Z-order lock: withdraw() → update_idletasks() → geometry() → deiconify() → lift() → attributes('-topmost', True) → focus_force()
+>   - Architecture: Snooze logic in CustomToastNotification._on_snooze_click(), database update with clear_reminder pattern
+>   - Database: Snooze recalculates reminder_datetime to +5m, sets reminder_triggered=0 (allows re-trigger)
+>   - UI: Toast height increased from 120px → 150px to accommodate [Snooze 5m] button
+>   - Button Layout: [Dismiss] | [Snooze 5m] | [Open] (left to right)
+>   - Snooze Button: Orange accent (#F9A825) for visual distinction from action buttons
+>   - Impact: Users can easily defer reminders 5 minutes at a time, toast NEVER disappears behind windows ✅
+>   - Verification: E2E tests pass 3/3 (Snooze DB Update, Toast Topmost, Snooze + Re-render) ✅
+>   - Thread-Safety: Snooze uses same synchronous update_note() pattern, no async races ✅
 
 > **v2.8.5** แก้ไข **Unblockable Custom Overlay Notifications: Thread-Safe Queue + Frameless Toast (Architecture Pivot)**
 >   - Critical Issue: Windows portable .exe blocks ALL native notifications (Toast, Shell, API)
@@ -1011,6 +1026,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.6.0  
-**Last Updated:** 2026-08-20  
-**Status:** ✅ PRODUCTION-STABLE (Non-Blocking Event Loop + Thread-Safe Notifications)
+**Version:** 2.9.0  
+**Last Updated:** 2026-08-21  
+**Status:** ✅ PRODUCTION-STABLE (Snooze Feature + Z-Order Fix)

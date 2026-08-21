@@ -1,10 +1,11 @@
-"""Custom Overlay Notification Toast (v2.8.5) — Unblockable Windows 11-Style Popup"""
+"""Custom Overlay Notification Toast (v2.9.0) — Unblockable Windows 11-Style Popup + Snooze"""
 
 import tkinter as tk
 from tkinter import font
 import winsound
 import threading
 import logging
+from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class CustomToastNotification:
     """
 
     def __init__(self, parent_root, title: str, message: str = None,
-                 on_open=None, on_dismiss=None):
+                 on_open=None, on_dismiss=None, note_id: str = None, board=None):
         """Create and show custom notification overlay
 
         Args:
@@ -32,12 +33,16 @@ class CustomToastNotification:
             message: Notification message/content preview
             on_open: Callback when user clicks [Open]
             on_dismiss: Callback when user clicks [Dismiss]
+            note_id: Note ID for snooze feature
+            board: Board instance for re-render after snooze
         """
         self.parent_root = parent_root
         self.title_text = title[:100] if title else "QuickNote"
         self.message_text = message[:200] if message else "Reminder triggered"
         self.on_open = on_open
         self.on_dismiss = on_dismiss
+        self.note_id = note_id
+        self.board = board
         self.toast_window = None
 
         # Create notification window
@@ -56,12 +61,15 @@ class CustomToastNotification:
             # v2.8.5: Windows 11-style notification styling
             self.toast_window.config(bg="#F3F3F3")  # Light gray background
 
+            # v2.9.0: Z-order fix - withdraw temporarily for geometry calculation
+            self.toast_window.withdraw()
+
             # v2.8.2: Force geometry calculation BEFORE positioning (DPI/scaling fix)
             self.toast_window.update_idletasks()
 
             # Notification dimensions
             toast_width = 360
-            toast_height = 120
+            toast_height = 150
 
             # v2.8.2: Get screen dimensions AFTER update_idletasks (accurate after scaling)
             screen_width = self.parent_root.winfo_screenwidth()
@@ -76,9 +84,13 @@ class CustomToastNotification:
             x = int(min(x, screen_width - 100))
             y = int(min(y, screen_height - 100))
 
+            # v2.9.0: Z-order sequence - geometry before deiconify
             self.toast_window.geometry(f"{toast_width}x{toast_height}+{x}+{y}")
+            self.toast_window.deiconify()  # Show window
             self.toast_window.attributes("-topmost", True)  # Always on top
             self.toast_window.attributes("-alpha", 0.98)    # Slightly transparent
+            self.toast_window.lift()  # Bring to front
+            self.toast_window.focus_force()  # Force focus
 
             # Main frame
             main_frame = tk.Frame(self.toast_window, bg="#F3F3F3", relief="flat", bd=1)
@@ -125,13 +137,30 @@ class CustomToastNotification:
                 font=("Segoe UI", 8),
                 bd=0,
                 relief="flat",
-                padx=12,
+                padx=10,
                 pady=4,
                 command=self._on_dismiss_click,
                 activebackground="#D5D5DA",
                 cursor="hand2"
             )
-            dismiss_btn.pack(side="left", padx=(0, 4))
+            dismiss_btn.pack(side="left", padx=(0, 3))
+
+            # Snooze button (v2.9.0) - new feature
+            snooze_btn = tk.Button(
+                button_frame,
+                text="Snooze 5m",
+                bg="#F9A825",
+                fg="#FFFFFF",
+                font=("Segoe UI", 8),
+                bd=0,
+                relief="flat",
+                padx=10,
+                pady=4,
+                command=self._on_snooze_click,
+                activebackground="#E69700",
+                cursor="hand2"
+            )
+            snooze_btn.pack(side="left", padx=(0, 3))
 
             # Open button (right, blue accent)
             open_btn = tk.Button(
@@ -142,13 +171,13 @@ class CustomToastNotification:
                 font=("Segoe UI", 8, "bold"),
                 bd=0,
                 relief="flat",
-                padx=12,
+                padx=10,
                 pady=4,
                 command=self._on_open_click,
                 activebackground="#0051C3",
                 cursor="hand2"
             )
-            open_btn.pack(side="right", padx=(4, 0))
+            open_btn.pack(side="right", padx=(3, 0))
 
             # Close button (X) in top-right corner
             close_x_frame = tk.Frame(self.toast_window, bg="#F3F3F3")
@@ -169,10 +198,6 @@ class CustomToastNotification:
                 cursor="hand2"
             )
             close_x_btn.pack()
-
-            # Ensure window stays on top
-            self.toast_window.lift()
-            self.toast_window.focus_set()
 
             log.info(f"[Toast] Custom notification shown: {self.title_text}")
 
@@ -217,6 +242,40 @@ class CustomToastNotification:
             log.error(f"[Toast] Error on dismiss click: {e}")
             self._close_notification()
 
+    def _on_snooze_click(self):
+        """User clicked [Snooze 5m] - reschedule reminder for 5 minutes later"""
+        try:
+            if not self.note_id or not self.board:
+                log.warning("[Toast] Snooze: note_id or board not available")
+                self._close_notification()
+                return
+
+            # v2.9.0: Calculate new reminder time (5 minutes from now)
+            new_time = datetime.now() + timedelta(minutes=5)
+            new_time_str = new_time.strftime("%Y-%m-%d %H:%M")
+
+            # Import database function
+            from src.core.database import update_note
+
+            # Update database synchronously - reschedule reminder
+            log.info(f"[Toast] Snoozing reminder for {self.note_id} to {new_time_str}")
+            update_note(
+                self.note_id,
+                reminder_datetime=new_time_str,
+                reminder_triggered=False  # Reset triggered flag to allow re-trigger
+            )
+
+            # Re-render board to update UI immediately
+            if self.board:
+                self.board._load_notes()
+
+            # Close notification
+            self._close_notification()
+
+        except Exception as e:
+            log.error(f"[Toast] Error on snooze click: {e}")
+            self._close_notification()
+
     def _bring_main_window_to_front(self):
         """Force main window to foreground (unblockable)"""
         try:
@@ -245,7 +304,8 @@ class CustomToastNotification:
 
 
 def show_custom_notification(parent_root, title: str, message: str = None,
-                            on_open=None, on_dismiss=None) -> bool:
+                            on_open=None, on_dismiss=None,
+                            note_id: str = None, board=None) -> bool:
     """Convenience function to show custom notification
 
     Args:
@@ -254,6 +314,8 @@ def show_custom_notification(parent_root, title: str, message: str = None,
         message: Notification message
         on_open: Callback when user clicks Open
         on_dismiss: Callback when user clicks Dismiss
+        note_id: Note ID for snooze feature
+        board: Board instance for re-render
 
     Returns:
         True if notification shown successfully
@@ -261,7 +323,8 @@ def show_custom_notification(parent_root, title: str, message: str = None,
     try:
         notification = CustomToastNotification(
             parent_root, title, message,
-            on_open=on_open, on_dismiss=on_dismiss
+            on_open=on_open, on_dismiss=on_dismiss,
+            note_id=note_id, board=board
         )
         return True
     except Exception as e:
