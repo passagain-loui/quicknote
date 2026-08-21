@@ -45,6 +45,7 @@ from src.ui.board import Board
 from src.ui.settings_window import SettingsWindow
 from src.platform.tray import start_tray_thread
 from src.platform.hotkey import start_hotkey_listener, create_default_hotkeys
+from src.services.tray_service import initialize_tray_service
 
 
 class SingleInstanceLock:
@@ -107,6 +108,15 @@ def main():
 
         notes = get_all_notes()
         print(f"[OK] Found {len(notes)} existing notes")
+
+        # v2.9.5: Initialize System Tray Service (unblockable notifications)
+        # Having a tray icon makes Windows recognize this as an active desktop app
+        print("[>] Starting system tray service (v2.9.5)...")
+        tray_service_ready = initialize_tray_service()
+        if tray_service_ready:
+            print("[OK] System tray service initialized")
+        else:
+            print("[!] System tray service initialization skipped (optional)")
 
         # Load settings
         settings = Settings()
@@ -234,6 +244,14 @@ def main():
             # Save geometry before closing
             settings.set("geometry", board.root.geometry())
             settings.save()
+
+            # Stop tray service (v2.9.5)
+            try:
+                from src.services.tray_service import get_tray_service
+                tray_service = get_tray_service()
+                tray_service.stop_icon()
+            except Exception:
+                pass
 
             # Stop tray
             tray.stop()

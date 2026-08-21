@@ -53,7 +53,9 @@ class WindowsNotificationService:
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
                                   on_click=None, duration: int = 8) -> bool:
-        """Show Windows native reminder notification with click callback (v2.9.4)
+        """Show Windows native reminder notification with click callback (v2.9.5)
+
+        v2.9.5: Priority chain with System Tray integration for unblockable notifications
 
         Args:
             note_title: Title of the note (notification title)
@@ -66,21 +68,37 @@ class WindowsNotificationService:
         try:
             self.on_click_callback = on_click
 
-            # v2.9.4: Priority 1: Try win10toast_click (click-aware)
+            # v2.9.5: Priority 1: Try System Tray Notification (unblockable)
+            try:
+                from .tray_service import get_tray_service
+                tray_service = get_tray_service()
+                if tray_service.is_running:
+                    result = tray_service.show_notification(
+                        title=note_title,
+                        message=note_content,
+                        on_click=on_click
+                    )
+                    if result:
+                        log.info("[Notification] System tray notification shown")
+                        return True
+            except Exception as e:
+                log.debug(f"[Notification] Tray notification failed: {e}")
+
+            # v2.9.4: Priority 2: Try win10toast_click (click-aware)
             if self.has_toast_click and self.notifier:
                 try:
                     return self._show_win10toast_click_notification(note_title, note_content, duration)
                 except Exception as e:
                     log.warning(f"[Notification] win10toast_click failed: {e}, trying standard toast...")
 
-            # Priority 2: Try standard win10toast
+            # Priority 3: Try standard win10toast
             if self.has_win10toast and self.notifier:
                 try:
                     return self._show_win10toast_notification(note_title, note_content, duration)
                 except Exception as e:
                     log.warning(f"[Notification] win10toast failed: {e}, trying Shell fallback...")
 
-            # Priority 3: Windows Shell Notification
+            # Priority 4: Windows Shell Notification
             try:
                 result = self._show_shell_notification(note_title, note_content)
                 if result:
@@ -88,7 +106,7 @@ class WindowsNotificationService:
             except Exception as e:
                 log.warning(f"[Notification] Shell notification failed: {e}, trying audio...")
 
-            # Priority 4: Audio-only fallback
+            # Priority 5: Audio-only fallback
             log.warning("[Notification] Using audio-only fallback")
             return self._show_fallback_notification(note_title)
 

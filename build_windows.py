@@ -79,6 +79,7 @@ def build_exe(debug: bool = False) -> int:
         "--hidden-import=src.core.settings",
         "--hidden-import=src.services.notification",
         "--hidden-import=src.services.notification_queue",
+        "--hidden-import=src.services.tray_service",
         "--hidden-import=src.services.google_tasks",
         "--hidden-import=src.platform.tray",
         "--hidden-import=src.platform.hotkey",

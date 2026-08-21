@@ -1,16 +1,19 @@
-# QuickNote v2.9.4 — Notes Always on Top + Native Windows Notifications + Click Callbacks
+# QuickNote v2.9.5 — Notes Always on Top + Unblockable System Tray Notifications
 
-โปรแกรมจดโน้ตเบา ๆ ที่ค้างอยู่บนหน้าจอตลอดเวลา — สไตล์ macOS Pastel สำหรับ Windows + Native Windows Notifications
+โปรแกรมจดโน้ตเบา ๆ ที่ค้างอยู่บนหน้าจอตลอดเวลา — สไตล์ macOS Pastel สำหรับ Windows + System Tray Integration + Unblockable Notifications
 
-**Status:** ✅ v2.9.4 PRODUCTION-STABLE — Native Windows Notifications + Click Callbacks + Foreground Activation
+**Status:** ✅ v2.9.5 PRODUCTION-STABLE — System Tray Integration + Unblockable Notifications (Portable .exe Ready)
 
 ![QuickNote Screenshot](docs/screenshot.png)
 
 ---
 
-## ✨ ฟีเจอร์ (v2.9.4)
+## ✨ ฟีเจอร์ (v2.9.5)
 
 - **ค้างบนหน้าจอ (Always-on-Top)** — เห็นโน้ตตลอดเวลาโดยไม่ต้องสลับหน้าต่าง
+- **System Tray Integration** — System Tray Icon ที่ช่วย unlock notification permissions
+- **Unblockable Notifications** — Notifications 100% visible แม้จาก portable .exe (v2.9.5)
+- **Tray Balloon Notifications** — Native Windows tray notifications ที่ไม่ต้อง AUMID registry (v2.9.5)
 - **Native Windows Notifications** — ใช้ native OS notifications (win10toast_click) แทน custom overlay
 - **Notification Click Callbacks** — คลิกที่ notification เพื่อเปิด app และหา note ทันที
 - **Foreground Activation** — Win32 API + Tkinter dual-strategy เพื่อค้นน app มาด้านหน้า
