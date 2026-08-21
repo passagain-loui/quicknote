@@ -1,4 +1,4 @@
-"""Custom Overlay Notification Toast (v2.9.0) — Unblockable Windows 11-Style Popup + Snooze"""
+"""Custom Overlay Notification Toast (v2.9.2) — Center-Screen Guaranteed Visibility"""
 
 import tkinter as tk
 from tkinter import font
@@ -52,65 +52,42 @@ class CustomToastNotification:
         threading.Thread(target=self._play_audio, daemon=True).start()
 
     def _create_notification(self):
-        """Create frameless overlay window at bottom-right corner (v2.9.1: DPI-aware positioning)"""
+        """Create frameless overlay notification at center screen (v2.9.2: Pure logical coords)"""
         try:
-            # Create toplevel without decorations
+            # v2.9.2: Create and position BEFORE any visibility changes (proper window sequence)
             self.toast_window = tk.Toplevel(self.parent_root)
-            self.toast_window.overrideredirect(True)  # Remove window decorations
+            self.toast_window.withdraw()  # Hide while configuring
+            self.toast_window.overrideredirect(True)  # Remove decorations (frameless)
 
             # v2.8.5: Windows 11-style notification styling
             self.toast_window.config(bg="#F3F3F3")  # Light gray background
 
-            # v2.9.0: Z-order fix - withdraw temporarily for geometry calculation
-            self.toast_window.withdraw()
-
-            # v2.8.2: Force geometry calculation BEFORE positioning (DPI/scaling fix)
+            # v2.9.2: Force geometry calculation BEFORE positioning (ensures accurate dimensions)
             self.toast_window.update_idletasks()
 
             # Notification dimensions
             toast_width = 360
             toast_height = 150
 
-            # v2.9.1: Get screen dimensions with multi-monitor DPI-aware fallback
-            screen_width = None
-            screen_height = None
+            # v2.9.2: Use pure Tkinter logical coordinates (already handles Windows DPI scaling)
+            # NEVER use win32api physical pixels — causes mismatch when Windows scaling is enabled
+            screen_width = self.parent_root.winfo_screenwidth()
+            screen_height = self.parent_root.winfo_screenheight()
 
-            # Try win32api first (more accurate for DPI-aware resolution)
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                user32.SetProcessDpiAwareness(1)  # Enable DPI awareness
-                screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
-                screen_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
-                log.info(f"[Toast] Screen bounds from win32api: {screen_width}x{screen_height}")
-            except Exception as e:
-                log.warning(f"[Toast] win32api failed, using Tkinter fallback: {e}")
+            log.info(f"[Toast] Screen bounds (Tkinter logical): {screen_width}x{screen_height}")
 
-            # Fallback to Tkinter if win32api fails
-            if not screen_width or not screen_height:
-                screen_width = self.parent_root.winfo_screenwidth()
-                screen_height = self.parent_root.winfo_screenheight()
-                log.info(f"[Toast] Screen bounds from Tkinter: {screen_width}x{screen_height}")
+            # v2.9.2: CENTER SCREEN positioning for guaranteed 100% visibility
+            # Logical center calculation works correctly on all DPI/scaling configurations
+            x = int((screen_width - toast_width) / 2)
+            y = int((screen_height - toast_height) / 2)
 
-            # v2.9.1: Position at bottom-right corner with safe margins (prevent off-screen)
-            # Ensure coordinates stay within screen bounds with larger safety margins
-            x = max(20, screen_width - toast_width - 40)   # 40px margin from right edge (safety)
-            y = max(20, screen_height - toast_height - 80)  # 80px margin from bottom (taskbar safety)
+            log.info(f"[Toast] Center position calculated: {x}+{y}")
 
-            # Clamp to safe area
-            x = min(x, screen_width - 100)
-            y = min(y, screen_height - 100)
-
-            log.info(f"[Toast] Position calculated: {x}+{y} (screen: {screen_width}x{screen_height})")
-
-            # v2.9.0: Z-order sequence - geometry before deiconify
+            # v2.9.2: Bulletproof Windows DWM sequence for frameless windows
             self.toast_window.geometry(f"{toast_width}x{toast_height}+{x}+{y}")
-
-            # v2.9.1: Force visibility with proper state management
-            self.toast_window.state('normal')  # Ensure normal state (not minimized)
-            self.toast_window.deiconify()  # Show window
-            self.toast_window.attributes("-topmost", True)  # Always on top
+            self.toast_window.attributes("-topmost", True)  # Lock to top
             self.toast_window.attributes("-alpha", 0.98)    # Slightly transparent
+            self.toast_window.deiconify()  # Show window
             self.toast_window.lift()  # Bring to front
             self.toast_window.focus_force()  # Force focus
 
