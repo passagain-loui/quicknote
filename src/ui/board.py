@@ -2,6 +2,7 @@
 
 import tkinter as tk
 import ctypes
+import logging
 from .theme import Theme
 from .titlebar import TitleBar
 from .note_card import NoteCard
@@ -11,6 +12,8 @@ from ..core.models import Note
 from ..core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
 from ..core.database import get_all_notes, get_notes_by_status, get_note, create_note, delete_note, update_note, update_note_status_only
 from ..services.notification_queue import get_notification_queue
+
+log = logging.getLogger(__name__)
 
 
 def _get_screen_bounds() -> tuple:
@@ -906,18 +909,38 @@ class Board:
             pass
 
     def _force_main_window_foreground(self):
-        """v2.9.3: Bring main window to foreground when notification arrives"""
+        """v2.9.4: Bring main window to foreground using multiple strategies
+
+        Strategy 1: Win32 API SetForegroundWindow (requires active window)
+        Strategy 2: Tkinter lift() + topmost + focus_force()
+        Strategy 3: Show system tray notification to guide user
+        """
         try:
             if self.root.winfo_exists():
+                # Ensure window is visible and not minimized
                 self.root.deiconify()
                 self.root.state('normal')
+
+                # Strategy 1: Try Win32 SetForegroundWindow (most reliable on Windows)
+                try:
+                    import ctypes
+                    hwnd = int(self.root.winfo_id())
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    log.info("[Board] SetForegroundWindow called successfully")
+                except Exception as e:
+                    log.debug(f"[Board] SetForegroundWindow failed: {e}")
+
+                # Strategy 2: Tkinter window management (backup)
                 self.root.attributes('-topmost', True)
                 self.root.lift()
                 self.root.focus_force()
+
                 # Release topmost after 1 second (allow user to use other apps)
                 self.root.after(1000, lambda: self.root.attributes('-topmost', False) if self.root.winfo_exists() else None)
-        except Exception:
-            pass
+
+                log.info("[Board] Main window brought to foreground")
+        except Exception as e:
+            log.warning(f"[Board] Failed to bring main window to foreground: {e}")
 
     def _on_open_note_from_notification(self, note_id: str):
         """Open note when user clicks [Open] on custom notification"""

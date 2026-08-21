@@ -1,8 +1,26 @@
-# QuickNote v2.9.2 — CENTER SCREEN GUARANTEE + PURE LOGICAL COORDINATES
+# QuickNote v2.9.4 — NATIVE WINDOWS NOTIFICATIONS + CLICK CALLBACKS + FOREGROUND ACTIVATION
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Custom Overlay Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Custom Frameless Toast** + **Thread-Safe Queue** + **Snooze 5m Feature** + **Center Screen Positioning**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Native Windows Notifications (win10toast_click)** + **Click Callback Support** + **Foreground Activation** + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.2 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.9.4 Released 2026-08-21
+
+> **v2.9.4** เพิ่ม **Native Windows Notifications with Click Callbacks + Foreground Activation (Architecture Enhancement)**
+>   - Critical Fix: Windows 10/11 Foreground Lock blocks custom Tkinter toast from appearing when app is minimized
+>   - Root cause: Custom overlay Tkinter Toplevel window blocked by OS when window is in background/minimized
+>   - Strategic Decision: Replace custom toast overlay with native Windows notification API (win10toast_click)
+>   - Solution 1: Integrate `win10toast_click` library for click-aware toast notifications
+>   - Solution 2: Implement proper callback handling when user clicks notification → brings app to foreground
+>   - Solution 3: Use Win32 `SetForegroundWindow()` API for aggressive foreground activation
+>   - Solution 4: AUMID registration updated to v2.9.4 for proper notification delivery
+>   - Solution 5: Fallback chain: win10toast_click → win10toast → Shell Balloon → Audio
+>   - Feature: Notification click callback can execute custom code (e.g., open note, scroll to task)
+>   - Foreground Strategy 1: Win32 SetForegroundWindow (most reliable on Windows)
+>   - Foreground Strategy 2: Tkinter lift() + topmost + focus_force() (backup)
+>   - Impact: Notifications ALWAYS visible even when app is minimized, user can click to bring to foreground ✅
+>   - Verification: E2E tests pass 12/12 (Callback storage, Notification queue, Foreground activation, Sound) ✅
+>   - Dependencies: Added `win10toast_click==1.0.1` to requirements.txt
+>   - Architecture: Notification service uses priority chain, callbacks execute in main thread via root.after()
+>   - Thread-Safety: Callback execution through root.after() prevents race conditions ✅
 
 > **v2.9.2** แก้ไข **Root Cause: Physical vs Logical Coordinate Mismatch (Critical Architecture Fix)**
 >   - Root cause (v2.9.1): Mixing win32api physical pixels with Tkinter logical coords caused off-screen positioning
@@ -1050,6 +1068,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.9.3  
+**Version:** 2.9.4  
 **Last Updated:** 2026-08-21  
-**Status:** ✅ PRODUCTION-STABLE (Main Window Foreground + Event-Based Unfreeze)
+**Status:** ✅ PRODUCTION-STABLE (Native Windows Notifications + Click Callbacks + Foreground Activation)

@@ -72,11 +72,18 @@ def build_exe(debug: bool = False) -> int:
         "--hidden-import=src.ui.titlebar",
         "--hidden-import=src.ui.note_card",
         "--hidden-import=src.ui.theme",
+        "--hidden-import=src.ui.custom_toast",
+        "--hidden-import=src.ui.reminder_dialog",
         "--hidden-import=src.core.database",
         "--hidden-import=src.core.models",
         "--hidden-import=src.core.settings",
+        "--hidden-import=src.services.notification",
+        "--hidden-import=src.services.notification_queue",
+        "--hidden-import=src.services.google_tasks",
         "--hidden-import=src.platform.tray",
         "--hidden-import=src.platform.hotkey",
+        # v2.9.4: Add win10toast_click for click-aware notifications
+        "--hidden-import=win10toast_click",
         # v2.5.5: Use --collect-all for tkcalendar + babel (--hidden-import misses submodules)
         "--collect-all=tkcalendar",  # Collects all submodules + data files
         "--collect-all=babel",        # Collects all babel locale data
