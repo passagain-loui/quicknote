@@ -28,7 +28,7 @@ class SettingsWindow:
             self.root = tk.Toplevel(parent_root)
             self.root.overrideredirect(False)
             self.root.title("Settings")
-            self.root.geometry("400x350")
+            self.root.geometry("420x520")  # v2.9.28: Increased height to accommodate all sections (Opacity, Snooze, Data Backup)
             self.root.config(bg=theme.c("bg"))
             self.root.resizable(False, False)
 
@@ -41,8 +41,8 @@ class SettingsWindow:
             main_x = parent_root.winfo_x()
             main_y = parent_root.winfo_y()
             main_w = parent_root.winfo_width()
-            settings_w = 400
-            settings_h = 350
+            settings_w = 420
+            settings_h = 520  # v2.9.28: Increased to accommodate all sections
 
             # Try to place on right side first
             x = main_x + main_w + 10
@@ -142,6 +142,59 @@ class SettingsWindow:
             width=5,
             )
             self.alpha_label_val.pack(side="left", padx=8)
+
+            # === Snooze Settings Section (v2.9.27) ===
+            snooze_label = tk.Label(
+                main_frame,
+                text="Snooze Duration",
+                bg=theme.c("bg"),
+                fg=theme.c("fg"),
+                font=("Segoe UI", 11, "bold"),
+            )
+            snooze_label.pack(anchor="w", pady=(16, 8))
+
+            snooze_frame = tk.Frame(main_frame, bg=theme.c("bg"))
+            snooze_frame.pack(fill="x", pady=8)
+
+            snooze_desc = tk.Label(
+                snooze_frame,
+                text="Minutes to snooze (1-60):",
+                bg=theme.c("bg"),
+                fg=theme.c("fg_muted"),
+                font=("Segoe UI", 9),
+            )
+            snooze_desc.pack(anchor="w", pady=(0, 4))
+
+            snooze_control_frame = tk.Frame(snooze_frame, bg=theme.c("bg"))
+            snooze_control_frame.pack(fill="x")
+
+            # Get current snooze duration
+            default_snooze = settings_data.get("snooze_duration_minutes", 5)
+            default_snooze = max(1, min(60, int(default_snooze)))
+            self.snooze_var = tk.IntVar(value=default_snooze)
+
+            self.snooze_spinbox = tk.Spinbox(
+                snooze_control_frame,
+                from_=1,
+                to=60,
+                width=5,
+                font=("Segoe UI", 10),
+                bg=theme.c("note_bg"),
+                fg=theme.c("fg"),
+                highlightthickness=0,
+                textvariable=self.snooze_var,
+                command=self._on_snooze_change,
+            )
+            self.snooze_spinbox.pack(side="left", padx=0)
+
+            self.snooze_label_val = tk.Label(
+                snooze_control_frame,
+                text="min",
+                bg=theme.c("bg"),
+                fg=theme.c("fg_muted"),
+                font=("Segoe UI", 9),
+            )
+            self.snooze_label_val.pack(side="left", padx=8)
 
             # === Data Backup Section ===
             backup_label = tk.Label(
@@ -376,6 +429,22 @@ class SettingsWindow:
                     pass
         except Exception as e:
             log.error(f"[Settings] Failed to apply alpha: {e}")
+
+    def _on_snooze_change(self):
+        """v2.9.27: Handle snooze duration change"""
+        try:
+            snooze_mins = int(self.snooze_var.get())
+            # Clamp to valid range
+            snooze_mins = max(1, min(60, snooze_mins))
+            self.snooze_var.set(snooze_mins)
+            # Update settings (handle both dict and Settings object)
+            if isinstance(self.settings, dict):
+                self.settings["snooze_duration_minutes"] = snooze_mins
+            elif hasattr(self.settings, 'data'):
+                self.settings.data["snooze_duration_minutes"] = snooze_mins
+            log.debug(f"[Settings] Snooze duration changed to {snooze_mins} minutes")
+        except Exception as e:
+            log.error(f"[Settings] Failed to change snooze duration: {e}")
 
     def _on_theme_changed(self, theme):
         """Handle real-time theme changes — v1.6.0"""

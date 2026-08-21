@@ -26,7 +26,8 @@ class UnblockableCustomDialog(tk.Toplevel):
 
     def __init__(self, parent, title: str = "QuickNote Reminder", message: str = "",
                  on_dismiss: Callable = None, on_snooze: Callable = None,
-                 on_open: Callable = None, stop_alarm: Callable = None):
+                 on_open: Callable = None, stop_alarm: Callable = None, parent_board=None,
+                 snooze_duration_minutes: int = 5):  # v2.9.26: Custom snooze duration
         """Initialize unblockable dialog
 
         Args:
@@ -37,6 +38,8 @@ class UnblockableCustomDialog(tk.Toplevel):
             on_snooze: Callback when Snooze clicked
             on_open: Callback when Open clicked
             stop_alarm: Callback to stop alarm sound
+            parent_board: Parent Board instance for UI re-render (v2.9.9)
+            snooze_duration_minutes: Duration in minutes for snooze (v2.9.26)
         """
         super().__init__(parent)
 
@@ -46,83 +49,165 @@ class UnblockableCustomDialog(tk.Toplevel):
         self.on_snooze = on_snooze
         self.on_open = on_open
         self.stop_alarm = stop_alarm
+        self.parent_board = parent_board  # v2.9.9: For forced UI re-render
+        self.snooze_duration_minutes = snooze_duration_minutes  # v2.9.26
 
-        # Configure window appearance
-        self.configure(bg="#F3F3F3", width=400, height=200)
+        # v2.9.9: Get theme from parent board for consistent styling
+        self.theme = None
+        if parent_board and hasattr(parent_board, 'theme'):
+            self.theme = parent_board.theme
+
+        # Configure window appearance with theme colors
+        bg_color = self.theme.c("bg") if self.theme else "#F3F3F3"
+        self.configure(bg=bg_color, width=400, height=200)
         self.resizable(False, False)
+
+        # v2.9.30: Non-blocking Z-order lock using transient() instead of grab_set()
+        # transient() makes this dialog a child of parent window at OS level
+        # Ensures dialog stays above parent without blocking event loop (non-modal)
+        try:
+            self.transient(parent)  # Link dialog to parent at OS window manager level
+            log.debug("[UnblockableDialog] transient(parent) applied for Z-order lock")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to set transient: {e}")
+
+        # v2.9.24: Force dialog to stay on top (ONCE at init, no timer flicker)
         self.attributes("-topmost", True)
+        self.lift()  # Immediately bring to front
+        self.focus_force()  # Force focus to this window
 
         # Create UI
         self._create_ui()
 
+        # v2.9.24: Bind FocusOut event to restore topmost silently (no flicker loop)
+        self.bind("<FocusOut>", self._on_focus_out)
+
         # Apply Win32 forceful positioning AFTER window is created
         self.update_idletasks()
+        self._position_bottom_right()  # v2.9.31: Position as bottom-right toast notification
         self._force_to_foreground()
 
     def _create_ui(self):
-        """Create dialog UI with title, message, and buttons"""
-        # Title Label
+        """Create dialog UI with title, message, and buttons (v2.9.12: Minimal left-aligned design)"""
+        # v2.9.9: Use theme colors for consistent UI
+        bg_color = self.theme.c("bg") if self.theme else "#F3F3F3"
+        fg_color = self.theme.c("fg") if self.theme else "#000000"
+        fg_muted_color = self.theme.c("fg_muted") if self.theme else "#333333"
+
+        # v2.9.12: Create a content frame for left-aligned layout
+        content_frame = tk.Frame(self, bg=bg_color)
+        content_frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+        # Title Label (v2.9.12: Left-aligned, smaller font)
         title_label = tk.Label(
-            self,
+            content_frame,
             text=self.title(),
-            font=("Segoe UI", 14, "bold"),
-            bg="#F3F3F3",
-            fg="#000000",
-            wraplength=350
-        )
-        title_label.pack(pady=(15, 10), padx=15)
-
-        # Message Label
-        message_label = tk.Label(
-            self,
-            text=self.message if self.message else "Reminder triggered",
-            font=("Segoe UI", 11),
-            bg="#F3F3F3",
-            fg="#333333",
+            font=("Segoe UI", 12, "bold"),
+            bg=bg_color,
+            fg=fg_color,
             wraplength=350,
-            justify="center"
+            justify="left",
+            anchor="w"
         )
-        message_label.pack(pady=(0, 20), padx=15)
+        title_label.pack(fill="x", pady=(0, 6))
 
-        # Button Frame
-        button_frame = tk.Frame(self, bg="#F3F3F3")
-        button_frame.pack(pady=(0, 15))
+        # Message Label (v2.9.12: Left-aligned, compact)
+        message_label = tk.Label(
+            content_frame,
+            text=self.message if self.message else "Reminder triggered",
+            font=("Segoe UI", 10),
+            bg=bg_color,
+            fg=fg_muted_color,
+            wraplength=350,
+            justify="left",
+            anchor="w"
+        )
+        message_label.pack(fill="x", pady=(0, 12))
 
-        # [Dismiss] Button - Red
+        # v2.9.12: Button Frame with minimal compact buttons
+        button_frame = tk.Frame(content_frame, bg=bg_color)
+        button_frame.pack(fill="x", pady=(6, 0))
+
+        # v2.9.11: Modern flat design with muted pastel colors
+        # v2.9.12: Compact minimal buttons (reduced padding)
+        # [Dismiss] Button - Pastel Red
         dismiss_btn = tk.Button(
             button_frame,
             text="Dismiss",
-            font=("Segoe UI", 10),
-            bg="#FF3B30",
-            fg="white",
-            width=12,
+            font=("Segoe UI", 9),
+            bg="#FFEBEE",  # Pastel red background
+            fg="#C62828",  # Dark red text
+            width=11,
+            height=1,
+            bd=0,
+            relief="flat",
+            padx=4,
+            pady=3,
             command=self._on_dismiss_click
         )
-        dismiss_btn.pack(side="left", padx=5)
+        dismiss_btn.pack(side="left", padx=2)
 
-        # [Snooze 5m] Button - Orange
+        # v2.9.26: Snooze button with custom duration
+        # Button text shows the configured snooze duration (e.g., "Snooze 10m")
+        snooze_text = f"Snooze {self.snooze_duration_minutes}m"
         snooze_btn = tk.Button(
             button_frame,
-            text="Snooze 5m",
-            font=("Segoe UI", 10),
-            bg="#F9A825",
-            fg="white",
-            width=12,
+            text=snooze_text,
+            font=("Segoe UI", 9),
+            bg="#FFF3E0",  # Pastel orange background
+            fg="#E65100",  # Dark orange text
+            width=14,
+            height=1,
+            bd=0,
+            relief="flat",
+            padx=4,
+            pady=3,
             command=self._on_snooze_click
         )
-        snooze_btn.pack(side="left", padx=5)
+        snooze_btn.pack(side="left", padx=2, fill="x", expand=True)
 
-        # [Open] Button - Blue
-        open_btn = tk.Button(
-            button_frame,
-            text="Open",
-            font=("Segoe UI", 10),
-            bg="#007AFF",
-            fg="white",
-            width=12,
-            command=self._on_open_click
-        )
-        open_btn.pack(side="left", padx=5)
+    def _on_focus_out(self, event=None):
+        """v2.9.30: Restore topmost when focus lost (non-blocking, prevents Z-order loss)
+
+        When user clicks main window and dialog loses focus, immediately:
+        1. Re-apply -topmost attribute
+        2. Call lift() to bring back to front
+        3. Re-focus to dialog
+
+        This prevents main window from stealing Z-order without blocking event loop.
+        """
+        try:
+            self.attributes("-topmost", True)
+            self.lift()  # Bring back to front if main window tried to steal it
+            self.focus_force()  # Re-focus to dialog
+            log.debug("[UnblockableDialog] Focus lost → topmost + lift + focus restored")
+        except Exception:
+            pass  # Dialog may have been destroyed
+
+    def _position_bottom_right(self):
+        """v2.9.31: Position dialog at bottom-right corner as Windows toast notification
+
+        Toast positioning:
+        - Places dialog in bottom-right corner of screen
+        - Leaves 20px margin from right edge + 60px from bottom (above taskbar)
+        - Classic Windows notification toast appearance
+        """
+        try:
+            self.update_idletasks()
+            width = self.winfo_width() or 320
+            height = self.winfo_height() or 180
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+
+            # Calculate position: bottom-right with margins
+            # 20px from right edge, 60px from bottom (taskbar clearance)
+            x = screen_width - width - 20
+            y = screen_height - height - 60
+
+            self.geometry(f"{width}x{height}+{x}+{y}")
+            log.debug(f"[UnblockableDialog] Positioned at bottom-right: ({x}, {y})")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to position at bottom-right: {e}")
 
     def _force_to_foreground(self):
         """Force dialog to foreground using Win32 API (v2.9.7)"""
@@ -159,50 +244,116 @@ class UnblockableCustomDialog(tk.Toplevel):
             log.warning(f"[UnblockableDialog] Failed to stop alarm: {e}")
 
     def _on_dismiss_click(self):
-        """Dismiss button clicked"""
+        """Dismiss button clicked — v2.9.18: Delegate to queue callback (no direct DB operations)"""
         try:
-            self._stop_alarm_sound()
+            # v2.9.18: ONLY delegate to callback (which puts message in command queue)
+            # All DB operations and audio stop happen in queue handler, not here
             if self.on_dismiss:
                 self.on_dismiss()
         except Exception as e:
             log.error(f"[UnblockableDialog] Dismiss callback failed: {e}")
         finally:
-            self.destroy()
+            self._safe_destroy()
 
     def _on_snooze_click(self):
-        """Snooze 5m button clicked"""
+        """Snooze 5m button clicked — v2.9.18: Delegate to queue callback (no direct DB operations)"""
         try:
-            self._stop_alarm_sound()
+            # v2.9.18: ONLY delegate to callback (which puts message in command queue)
+            # All DB operations and audio stop happen in queue handler, not here
             if self.on_snooze:
                 self.on_snooze()
         except Exception as e:
             log.error(f"[UnblockableDialog] Snooze callback failed: {e}")
         finally:
-            self.destroy()
+            self._safe_destroy()
 
-    def _on_open_click(self):
-        """Open button clicked"""
+    def _safe_destroy(self):
+        """v2.9.30: Safely destroy dialog (no grab_release needed, using transient instead)"""
         try:
-            self._stop_alarm_sound()
-            if self.on_open:
-                self.on_open()
-        except Exception as e:
-            log.error(f"[UnblockableDialog] Open callback failed: {e}")
-        finally:
             self.destroy()
-
-    def center_on_screen(self):
-        """Center dialog on screen"""
-        try:
-            self.update_idletasks()
-            screen_w = self.winfo_screenwidth()
-            screen_h = self.winfo_screenheight()
-            window_w = self.winfo_width()
-            window_h = self.winfo_height()
-
-            x = (screen_w - window_w) // 2
-            y = (screen_h - window_h) // 2
-
-            self.geometry(f"{window_w}x{window_h}+{x}+{y}")
+            log.debug("[UnblockableDialog] Dialog destroyed")
         except Exception as e:
-            log.warning(f"[UnblockableDialog] Failed to center: {e}")
+            log.warning(f"[UnblockableDialog] Failed to destroy: {e}")
+
+
+    def _mark_reminder_triggered(self):
+        """v2.9.8: Mark reminder as triggered in database to prevent re-trigger on app restart"""
+        try:
+            # The actual DB update is handled by the on_dismiss/on_open callback from board._trigger_reminder
+            # That callback calls update_note with reminder_triggered = True
+            log.info("[UnblockableDialog] Reminder marked as triggered (via callback chain)")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to mark reminder triggered: {e}")
+
+    def _snooze_reminder_5m(self):
+        """v2.9.8: Reschedule reminder +5 minutes"""
+        try:
+            # The snooze logic is handled by the on_snooze callback from board._trigger_reminder
+            # That callback calls update_note with new reminder_datetime = now + 5m
+            log.info("[UnblockableDialog] Reminder rescheduled +5 minutes (via callback chain)")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to snooze reminder: {e}")
+
+    def _force_ui_rerender(self):
+        """v2.9.9: Force parent board to re-render UI (update note card icons)"""
+        try:
+            if self.parent_board and hasattr(self.parent_board, '_load_notes'):
+                # Call _load_notes() to refresh all note cards and icon states
+                self.parent_board._load_notes()
+                log.info("[UnblockableDialog] UI re-render forced via _load_notes()")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to force UI re-render: {e}")
+
+    def _commit_reminder_triggered_sync(self):
+        """v2.9.13: Synchronous DB commit to prevent race condition with Scheduler thread
+
+        CRITICAL: This is a BLOCKING call that waits for DB to write to disk.
+        Ensures Scheduler thread sees reminder_triggered=1 on next check cycle.
+        """
+        try:
+            # Import here to avoid circular dependency
+            from src.core.database import update_note
+
+            # Get note_id from parent_board if available (board stores reference in root._board)
+            if self.parent_board and hasattr(self.parent_board, 'root'):
+                root = self.parent_board.root
+                if hasattr(root, '_current_reminder_note_id'):
+                    note_id = root._current_reminder_note_id
+                    # Synchronous DB update with explicit commit
+                    update_note(note_id, reminder_triggered=True)
+                    log.info(f"[UnblockableDialog] Synchronous DB commit: reminder_triggered=1 for {note_id}")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to commit reminder_triggered: {e}")
+
+    def _force_main_window_to_foreground_win32(self):
+        """v2.9.13: Force main window to foreground using Win32 API (hard override)
+
+        Tkinter deiconify() alone doesn't work on Windows 10/11 due to Foreground Lock.
+        Use ShowWindow(RESTORE=9) + SwitchToThisWindow() to force focus.
+        """
+        try:
+            if not self.parent_board or not hasattr(self.parent_board, 'root'):
+                return
+
+            root = self.parent_board.root
+            hwnd = int(root.winfo_id())
+
+            # Step 1: Restore window from minimized state
+            # ShowWindow(hwnd, SW_RESTORE=9)
+            ctypes.windll.user32.ShowWindow(hwnd, 9)
+            log.info(f"[UnblockableDialog] ShowWindow(RESTORE=9) called")
+
+            # Step 2: Switch to this window (bypasses Foreground Lock)
+            # SwitchToThisWindow(hwnd, True) - allocate input queue to this window
+            ctypes.windll.user32.SwitchToThisWindow(hwnd, True)
+            log.info(f"[UnblockableDialog] SwitchToThisWindow() called")
+
+            # Step 3: Traditional foreground + lift + focus as fallback
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            root.lift()
+            root.focus_force()
+
+            log.info(f"[UnblockableDialog] Main window forced to foreground via Win32 API")
+        except Exception as e:
+            log.warning(f"[UnblockableDialog] Failed to force foreground with Win32: {e}")
+

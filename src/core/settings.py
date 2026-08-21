@@ -12,6 +12,7 @@ DEFAULTS = {
     "theme": "light",
     "alpha": 1.0,
     "always_on_top": True,
+    "snooze_duration_minutes": 5,  # v2.9.26: Custom snooze duration (default 5 minutes)
     "hotkeys": {
         "new_note": "<ctrl>+<alt>+n",
         "toggle_show": "<ctrl>+<alt>+s",
@@ -66,6 +67,15 @@ class Settings:
             self.data["theme"] = "light"
         if self.data["theme"] not in ("light", "dark"):
             self.data["theme"] = "light"
+
+        # v2.9.26: Snooze duration: 1-60 minutes (clamp to valid range)
+        if "snooze_duration_minutes" not in self.data:
+            self.data["snooze_duration_minutes"] = 5
+        try:
+            snooze_mins = int(self.data.get("snooze_duration_minutes", 5))
+            self.data["snooze_duration_minutes"] = max(1, min(60, snooze_mins))
+        except (TypeError, ValueError):
+            self.data["snooze_duration_minutes"] = 5
 
         # Geometry: validate format WxH+X+Y
         if "geometry" not in self.data:

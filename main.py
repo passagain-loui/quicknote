@@ -6,6 +6,7 @@ import ctypes
 import threading
 import socket
 import logging
+import queue
 from pathlib import Path
 
 # Configure logging
@@ -132,9 +133,15 @@ def main():
             alpha = 1.0
         alpha = max(0.3, min(1.0, float(alpha)))
 
+        # v2.9.14: Create command queue for thread-safe communication
+        # Background threads (notification, tray) send commands to this queue
+        # Main thread processes queue every 100ms via root.after()
+        # ONLY Main Thread touches Database and GUI
+        command_queue = queue.Queue()
+
         # Create and show Board UI (will set on_open_settings callback below)
         print("[>] Launching UI...")
-        board = Board(geometry=geometry, theme_mode=theme, settings_obj=settings)
+        board = Board(geometry=geometry, theme_mode=theme, settings_obj=settings, command_queue=command_queue)
 
         # Apply alpha
         board.root.update_idletasks()

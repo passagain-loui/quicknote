@@ -19,13 +19,29 @@ class NoteCard(tk.Frame):
         self.color_idx = hash(note.id) % len(color_list)
         self.card_color = color_list[self.color_idx]
 
+        # v2.9.26: Red border shows if alarm is TRIGGERED AND datetime still exists
+        # v2.9.26: Complete dismiss clears both reminder_datetime and sets reminder_triggered=1
+        # Before alarm: reminder_triggered = 0, reminder_datetime = set → No border
+        # Alarm fires: reminder_triggered = 1, reminder_datetime = set → RED BORDER SHOWS
+        # User dismisses: reminder_triggered = 1, reminder_datetime = NULL → No border (datetime cleared)
+        # User snoozes: reminder_triggered = 0, reminder_datetime = future → No border (time not arrived)
+        reminder_triggered = getattr(note, 'reminder_triggered', False)
+        reminder_datetime = note.reminder_datetime
+
+        # v2.9.26: Red border shows if reminder_triggered AND datetime still exists
+        is_reminder_active = bool(reminder_triggered and reminder_datetime)
+
         # Card frame (white background สำหรับ light mode)
         # ✓ v1.3.5: Add visible border for Light Theme contrast
         # ✓ v1.4.2: Modern card styling — softer borders + modern spacing
+        # v2.9.23: Dynamic highlight — RED (#FF3B30) if alarm time ARRIVED and not dismissed
+        highlight_color = "#FF3B30" if is_reminder_active else theme.c("note_border_soft")
+        highlight_thickness = 3 if is_reminder_active else 2
+
         self.config(
             bg=theme.c("note_bg"),
-            highlightthickness=2,  # ✓ v1.4.2: Slightly thicker border for definition
-            highlightbackground=theme.c("note_border_soft"),  # ✓ v1.4.2: Softer, lighter border (modern look)
+            highlightthickness=highlight_thickness,  # v2.9.21: Thicker red border when alarm active
+            highlightbackground=highlight_color,  # v2.9.21: Red (#FF3B30) if reminder active, normal otherwise
             relief="flat",
             padx=12,  # ✓ v1.4.2: Increased padding for spacious, modern appearance
             pady=10,  # ✓ v1.4.2: Increased padding for better breathing room
@@ -148,7 +164,13 @@ class NoteCard(tk.Frame):
         left_frame.pack(side="left", fill="x", expand=False)
 
         # Reminder button (v1.3.0) — ⏰ for setting reminder datetime
-        reminder_icon = "⏰" if note.reminder_datetime else "⏱"
+        # v2.9.9: Check reminder_triggered FIRST to ensure icon shows correct state
+        # v2.9.10: Use getattr() instead of .get() (Note is object, not dict)
+        # If triggered=1, show inactive (⏱) gray regardless of reminder_datetime
+        # If triggered=0 AND reminder_datetime set, show active (⏰) red
+        reminder_triggered = getattr(note, 'reminder_triggered', False)
+        is_reminder_active = bool(note.reminder_datetime) and not reminder_triggered
+        reminder_icon = "⏰" if is_reminder_active else "⏱"
         self.btn_reminder = tk.Button(
             left_frame,
             text=reminder_icon,
@@ -156,7 +178,7 @@ class NoteCard(tk.Frame):
             height=1,
             bd=0,
             bg=theme.c("note_bg"),
-            fg=theme.priority_color("high") if note.reminder_datetime else theme.c("fg_muted"),
+            fg=theme.priority_color("high") if is_reminder_active else theme.c("fg_muted"),
             activebackground=theme.c("note_bg"),
             activeforeground=theme.c("fg"),
             font=("Segoe UI", 10),

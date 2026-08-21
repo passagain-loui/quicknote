@@ -33,7 +33,7 @@ def _get_screen_bounds() -> tuple:
 class Board:
     """หน้าต่างหลัก — borderless, always-on-top, scrollable + load notes from DB"""
 
-    def __init__(self, geometry: str = "", theme_mode: str = "light", settings_obj=None, on_settings_saved=None, on_open_settings=None):
+    def __init__(self, geometry: str = "", theme_mode: str = "light", settings_obj=None, on_settings_saved=None, on_open_settings=None, command_queue=None):
         self.theme = Theme(theme_mode)
         self.settings = settings_obj  # Settings object from main.py
         self.on_settings_saved = on_settings_saved  # Callback when settings are saved
@@ -45,11 +45,17 @@ class Board:
         self.settings_window_instance = None  # Singleton Settings window
         self._scheduler_enabled = True  # v2.5.8: Flag to pause scheduler when dialog open
         self.active_toasts = []  # v2.8.1: Keep references to prevent GC from destroying Toplevel windows
+        self.command_queue = command_queue  # v2.9.14: Thread-safe command queue from main thread
+        self._last_action_timestamp = 0  # v2.9.16: Debounce to prevent alarm re-trigger during DB commit (5s grace period)
+        self._refresh_timer = None  # v2.9.22: Debounce timer for UI refresh (prevent excessive _load_notes calls)
 
         # Create window
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.config(bg=self.theme.c("bg"))
+
+        # v2.9.9: Store board reference on root for dialog access
+        self.root._board = self
 
         # Set minimum window size (for proper UI layout)
         # ✓ v1.3.5: Increased from 450 to 500px width for header buttons (Status + Reminder + Delete)
@@ -164,10 +170,11 @@ class Board:
         # Bind canvas resize to update inner frame width
         self.canvas.bind("<Configure>", self._on_canvas_resize)
 
-        # Mouse wheel scroll
-        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.canvas.bind("<Button-4>", self._on_mousewheel)   # Linux wheel up
-        self.canvas.bind("<Button-5>", self._on_mousewheel)   # Linux wheel down
+        # v2.9.26: Global mouse wheel scroll — bind on root so scrolling works anywhere in app
+        # Users can scroll from any part of the window, not just the scrollbar
+        self.root.bind_all("<MouseWheel>", self._on_global_mousewheel)
+        self.root.bind_all("<Button-4>", self._on_global_mousewheel)   # Linux wheel up
+        self.root.bind_all("<Button-5>", self._on_global_mousewheel)   # Linux wheel down
 
         # Focus on canvas click only (don't intercept widgets)
         self.canvas.bind("<Button-1>", lambda e: self.root.focus_force(), add="+")
@@ -248,6 +255,11 @@ class Board:
 
         # Load notes from database
         self._load_notes()
+
+        # v2.9.14: Start command queue processor (every 100ms) — BEFORE reminder checker
+        # This ensures commands from background threads are processed in main thread
+        if self.command_queue:
+            self._process_command_queue()
 
         # Start reminder checker (v1.3.0) — non-blocking, runs every 5 seconds
         self._check_reminders()
@@ -340,12 +352,17 @@ class Board:
         # Update scroll region
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
+    def _on_global_mousewheel(self, event):
+        """v2.9.26: Global mouse wheel scroll — works from anywhere in app"""
+        if hasattr(self, 'canvas') and self.canvas:
+            if event.num == 5 or event.delta < 0:
+                self.canvas.yview_scroll(3, "units")
+            elif event.num == 4 or event.delta > 0:
+                self.canvas.yview_scroll(-3, "units")
+
     def _on_mousewheel(self, event):
-        """เลื่อนด้วย mouse wheel"""
-        if event.num == 5 or event.delta < 0:
-            self.canvas.yview_scroll(3, "units")
-        elif event.num == 4 or event.delta > 0:
-            self.canvas.yview_scroll(-3, "units")
+        """เลื่อนด้วย mouse wheel (legacy, kept for compatibility)"""
+        self._on_global_mousewheel(event)
 
     def _on_resize(self, event):
         """ลากมุมล่างขวาเพื่อปรับขนาดหน้าต่าง"""
@@ -658,12 +675,235 @@ class Board:
             pass
         self.root.after(3000, self._reapply_topmost)
 
+    def _request_ui_refresh(self):
+        """v2.9.22: Debounced UI refresh to prevent Tkinter freeze from excessive _load_notes calls
+
+        Consolidates multiple refresh requests within 200ms into a single UI update.
+        This prevents the main thread from being overwhelmed by back-to-back _load_notes calls.
+        """
+        try:
+            # Cancel any pending refresh
+            if self._refresh_timer is not None:
+                self.root.after_cancel(self._refresh_timer)
+
+            # Schedule refresh for 200ms from now
+            # If another refresh is requested within 200ms, it will cancel this and reschedule
+            self._refresh_timer = self.root.after(200, self._load_notes)
+        except Exception as e:
+            log.warning(f"[v2.9.22] UI refresh debouncer failed: {e}")
+            # Fallback: call _load_notes immediately
+            try:
+                self._load_notes()
+            except Exception as e2:
+                log.error(f"[v2.9.22] Fallback _load_notes failed: {e2}")
+
+    def _process_command_queue(self):
+        """v2.9.14: Process thread-safe command queue from background threads
+
+        This is the ONLY place where background threads can affect DB and GUI.
+        Notification/Tray threads send commands; Main thread executes them.
+        """
+        try:
+            if not self.command_queue:
+                return
+
+            # Process ALL queued commands in this batch
+            while True:
+                try:
+                    cmd = self.command_queue.get_nowait()  # Non-blocking get
+                except:
+                    break  # Queue empty
+
+                try:
+                    action = cmd.get("action")
+
+                    if action == "dismiss_note":
+                        # v2.9.14: Main thread marks reminder as triggered
+                        # v2.9.26: Also clear reminder_datetime to completely remove alarm state
+                        # v2.9.28: Mark note as recently dismissed to pin at top
+                        note_id = cmd.get("note_id")
+                        if note_id:
+                            from src.core.database import update_note
+                            # v2.9.26: Clear reminder_datetime AND set reminder_triggered=1
+                            # Use clear_reminder_datetime to selectively clear datetime while keeping triggered state
+                            # v2.9.28: Also mark_dismissed=True to pin note at top
+                            update_note(note_id, reminder_triggered=True, clear_reminder_datetime=True, mark_dismissed=True)
+                            # v2.9.16: Set debounce timestamp to prevent alarm re-trigger
+                            import time
+                            self._last_action_timestamp = time.time()
+                            # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
+                            self._request_ui_refresh()
+
+                    elif action == "open_note":
+                        # v2.9.17: Fail-safe 'open_note' with exception isolation (no silent crashes!)
+                        note_id = cmd.get("note_id")
+                        if note_id:
+                            import time
+
+                            # STEP 1: CRITICAL DB COMMIT FIRST — must succeed to prevent alarm re-trigger
+                            try:
+                                from src.core.database import update_note
+                                update_note(note_id, reminder_triggered=True)
+                                # Set debounce timestamp for scheduler grace period
+                                self._last_action_timestamp = time.time()
+                                log.info(f"[v2.9.17] DB committed for note {note_id}, debounce active")
+                            except Exception as e:
+                                log.error(f"[v2.9.17] CRITICAL: DB commit failed for {note_id}: {e}")
+                                # Continue anyway — UI operations might still work
+
+                            # STEP 2: Stop alarm audio (isolated try-except)
+                            try:
+                                from src.services.notification_queue import get_notification_queue
+                                queue = get_notification_queue()
+                                if queue:
+                                    queue.stop_alarm()
+                            except Exception as e:
+                                log.debug(f"[v2.9.17] Audio stop failed (non-critical): {e}")
+
+                            # STEP 3: Refresh UI — isolated try-except
+                            try:
+                                # v2.9.22: Use debounced refresh to prevent Tkinter freeze
+                                self._request_ui_refresh()
+                                log.debug(f"[v2.9.17] UI refresh requested (debounced)")
+                            except Exception as e:
+                                log.debug(f"[v2.9.17] UI refresh failed (non-critical): {e}")
+
+                            # STEP 4: Force window to foreground — isolated try-except
+                            try:
+                                self._force_window_to_foreground_v2916()
+                                log.debug(f"[v2.9.17] Window brought to foreground")
+                            except Exception as e:
+                                log.debug(f"[v2.9.17] Window activation failed (non-critical): {e}")
+
+                            # STEP 5: Scroll to note — isolated try-except (use fresh DB fetch)
+                            try:
+                                from src.core.database import get_note
+                                note_data = get_note(note_id)
+                                if note_data:
+                                    self._scroll_to_note_by_id(note_id)
+                                    log.debug(f"[v2.9.17] Scrolled to note {note_id}")
+                            except Exception as e:
+                                log.debug(f"[v2.9.17] Scroll to note failed (non-critical): {e}")
+
+                            # STEP 6: Open note content — isolated try-except (use fresh DB fetch)
+                            try:
+                                from src.core.database import get_note
+                                from src.core.models import Note
+                                note_data = get_note(note_id)
+                                if note_data:
+                                    note_obj = Note.from_dict(note_data)
+                                    self._on_note_reminder_open(note_obj)
+                                    log.debug(f"[v2.9.17] Opened note content for {note_id}")
+                            except Exception as e:
+                                log.debug(f"[v2.9.17] Note open failed (non-critical): {e}")
+
+                    elif action == "snooze_note":
+                        # v2.9.14: Main thread reschedules reminder
+                        # v2.9.26: Use custom snooze duration from settings (default 5 minutes)
+                        note_id = cmd.get("note_id")
+                        if note_id:
+                            from src.core.database import update_note
+                            from datetime import datetime, timedelta
+                            # Get snooze duration from settings (default 5 if not set)
+                            snooze_mins = 5
+                            if self.settings:
+                                snooze_mins = self.settings.get("snooze_duration_minutes", 5) if hasattr(self.settings, 'get') else 5
+                            new_reminder = (datetime.now() + timedelta(minutes=snooze_mins)).strftime("%Y-%m-%d %H:%M")
+                            # v2.9.15: update_note() commits synchronously
+                            update_note(note_id, reminder_datetime=new_reminder, reminder_triggered=False)
+                            # v2.9.16: Set debounce timestamp to prevent alarm re-trigger
+                            import time
+                            self._last_action_timestamp = time.time()
+                            # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
+                            self._request_ui_refresh()
+
+                except Exception as e:
+                    log.error(f"[CommandQueue] Failed to process action '{action}': {e}")
+
+        except Exception as e:
+            log.error(f"[CommandQueue] Queue processing error: {e}")
+
+        finally:
+            # v2.9.14: Reschedule queue processor (every 100ms)
+            if self.command_queue:
+                self.root.after(100, self._process_command_queue)
+
+    def _force_window_to_foreground_v2915(self):
+        """v2.9.15: Force window to foreground using native shell-level restore (WM_SYSCOMMAND)
+
+        Previous methods (SetForegroundWindow, ShowWindow) blocked by Windows Focus Lock.
+        Solution: Use PostMessage with WM_SYSCOMMAND + SC_RESTORE (shell-level command).
+        """
+        try:
+            import ctypes
+            import win32gui
+            import win32con
+
+            hwnd = int(self.root.winfo_id())
+
+            # Step 1: Flash taskbar to attract attention
+            FLASHW_ALL = 3
+            ctypes.windll.user32.FlashWindow(hwnd, FLASHW_ALL)
+
+            # Step 2: Send WM_SYSCOMMAND with SC_RESTORE (61728 = 0xF120)
+            # This is at shell level, not blocked by Focus Lock
+            win32gui.PostMessage(hwnd, win32con.WM_SYSCOMMAND, win32con.SC_RESTORE, 0)
+
+            # Step 3: Bring to front with Tkinter fallback
+            self.root.deiconify()
+            self.root.state('normal')
+            self.root.lift()
+            self.root.focus_force()
+
+            log.info("[v2.9.15] Window restored using WM_SYSCOMMAND (shell-level)")
+        except Exception as e:
+            log.warning(f"[v2.9.15] Failed to force window to foreground: {e}")
+            # Fallback: basic Tkinter operations
+            try:
+                self.root.deiconify()
+                self.root.lift()
+                self.root.focus_force()
+            except Exception:
+                pass
+
+    def _force_window_to_foreground_v2916(self):
+        """v2.9.16: Force window to foreground using PyWinCtl (modern OS-level API)
+
+        PyWinCtl uses modern OS automation APIs that properly handle Windows Focus Lock.
+        Bypasses all traditional Win32 restrictions by using system-level window activation.
+        """
+        try:
+            import pywinctl as pwc
+
+            # Get all windows and find this app's window
+            app_title = "QuickNote"
+            windows = pwc.getWindowsWithTitle(app_title)
+
+            if windows:
+                win = windows[0]
+                # PyWinCtl .activate() properly handles Focus Lock
+                win.activate()
+                log.info("[v2.9.16] Window activated using PyWinCtl (OS-level API)")
+                return
+            else:
+                # Fallback to v2915 if PyWinCtl doesn't find window
+                log.warning("[v2.9.16] PyWinCtl didn't find window, falling back to v2915")
+                self._force_window_to_foreground_v2915()
+        except ImportError:
+            log.warning("[v2.9.16] PyWinCtl not available, falling back to v2915")
+            self._force_window_to_foreground_v2915()
+        except Exception as e:
+            log.warning(f"[v2.9.16] Failed to activate window with PyWinCtl: {e}")
+            self._force_window_to_foreground_v2915()
+
     def _check_reminders(self):
         """v2.2.3: Unbreakable reminder scheduler with visual debug (next reminder display)
-        v2.5.8: Check if scheduler is paused (dialog open) — if so, skip but reschedule anyway"""
+        v2.5.8: Check if scheduler is paused (dialog open) — if so, skip but reschedule anyway
+        v2.9.16: Debounce period (5s) after Open/Dismiss to prevent alarm re-trigger during DB commit"""
         try:
             from datetime import datetime
             from src.core.database import get_next_due_reminder
+            import time
 
             # v2.5.8: Skip checking reminders if scheduler is paused (dialog open)
             # Still reschedule to keep loop alive
@@ -671,6 +911,15 @@ class Board:
                 # Scheduler is paused, just reschedule and return
                 self.root.after(5000, self._check_reminders)
                 return
+
+            # v2.9.16: Debounce check — skip reminder checks for 5 seconds after Open/Dismiss/Snooze
+            # This gives DB commit time to complete before next scheduler cycle
+            if hasattr(self, '_last_action_timestamp') and self._last_action_timestamp > 0:
+                time_since_action = time.time() - self._last_action_timestamp
+                if time_since_action < 5.0:  # 5 second grace period
+                    log.debug(f"[v2.9.16] Debounce active ({time_since_action:.1f}s < 5s), skipping reminder check")
+                    self.root.after(5000, self._check_reminders)
+                    return
 
             # Update heartbeat indicator with next due reminder (v2.2.3)
             # v2.6.2: Shorten date format to time-only to prevent footer clipping
@@ -713,6 +962,25 @@ class Board:
                     if not reminder_str:
                         continue
 
+                    # v2.9.8: Startup Alarm Storm Prevention
+                    # If reminder is way in the past (>1 hour old), auto-dismiss it
+                    # This prevents alarm flooding when reopening app after crash/close
+                    try:
+                        reminder_dt = datetime.strptime(reminder_str, "%Y-%m-%d %H:%M")
+                        now_dt = datetime.now()
+                        time_diff = (now_dt - reminder_dt).total_seconds()
+
+                        # If reminder is more than 1 hour old, mark as triggered without alarming
+                        if time_diff > 3600:  # 3600 seconds = 1 hour
+                            try:
+                                update_note(note_data["id"], reminder_triggered=True)
+                            except Exception:
+                                pass
+                            continue
+                    except Exception:
+                        # If time parsing fails, just proceed with normal logic
+                        pass
+
                     # Safe string comparison: "2026-08-20 14:30" <= "2026-08-20 14:35"
                     # This avoids datetime parsing exceptions entirely
                     if reminder_str <= now_str:
@@ -744,56 +1012,105 @@ class Board:
             from src.core.models import Note
             note_obj = Note.from_dict(note_data)
 
-            # v2.8.0: SYNCHRONOUS DB UPDATE (must complete before notification)
-            # Clear reminder_datetime (consume the reminder) and mark as triggered
-            # This CRITICAL: prevents reminder from triggering multiple times
+            # v2.9.25: CRITICAL — Immediately clamp alarm state to prevent repeat triggers
+            # This MUST happen BEFORE showing any UI/dialog to prevent scheduler loop from firing same alarm again
+            # Step 1: Lock alarm by setting reminder_triggered = 1 in database immediately
             try:
-                update_note(note_data["id"], reminder_datetime=None, reminder_triggered=True)
-                # Flush/sync the database to ensure write completes before next check cycle
-                from src.core.database import get_db_connection
-                conn = get_db_connection()
-                conn.commit()
-                conn.close()
-            except Exception:
-                pass  # Silently fail on DB update error
+                update_note(note_data["id"], reminder_triggered=True)
+                log.info(f"[v2.9.25] Alarm state clamped: reminder_triggered=1 for {note_data['id']}")
+            except Exception as e:
+                log.warning(f"[v2.9.25] Failed to clamp alarm state: {e}")
 
-            # v2.8.1: Show Windows native notification (not Tkinter in-app toast)
+            # v2.9.24: IMMEDIATE UI REFRESH — refresh board BEFORE showing dialog
+            # This ensures task moves to Index 0 and red border shows immediately
+            try:
+                self._load_notes()
+            except Exception:
+                pass  # Silently fail if refresh doesn't work
+
+            # v2.9.8: Show custom dialog with full button support (thread-safe routing)
             # This completely avoids GUI freeze by using OS notification system
             def show_native_notification():
                 try:
                     from src.services.notification import get_notification_service
                     service = get_notification_service()
 
-                    # Create callback for when user clicks notification
+                    # v2.9.13: Store note_id on root for dialog to access
+                    # This allows dialog callbacks to use synchronous DB commit
+                    self.root._current_reminder_note_id = note_data["id"]
+
+                    # v2.9.14: Callback for [Open] button — put command in queue for main thread
+                    # Background thread sends command; main thread executes it
                     def on_notification_click():
                         try:
-                            self._on_note_reminder_open(note_obj)
+                            if self.command_queue:
+                                self.command_queue.put({
+                                    "action": "open_note",
+                                    "note_id": note_data["id"]
+                                })
                         except Exception:
                             pass
 
-                    # Show Windows native toast notification
+                    # v2.9.14: Callback for [Dismiss] button — put command in queue for main thread
+                    def on_dismiss():
+                        try:
+                            if self.command_queue:
+                                self.command_queue.put({
+                                    "action": "dismiss_note",
+                                    "note_id": note_data["id"]
+                                })
+                        except Exception:
+                            pass
+
+                    # v2.9.14: Callback for [Snooze 5m] button — put command in queue for main thread
+                    def on_snooze():
+                        try:
+                            if self.command_queue:
+                                self.command_queue.put({
+                                    "action": "snooze_note",
+                                    "note_id": note_data["id"]
+                                })
+                        except Exception:
+                            pass
+
+                    # v2.9.8: Callback to stop alarm sound (placeholder for audio player integration)
+                    def stop_alarm():
+                        try:
+                            # If audio player exists, stop it
+                            pass
+                        except Exception:
+                            pass
+
+                    # v2.9.26: Get custom snooze duration from settings
+                    snooze_mins = 5  # Default
+                    if self.settings:
+                        snooze_mins = self.settings.get("snooze_duration_minutes", 5) if hasattr(self.settings, 'get') else 5
+
+                    # Show Windows native toast notification with dialog + callbacks
                     service.show_reminder_notification(
                         note_title=note_obj.title[:50],
                         note_content=note_obj.content[:100] if note_obj.content else "Reminder triggered",
                         on_click=on_notification_click,
-                        duration=8
+                        on_dismiss=on_dismiss,
+                        on_snooze=on_snooze,
+                        stop_alarm=stop_alarm,
+                        parent_root=self.root,  # v2.9.8: Thread-safe dialog routing
+                        duration=8,
+                        snooze_duration_minutes=snooze_mins  # v2.9.26
                     )
 
                     # Also play notification sound
                     service.play_notification_sound()
 
-                    # Refresh note cards to update UI state
-                    try:
-                        self._load_notes()
-                    except Exception:
-                        pass
+                    # v2.9.24: Board already refreshed immediately before dialog showed
+                    # No need to refresh again here
                 except Exception:
                     pass  # Silently fail to avoid blocking UI
 
-            # Run notification in background to avoid any UI blocking
-            import threading
-            thread = threading.Thread(target=show_native_notification, daemon=True)
-            thread.start()
+            # v2.9.29: CRITICAL FIX — Run notification on main thread via after()
+            # NOT in daemon thread! Tkinter is single-threaded; daemon threads cause deadlock with grab_set()
+            # root.after(0, ...) ensures notification runs on main thread after current event completes
+            self.root.after(0, show_native_notification)
 
         except Exception:
             pass  # Silently fail to avoid blocking UI
@@ -852,6 +1169,58 @@ class Board:
             self._show_note_in_view(note)
         except Exception:
             pass
+
+    def _highlight_and_scroll_to_note(self, note):
+        """v2.9.13: Highlight the note task and auto-scroll canvas to show it
+
+        After Open button is clicked and main window is brought to foreground,
+        scroll canvas to top and highlight the opened note for visual feedback.
+        """
+        try:
+            # Auto-scroll canvas to top to show the task
+            if hasattr(self, 'canvas'):
+                self.canvas.yview_moveto(0.0)
+
+            # Find and highlight the note card (if it exists)
+            if hasattr(self, 'note_cards') and note.id in self.note_cards:
+                card = self.note_cards[note.id]
+                # Briefly highlight the card with a flash effect (optional)
+                try:
+                    original_bg = card.cget("bg")
+                    # Flash the card background to highlight it
+                    card.config(bg="#FFFACD")  # Light yellow highlight
+                    self.root.after(200, lambda: card.config(bg=original_bg))
+                except Exception:
+                    pass
+
+        except Exception as e:
+            pass  # Silently fail
+
+    def _scroll_to_note_by_id(self, note_id):
+        """v2.9.17: Scroll canvas to show note by ID (fail-safe, no external object required)
+
+        Simpler version that only takes note_id and scrolls to it.
+        No dependency on note object — fresh lookup from UI state.
+        """
+        try:
+            # Auto-scroll canvas to top to show the opened task
+            if hasattr(self, 'canvas'):
+                self.canvas.yview_moveto(0.0)
+                log.debug(f"[v2.9.17] Scrolled canvas to top for note {note_id}")
+
+            # Find and highlight the note card by ID
+            if hasattr(self, 'note_cards') and note_id in self.note_cards:
+                card = self.note_cards[note_id]
+                try:
+                    original_bg = card.cget("bg")
+                    # Flash the card background to highlight it
+                    card.config(bg="#FFFACD")  # Light yellow highlight
+                    self.root.after(200, lambda: card.config(bg=original_bg))
+                    log.debug(f"[v2.9.17] Highlighted note card {note_id}")
+                except Exception:
+                    pass
+        except Exception as e:
+            log.debug(f"[v2.9.17] Scroll to note by ID failed: {e}")
 
     def _check_notification_queue(self):
         """v2.8.1: Check notification queue and display custom overlay toasts

@@ -1,0 +1,191 @@
+﻿py : 113 INFO: PyInstaller: 6.22.0, contrib hooks: 2026.6
+At line:1 char:348
++ ... \OpenCode\Noted Planing and Record"; py build_windows.py 2>&1 | Tee-O ...
++                                          ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (113 INFO: PyIns...b hooks: 2026.6:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+114 INFO: Python: 3.14.7
+136 INFO: Platform: Windows-11-10.0.26220-SP0
+136 INFO: Python environment: C:\Users\passa\AppData\Local\Python\pythoncore-3.14-64
+136 INFO: wrote D:\AI\OpenCode\Noted Planing and Record\QuickNote_v2.9.22.spec
+137 INFO: Removing temporary files and cleaning cache in C:\Users\passa\AppData\Local\pyinstaller
+1057 INFO: Module search paths (PYTHONPATH):
+['D:\\AI\\OpenCode\\Noted Planing and Record',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\python314.zip',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\DLLs',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\win32',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\pythonwin',
+ 'D:\\AI\\OpenCode\\Noted Planing and Record']
+1383 INFO: Appending 'datas' from .spec
+1405 INFO: checking Analysis
+1405 INFO: Building Analysis because Analysis-00.toc is non existent
+1405 INFO: Looking for Python shared library...
+1405 INFO: Using Python shared library: C:\Users\passa\AppData\Local\Python\pythoncore-3.14-64\python314.dll
+1405 INFO: Running Analysis Analysis-00.toc
+1405 INFO: Target bytecode optimization level: 0
+1406 INFO: Initializing module dependency graph...
+1406 INFO: Initializing module graph hook caches...
+1417 INFO: Analyzing modules for base_library.zip ...
+4605 INFO: Processing standard module hook 'hook-math.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+4618 INFO: Processing standard module hook 'hook-heapq.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+4977 INFO: Processing standard module hook 'hook-encodings.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+6838 INFO: Processing standard module hook 'hook-difflib.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+6952 INFO: Processing standard module hook 'hook-pickle.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+8433 INFO: Caching module dependency graph...
+8478 INFO: Analyzing D:\AI\OpenCode\Noted Planing and Record\main.py
+8548 INFO: Processing standard module hook 'hook-sysconfig.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+8553 INFO: Processing standard module hook 'hook-_ctypes.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+8585 INFO: Processing pre-find-module-path hook 'hook-tkinter.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pytho
+ncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+8586 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+8980 INFO: Processing standard module hook 'hook-_tkinter.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+C:\Users\passa\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\tkcalendar\calendar_.py:221: SyntaxWarning: 
+"\ " is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\ "? A raw string is 
+also an option.
+  font = kw.pop("font", "Liberation\ Sans 9")
+9096 INFO: Processing standard module hook 'hook-babel.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+9244 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\passa\\AppData\\Local\\P
+ython\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+9245 INFO: SetuptoolsInfo: initializing cached setuptools info...
+9858 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncor
+e-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+9967 INFO: Processing standard module hook 'hook-sqlite3.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+10356 INFO: Processing standard module hook 'hook-platform.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+10553 INFO: Processing standard module hook 'hook-pystray.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncor
+e-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+10960 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\
+pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+12044 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pythonc
+ore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+C:\Users\passa\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\pystray\_util\gtk.py:53: SyntaxWarning: 
+'return' in a 'finally' block
+  return False
+12063 INFO: Processing standard module hook 'hook-PIL.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12237 INFO: Processing standard module hook 'hook-PIL.Image.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12678 INFO: Processing standard module hook 'hook-xml.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12700 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+12906 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+13452 INFO: Processing standard module hook 'hook-pynput.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore
+-3.14-64\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+13837 INFO: Analyzing hidden import 'tkcalendar.__main__'
+13840 INFO: Analyzing hidden import 'babel.languages'
+13843 INFO: Analyzing hidden import 'babel.lists'
+13845 INFO: Analyzing hidden import 'babel.messages'
+13900 INFO: Analyzing hidden import 'babel.messages.extract'
+13935 INFO: Analyzing hidden import 'babel.messages.frontend'
+14129 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pyth
+oncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14130 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 
+'setuptools._vendor.tomli'!
+14136 INFO: Processing standard module hook 'hook-setuptools.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+14151 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\
+pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14182 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pyt
+honcore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14183 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 
+'setuptools._vendor.jaraco'!
+14196 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\passa\\AppData\\Local\\Pyt
+hon\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14197 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 
+'setuptools._vendor.more_itertools'!
+14352 INFO: Processing standard module hook 'hook-_osx_support.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+14369 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\
+pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14713 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+14714 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\passa\\AppData\\Local
+\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14723 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\
+pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14723 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 
+'setuptools._vendor.backports'!
+15830 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\passa\\AppData\\Local\\Python\\pyth
+oncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15830 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 
+'setuptools._vendor.wheel'!
+15910 INFO: Analyzing hidden import 'babel.support'
+15935 INFO: Analyzing hidden import 'babel.units'
+15941 INFO: Processing module hooks (post-graph stage)...
+16185 WARNING: Hidden import "tzdata" not found!
+16525 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+16951 INFO: Processing standard module hook 'hook-webbrowser.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+17332 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+17776 INFO: Processing standard module hook 'hook-_tkinter.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks'
+17794 INFO: Performing binary vs. data reclassification (1135 entries)
+17892 INFO: Looking for ctypes DLLs
+17952 INFO: Analyzing run-time hooks ...
+17955 INFO: Including run-time hook 'pyi_rth_inspect.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+17958 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+17960 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+17962 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+17964 INFO: Including run-time hook 'pyi_rth__tkinter.py' from 
+'C:\\Users\\passa\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+17992 INFO: Creating base_library.zip...
+18011 INFO: Looking for dynamic libraries
+18430 INFO: Extra DLL search directories (AddDllDirectory): []
+18430 INFO: Extra DLL search directories (PATH): []
+18691 INFO: Warnings written to D:\AI\OpenCode\Noted Planing and 
+Record\build\QuickNote_v2.9.22\warn-QuickNote_v2.9.22.txt
+18732 INFO: Graph cross-reference written to D:\AI\OpenCode\Noted Planing and 
+Record\build\QuickNote_v2.9.22\xref-QuickNote_v2.9.22.html
+18785 INFO: checking PYZ
+18785 INFO: Building PYZ because PYZ-00.toc is non existent
+18785 INFO: Building PYZ (ZlibArchive) D:\AI\OpenCode\Noted Planing and Record\build\QuickNote_v2.9.22\PYZ-00.pyz
+19069 INFO: Building PYZ (ZlibArchive) D:\AI\OpenCode\Noted Planing and Record\build\QuickNote_v2.9.22\PYZ-00.pyz 
+completed successfully.
+19092 INFO: checking PKG
+19092 INFO: Building PKG because PKG-00.toc is non existent
+19092 INFO: Building PKG (CArchive) QuickNote_v2.9.22.pkg
+22119 INFO: Building PKG (CArchive) QuickNote_v2.9.22.pkg completed successfully.
+22137 INFO: Bootloader C:\Users\passa\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\PyInstaller\bootloader\
+Windows-64bit-intel\runw.exe
+22137 INFO: checking EXE
+22137 INFO: Building EXE because EXE-00.toc is non existent
+22137 INFO: Building EXE from EXE-00.toc
+22137 INFO: Copying bootloader EXE to D:\AI\OpenCode\Noted Planing and Record\dist\QuickNote_v2.9.22.exe
+22178 INFO: Copying icon to EXE
+22214 INFO: Copying 0 resources to EXE
+22214 INFO: Embedding manifest in EXE
+22250 INFO: Appending PKG archive to EXE
+22311 INFO: Fixing EXE headers
+22674 INFO: Building EXE from EXE-00.toc completed successfully.
+22694 INFO: Build complete! The results are available in: D:\AI\OpenCode\Noted Planing and Record\dist
+[OK] ลบ build artifacts
+[!] ไอคอนไม่พบที่ assets/quicknote.ico — ข้ามไป
+[>] Building .exe...
+[>] C:\Users\passa\AppData\Local\Python\pythoncore-3.14-64\python.exe -m PyInstaller --onefile --noconfirm --clean --name QuickNote_v2.9.22 --hidden-import=src.ui.settings_window --hidden-import=src.ui.board --hidden-import=src.ui.titlebar --hidden-import=src.ui.note_card --hidden-import=src.ui.theme --hidden-import=src.ui.custom_toast --hidden-import=src.ui.reminder_dialog --hidden-import=src.core.database --hidden-import=src.core.models --hidden-import=src.core.settings --hidden-import=src.services.notification --hidden-import=src.services.notification_queue --hidden-import=src.services.tray_service --hidden-import=src.services.google_tasks --hidden-import=src.platform.tray --hidden-import=src.platform.hotkey --hidden-import=win10toast_click --collect-all=tkcalendar --collect-all=babel --noconsole D:\AI\OpenCode\Noted Planing and Record\main.py
+
+[/] .exe เสร็จแล้ว: D:\AI\OpenCode\Noted Planing and Record\dist\QuickNote_v2.9.22.exe  (32.7 MB)
+[!] Inno Setup ไม่พบ — ข้ามการสร้าง installer
+    ติดตั้ง Inno Setup จาก: https://jrsoftware.org/isinfo.php

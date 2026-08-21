@@ -53,10 +53,12 @@ class WindowsNotificationService:
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
                                   on_click=None, on_snooze=None, on_dismiss=None,
-                                  stop_alarm=None, parent_root=None, duration: int = 8) -> bool:
-        """Show Windows native reminder notification with click callback (v2.9.7)
+                                  stop_alarm=None, parent_root=None, duration: int = 8,
+                                  snooze_duration_minutes: int = 5) -> bool:  # v2.9.26: Custom snooze duration
+        """Show Windows native reminder notification with click callback (v2.9.8)
 
-        v2.9.7: Priority chain with unblockable custom dialog at Priority -1
+        v2.9.8: Thread-safe custom dialog routing via root.after(0, ...) to main thread
+        v2.9.26: Support custom snooze duration
 
         Args:
             note_title: Title of the note (notification title)
@@ -67,30 +69,46 @@ class WindowsNotificationService:
             stop_alarm: Callback to stop alarm sound
             parent_root: Parent Tk root window for dialog
             duration: Duration in seconds to show notification (default 8)
+            snooze_duration_minutes: Custom snooze duration in minutes (v2.9.26, default 5)
 
         Returns True if notification shown successfully, False otherwise
         """
         try:
             self.on_click_callback = on_click
 
-            # v2.9.7: Priority -1: Unblockable Custom Dialog (ULTIMATE OPTION)
+            # v2.9.8: Priority -1: Unblockable Custom Dialog (THREAD-SAFE ROUTING)
             if parent_root:
                 try:
                     from ..ui.unblockable_dialog import UnblockableCustomDialog
-                    dialog = UnblockableCustomDialog(
-                        parent_root,
-                        title=note_title,
-                        message=note_content if note_content else "Reminder triggered",
-                        on_dismiss=on_dismiss,
-                        on_snooze=on_snooze,
-                        on_open=on_click,
-                        stop_alarm=stop_alarm
-                    )
-                    dialog.center_on_screen()
-                    log.info("[Notification] Unblockable custom dialog shown")
+
+                    def show_dialog_safely():
+                        """Route dialog creation to main Tkinter thread (thread-safe)"""
+                        try:
+                            # v2.9.9: Pass parent_board for forced UI re-render on button clicks
+                            parent_board = getattr(parent_root, '_board', None)
+
+                            dialog = UnblockableCustomDialog(
+                                parent_root,
+                                title=note_title,
+                                message=note_content if note_content else "Reminder triggered",
+                                on_dismiss=on_dismiss,
+                                on_snooze=on_snooze,
+                                on_open=on_click,
+                                stop_alarm=stop_alarm,
+                                parent_board=parent_board,
+                                snooze_duration_minutes=snooze_duration_minutes  # v2.9.26
+                            )
+                            log.info("[Notification] Unblockable custom dialog shown (thread-safe, bottom-right positioned)")
+                        except Exception as e:
+                            log.warning(f"[Notification] Dialog creation failed in main thread: {e}")
+                            raise
+
+                    # v2.9.8: Use root.after(0, ...) to safely route to main Tkinter thread
+                    # This prevents threading violation when background thread tries to create Toplevel
+                    parent_root.after(0, show_dialog_safely)
                     return True
                 except Exception as e:
-                    log.debug(f"[Notification] Unblockable dialog failed: {e}")
+                    log.debug(f"[Notification] Unblockable dialog routing failed: {e}")
 
             # v2.9.6: Priority 0: Win32 Native MessageBox (NUCLEAR OPTION - unblockable)
             try:

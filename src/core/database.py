@@ -11,11 +11,24 @@ APP_DIR = Path.home() / ".quicknote"
 DB_FILE = APP_DIR / "notes.db"
 
 
+def _get_db_connection():
+    """v2.9.22: Create SQLite connection with WAL mode enabled for thread-safe concurrent access
+
+    WAL (Write-Ahead Logging) allows multiple threads to read while one thread writes,
+    preventing deadlocks between Background Scheduler Thread and Main GUI Thread.
+    """
+    conn = sqlite3.connect(DB_FILE, timeout=10.0)  # 10-second timeout for busy database
+    conn.execute("PRAGMA journal_mode=WAL;")        # Enable WAL mode
+    conn.execute("PRAGMA synchronous=NORMAL;")       # Balance safety and performance
+    conn.execute("PRAGMA busy_timeout=5000;")         # 5-second busy timeout
+    return conn
+
+
 def init_db() -> None:
     """สร้างโฟลเดอร์แอป + ตาราง notes ถ้ายังไม่มี"""
     APP_DIR.mkdir(exist_ok=True)
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     c = conn.cursor()
 
     c.execute("""
@@ -30,7 +43,8 @@ def init_db() -> None:
             priority TEXT DEFAULT 'none' CHECK(priority IN ('none', 'low', 'medium', 'high')),
             reminder_datetime TEXT,
             reminder_triggered BOOLEAN DEFAULT 0,
-            is_pinned BOOLEAN DEFAULT 0
+            is_pinned BOOLEAN DEFAULT 0,
+            last_dismissed_at TIMESTAMP
         )
     """)
 
@@ -42,7 +56,7 @@ def init_db() -> None:
 
 def _migrate_db_schema() -> None:
     """ตรวจและเพิ่มคอลัมน์ใหม่สำหรับ v1.3.0+ (priority, reminders, pinning)"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     c = conn.cursor()
 
     try:
@@ -60,6 +74,9 @@ def _migrate_db_schema() -> None:
         if "is_pinned" not in columns:
             # v1.5.0: Add pinning support
             c.execute("ALTER TABLE notes ADD COLUMN is_pinned BOOLEAN DEFAULT 0")
+        if "last_dismissed_at" not in columns:
+            # v2.9.28: Track when note was last dismissed (for pinning at top)
+            c.execute("ALTER TABLE notes ADD COLUMN last_dismissed_at TIMESTAMP")
 
         conn.commit()
     except sqlite3.OperationalError as e:
@@ -72,7 +89,7 @@ def _migrate_db_schema() -> None:
 def create_note(title: str, content: str = "") -> str:
     """เพิ่มโน้ตใหม่ — คืนค่า id"""
     note_id = uuid.uuid4().hex
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     c = conn.cursor()
 
     c.execute("""
@@ -87,7 +104,7 @@ def create_note(title: str, content: str = "") -> str:
 
 def get_all_notes() -> list[dict]:
     """อ่านทุกโน้ต คืนเป็น list of dict"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
@@ -100,24 +117,40 @@ def get_all_notes() -> list[dict]:
 
 def get_notes_by_status(status: str) -> list[dict]:
     """อ่านโน้ตตามสถานะ (active/completed) — v2.8.2: Absolute sort by newest triggered reminder"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # v2.8.2: Sort by reminder_triggered DESC, then by reminder_datetime DESC (newest triggered on top)
-    # Then pinned, priority, created_at for stable secondary ordering
+    # v2.9.26: Sort to put TRIGGERED ALARMS (reminder_triggered = 1 AND datetime not NULL) at top
+    # v2.9.28: Also sort recently dismissed notes to top (last_dismissed_at recent)
+    # Triggered alarm = reminder_triggered = 1 AND reminder_datetime IS NOT NULL
     c.execute("""
         SELECT * FROM notes
         WHERE status = ?
-        ORDER BY reminder_triggered DESC,
-                 reminder_datetime DESC,
+        ORDER BY
+                 -- CRITICAL: Recently triggered alarms with datetime go to top (Index 0)
+                 -- v2.9.26: Must check both triggered=1 AND datetime is NOT NULL
+                 CASE
+                   WHEN reminder_triggered = 1 AND reminder_datetime IS NOT NULL
+                   THEN 0  -- Just triggered with datetime: highest priority
+                   ELSE 1  -- Not triggered or datetime cleared: lower priority
+                 END,
+                 -- v2.9.28: Secondary: Recently dismissed notes stay at top (pinned to top for quick access)
+                 -- Use last_dismissed_at timestamp (most recent first) for recently dismissed notes
+                 CASE WHEN last_dismissed_at IS NOT NULL THEN 0 ELSE 1 END,
+                 last_dismissed_at DESC,
+                 -- Tertiary sort: by reminder time (soonest first)
+                 reminder_datetime ASC,
+                 -- Quaternary: pinned notes
                  is_pinned DESC,
+                 -- Quinary: priority
                  CASE priority
                    WHEN 'high' THEN 0
                    WHEN 'medium' THEN 1
                    WHEN 'low' THEN 2
                    ELSE 3
                  END,
+                 -- Final: creation time (newest first)
                  created_at DESC
     """, (status,))
     notes = [dict(row) for row in c.fetchall()]
@@ -132,9 +165,11 @@ def update_note(note_id: str, title: Optional[str] = None,
                 reminder_datetime: Optional[str] = None,
                 reminder_triggered: Optional[bool] = None,
                 is_pinned: Optional[bool] = None,
-                clear_reminder: bool = False) -> None:
-    """อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (v2.8.3: added clear_reminder flag)"""
-    conn = sqlite3.connect(DB_FILE)
+                clear_reminder: bool = False,
+                clear_reminder_datetime: bool = False,
+                mark_dismissed: bool = False) -> None:  # v2.9.28: Mark note as recently dismissed
+    """อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (v2.8.3: added clear_reminder flag, v2.9.26: clear_reminder_datetime, v2.9.28: mark_dismissed)"""
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     c = conn.cursor()
 
     updates = []
@@ -159,9 +194,12 @@ def update_note(note_id: str, title: Optional[str] = None,
         updates.append("priority = ?")
         params.append(priority)
     # v2.8.3: Handle reminder_datetime clearing
+    # v2.9.26: Added clear_reminder_datetime for selective clearing (keeps reminder_triggered state)
     if clear_reminder:
         updates.append("reminder_datetime = NULL")
         updates.append("reminder_triggered = 0")
+    elif clear_reminder_datetime:
+        updates.append("reminder_datetime = NULL")
     elif reminder_datetime is not None:
         updates.append("reminder_datetime = ?")
         params.append(reminder_datetime)
@@ -172,6 +210,11 @@ def update_note(note_id: str, title: Optional[str] = None,
         # v1.5.0: Add pinning support
         updates.append("is_pinned = ?")
         params.append(is_pinned)
+
+    # v2.9.28: Mark note as recently dismissed (for pinning at top of board)
+    if mark_dismissed:
+        updates.append("last_dismissed_at = ?")
+        params.append(datetime.now().isoformat())
 
     if updates:
         params.append(note_id)
@@ -185,7 +228,7 @@ def update_note(note_id: str, title: Optional[str] = None,
 def update_note_status_only(note_id: str, status: str,
                            reminder_triggered: Optional[bool] = None) -> None:
     """อัปเดตสถานะของโน้ตเท่านั้น (v1.3.9: prevent title/content corruption on status change)"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     c = conn.cursor()
 
     updates = []
@@ -215,7 +258,7 @@ def update_note_status_only(note_id: str, status: str,
 
 def delete_note(note_id: str) -> None:
     """ลบโน้ต"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     c = conn.cursor()
     c.execute("DELETE FROM notes WHERE id = ?", (note_id,))
     conn.commit()
@@ -224,7 +267,7 @@ def delete_note(note_id: str) -> None:
 
 def get_note(note_id: str) -> Optional[dict]:
     """อ่านโน้ตเดียว"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
@@ -247,7 +290,7 @@ def get_next_due_reminder() -> Optional[str]:
     """
     try:
         from datetime import datetime
-        conn = sqlite3.connect(DB_FILE)
+        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
         c = conn.cursor()
 
         # Get current time in ISO format (YYYY-MM-DD HH:MM)
@@ -281,7 +324,7 @@ def sanitize_reminders() -> None:
     Sets reminder_datetime = NULL for any corrupted values
     """
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
         c = conn.cursor()
 
         # Get all reminders
@@ -354,7 +397,7 @@ def restore_database(backup_path: str) -> bool:
 
         # Close any open connections (safety measure)
         try:
-            conn = sqlite3.connect(DB_FILE)
+            conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
             conn.close()
         except Exception:
             pass
