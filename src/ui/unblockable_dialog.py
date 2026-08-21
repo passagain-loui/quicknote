@@ -185,29 +185,30 @@ class UnblockableCustomDialog(tk.Toplevel):
             pass  # Dialog may have been destroyed
 
     def _position_bottom_right(self):
-        """v2.9.31: Position dialog at bottom-right corner as Windows toast notification
+        """v2.9.33: Position dialog at bottom-right corner with elevated margin (1 inch clearance)
 
-        Toast positioning:
+        Toast positioning (v2.9.33 elevated):
         - Places dialog in bottom-right corner of screen
-        - Leaves 20px margin from right edge + 60px from bottom (above taskbar)
-        - Classic Windows notification toast appearance
+        - Leaves 20px margin from right edge + 160px from bottom (well above taskbar)
+        - Elevated positioning prevents taskbar overlap on various screen sizes
+        - Classic Windows notification toast appearance with extra clearance
         """
         try:
             self.update_idletasks()
-            width = self.winfo_width() or 320
+            width = self.winfo_width() or 340
             height = self.winfo_height() or 180
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
 
-            # Calculate position: bottom-right with margins
-            # 20px from right edge, 60px from bottom (taskbar clearance)
-            x = screen_width - width - 20
-            y = screen_height - height - 60
+            # Calculate position: bottom-right with elevated margin
+            # 25px from right edge, 160px from bottom (elevated ~1 inch above taskbar)
+            x = screen_width - width - 25
+            y = screen_height - height - 160
 
             self.geometry(f"{width}x{height}+{x}+{y}")
-            log.debug(f"[UnblockableDialog] Positioned at bottom-right: ({x}, {y})")
+            log.debug(f"[UnblockableDialog] Positioned at elevated bottom-right: ({x}, {y})")
         except Exception as e:
-            log.warning(f"[UnblockableDialog] Failed to position at bottom-right: {e}")
+            log.warning(f"[UnblockableDialog] Failed to position at elevated bottom-right: {e}")
 
     def _force_to_foreground(self):
         """Force dialog to foreground using Win32 API (v2.9.7)"""
