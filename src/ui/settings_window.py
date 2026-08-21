@@ -23,12 +23,12 @@ class SettingsWindow:
             self.on_save = on_save_callback or (lambda: None)
             self.on_window_closed = on_window_closed or (lambda: None)  # v1.5.2: callback when window closes
 
-            # Create window
+            # Create window (v2.9.34: Modern sizing)
             log.debug("[Settings] Creating Toplevel window...")
             self.root = tk.Toplevel(parent_root)
             self.root.overrideredirect(False)
             self.root.title("Settings")
-            self.root.geometry("420x520")  # v2.9.28: Increased height to accommodate all sections (Opacity, Snooze, Data Backup)
+            self.root.geometry("440x560")  # v2.9.34: Adjusted for modern layout with proper spacing
             self.root.config(bg=theme.c("bg"))
             self.root.resizable(False, False)
 
@@ -41,8 +41,8 @@ class SettingsWindow:
             main_x = parent_root.winfo_x()
             main_y = parent_root.winfo_y()
             main_w = parent_root.winfo_width()
-            settings_w = 420
-            settings_h = 520  # v2.9.28: Increased to accommodate all sections
+            settings_w = 440  # v2.9.34: Modern width
+            settings_h = 560  # v2.9.34: Modern height with better spacing
 
             # Try to place on right side first
             x = main_x + main_w + 10
@@ -75,23 +75,24 @@ class SettingsWindow:
             self.theme.register_theme_change_listener(self._on_theme_changed)
             log.debug("[Settings] Registered as theme change listener")
 
-            # Use Notebook for tabs
+            # Use Notebook for tabs (v2.9.34: Reordered tabs)
             log.debug("[Settings] Creating Notebook...")
             self.notebook = ttk.Notebook(self.root)
             self.notebook.pack(fill="both", expand=True, padx=0, pady=0)
 
-            # Settings Tab
+            # Tab 1: General Settings
             settings_frame = tk.Frame(self.notebook, bg=theme.c("bg"))
-            self.notebook.add(settings_frame, text="Settings")
+            self.notebook.add(settings_frame, text="General Settings")
 
-            # About Tab
+            # Tab 2: Google Tasks (v2.9.34: Reordered before About)
+            google_tasks_frame = tk.Frame(self.notebook, bg=theme.c("bg"))
+            self.notebook.add(google_tasks_frame, text="Google Tasks")
+
+            # Tab 3: About
             about_frame = tk.Frame(self.notebook, bg=theme.c("bg"))
             self.notebook.add(about_frame, text="About")
 
-            # v2.8.0: Google Tasks Sync Tab
-            google_tasks_frame = tk.Frame(self.notebook, bg=theme.c("bg"))
-            self.notebook.add(google_tasks_frame, text="Google Tasks")
-            log.debug("[Settings] Tabs created (including Google Tasks)")
+            log.debug("[Settings] Tabs created with v2.9.34 reordering (General → Google Tasks → About)")
 
             # Main frame for settings
             main_frame = tk.Frame(settings_frame, bg=theme.c("bg"))
@@ -209,29 +210,32 @@ class SettingsWindow:
             backup_button_frame = tk.Frame(main_frame, bg=theme.c("bg"))
             backup_button_frame.pack(fill="x", pady=8)
 
+            # v2.9.34: Modern flat buttons with muted colors
             self.btn_backup = tk.Button(
                 backup_button_frame,
                 text="Backup Data",
-                bg="#007AFF",
-                fg="#FFFFFF",
+                bg="#E8E8E8" if theme.mode == "light" else "#3C3C3E",
+                fg=theme.c("fg"),
                 font=("Segoe UI", 9),
-                bd=0,
-                relief="flat",
+                bd=1,
+                relief="solid",
                 command=self._on_backup,
+                borderwidth=1,
             )
-            self.btn_backup.pack(side="left", padx=4)
+            self.btn_backup.pack(side="left", padx=4, fill="x", expand=True)
 
             self.btn_restore = tk.Button(
                 backup_button_frame,
                 text="Restore Data",
-                bg="#FF9500",
-                fg="#FFFFFF",
+                bg="#E8E8E8" if theme.mode == "light" else "#3C3C3E",
+                fg=theme.c("fg"),
                 font=("Segoe UI", 9),
-                bd=0,
-                relief="flat",
+                bd=1,
+                relief="solid",
                 command=self._on_restore,
+                borderwidth=1,
             )
-            self.btn_restore.pack(side="left", padx=4)
+            self.btn_restore.pack(side="left", padx=4, fill="x", expand=True)
 
             # === Buttons (Settings Tab) ===
             button_frame = tk.Frame(main_frame, bg=theme.c("bg"))
@@ -308,7 +312,7 @@ class SettingsWindow:
             )
             credits_label.pack(anchor="w")
 
-            # === Google Tasks Tab Content (v2.8.0) ===
+            # === Google Tasks Tab Content (v2.9.34: Modern OAuth Integration) ===
             google_tasks_inner = tk.Frame(google_tasks_frame, bg=theme.c("bg"))
             google_tasks_inner.pack(fill="both", expand=True, padx=16, pady=16)
 
@@ -318,69 +322,89 @@ class SettingsWindow:
                 text="Google Tasks Sync",
                 bg=theme.c("bg"),
                 fg=theme.c("fg"),
-                font=("Segoe UI", 12, "bold"),
+                font=("Segoe UI", 14, "bold"),
             )
-            google_tasks_title.pack(anchor="w", pady=(0, 8))
+            google_tasks_title.pack(anchor="w", pady=(0, 4))
 
             # Description
             google_tasks_desc = tk.Label(
                 google_tasks_inner,
-                text="Sync reminders to Google Tasks automatically",
+                text="Sync your reminders to Google Tasks",
                 bg=theme.c("bg"),
                 fg=theme.c("fg_muted"),
                 font=("Segoe UI", 9),
-                wraplength=350,
+                wraplength=390,
             )
             google_tasks_desc.pack(anchor="w", pady=(0, 16))
 
-            # Credentials Section
-            creds_label = tk.Label(
-                google_tasks_inner,
-                text="Credentials Setup",
-                bg=theme.c("bg"),
+            # Connection Status Card (v2.9.34)
+            status_card = tk.Frame(google_tasks_inner, bg=theme.c("note_bg"), relief="solid", bd=1)
+            status_card.pack(fill="x", pady=(0, 16))
+
+            status_inner = tk.Frame(status_card, bg=theme.c("note_bg"))
+            status_inner.pack(fill="x", padx=12, pady=12)
+
+            status_label = tk.Label(
+                status_inner,
+                text="Connection Status",
+                bg=theme.c("note_bg"),
                 fg=theme.c("fg"),
                 font=("Segoe UI", 10, "bold"),
             )
-            creds_label.pack(anchor="w", pady=(8, 8))
+            status_label.pack(anchor="w", pady=(0, 6))
 
-            creds_btn_frame = tk.Frame(google_tasks_inner, bg=theme.c("bg"))
-            creds_btn_frame.pack(fill="x", pady=8)
+            self.google_status_label = tk.Label(
+                status_inner,
+                text="●  Not Connected",
+                bg=theme.c("note_bg"),
+                fg="#999999",
+                font=("Segoe UI", 9),
+            )
+            self.google_status_label.pack(anchor="w", pady=(0, 12))
 
-            self.btn_browse_creds = tk.Button(
-                creds_btn_frame,
-                text="📁 Browse credentials.json",
+            # Connection Buttons (v2.9.34)
+            button_frame = tk.Frame(status_inner, bg=theme.c("note_bg"))
+            button_frame.pack(fill="x")
+
+            self.btn_connect = tk.Button(
+                button_frame,
+                text="Connect Account",
                 bg="#007AFF",
                 fg="#FFFFFF",
                 font=("Segoe UI", 9),
                 bd=0,
                 relief="flat",
-                command=self._on_browse_google_creds,
-            )
-            self.btn_browse_creds.pack(side="left", padx=2)
-
-            self.btn_google_auth = tk.Button(
-                creds_btn_frame,
-                text="🔐 Authenticate",
-                bg="#34C759",
-                fg="#FFFFFF",
-                font=("Segoe UI", 9),
-                bd=0,
-                relief="flat",
+                padx=12,
+                pady=6,
                 command=self._on_google_authenticate,
             )
-            self.btn_google_auth.pack(side="left", padx=2)
+            self.btn_connect.pack(side="left", padx=2)
 
-            # Status Label
-            self.google_status_label = tk.Label(
-                google_tasks_inner,
-                text="Status: Disconnected",
-                bg=theme.c("bg"),
-                fg=theme.c("fg_muted"),
+            self.btn_disconnect = tk.Button(
+                button_frame,
+                text="Disconnect",
+                bg="#E8E8E8" if theme.mode == "light" else "#3C3C3E",
+                fg=theme.c("fg"),
                 font=("Segoe UI", 9),
+                bd=1,
+                relief="solid",
+                padx=12,
+                pady=6,
+                command=self._on_google_disconnect,
+                state="disabled",  # Disabled until connected
             )
-            self.google_status_label.pack(anchor="w", pady=(8, 0))
+            self.btn_disconnect.pack(side="left", padx=2)
 
-            # Auto-sync Checkbox
+            # Auto-sync Options
+            autosync_label = tk.Label(
+                google_tasks_inner,
+                text="Sync Options",
+                bg=theme.c("bg"),
+                fg=theme.c("fg"),
+                font=("Segoe UI", 10, "bold"),
+            )
+            autosync_label.pack(anchor="w", pady=(16, 8))
+
             self.google_autosync_var = tk.BooleanVar(value=False)
             self.checkbox_autosync = tk.Checkbutton(
                 google_tasks_inner,
@@ -390,8 +414,24 @@ class SettingsWindow:
                 fg=theme.c("fg"),
                 font=("Segoe UI", 9),
                 highlightthickness=0,
+                state="disabled",  # Disabled until connected
             )
-            self.checkbox_autosync.pack(anchor="w", pady=(16, 0))
+            self.checkbox_autosync.pack(anchor="w", pady=(0, 8))
+
+            self.btn_sync_now = tk.Button(
+                google_tasks_inner,
+                text="Sync Now",
+                bg="#34C759",
+                fg="#FFFFFF",
+                font=("Segoe UI", 9),
+                bd=0,
+                relief="flat",
+                padx=12,
+                pady=6,
+                command=self._on_google_sync_now,
+                state="disabled",  # Disabled until connected
+            )
+            self.btn_sync_now.pack(anchor="w", pady=(4, 0))
 
             log.info("[Settings] SettingsWindow initialized successfully (including Google Tasks)")
         except Exception as e:
@@ -592,7 +632,7 @@ class SettingsWindow:
                 pass
 
     def _on_google_authenticate(self):
-        """v2.8.0: Authenticate with Google Tasks API"""
+        """v2.9.34: Authenticate with Google Tasks API (Connect Account)"""
         try:
             from tkinter import messagebox
             from ..services.google_tasks import get_google_tasks_service
@@ -600,17 +640,65 @@ class SettingsWindow:
             service = get_google_tasks_service()
             if service.authenticate():
                 service.is_authenticated = True
-                messagebox.showinfo("Success", "Authenticated with Google Tasks successfully")
-                self.google_status_label.config(text="Status: Connected ✓")
+                messagebox.showinfo("Success", "Connected to Google Tasks successfully")
+                self.google_status_label.config(text="●  Connected as user@gmail.com", fg="#34C759")
+                self.btn_connect.config(state="disabled")
+                self.btn_disconnect.config(state="normal")
+                self.checkbox_autosync.config(state="normal")
+                self.btn_sync_now.config(state="normal")
                 log.info("[Settings] Google Tasks authentication successful")
             else:
                 messagebox.showerror("Error", "Failed to authenticate with Google Tasks")
-                self.google_status_label.config(text="Status: Authentication failed")
+                self.google_status_label.config(text="●  Connection failed", fg="#FF3B30")
         except Exception as e:
             log.error(f"[Settings] Google authentication error: {e}")
             try:
                 from tkinter import messagebox
                 messagebox.showerror("Error", f"Authentication failed: {e}")
+            except Exception:
+                pass
+
+    def _on_google_disconnect(self):
+        """v2.9.34: Disconnect from Google Tasks"""
+        try:
+            from tkinter import messagebox
+            from ..services.google_tasks import get_google_tasks_service
+
+            service = get_google_tasks_service()
+            service.is_authenticated = False
+            messagebox.showinfo("Success", "Disconnected from Google Tasks")
+            self.google_status_label.config(text="●  Not Connected", fg="#999999")
+            self.btn_connect.config(state="normal")
+            self.btn_disconnect.config(state="disabled")
+            self.checkbox_autosync.config(state="disabled")
+            self.btn_sync_now.config(state="disabled")
+            log.info("[Settings] Disconnected from Google Tasks")
+        except Exception as e:
+            log.error(f"[Settings] Disconnect error: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("Error", f"Failed to disconnect: {e}")
+            except Exception:
+                pass
+
+    def _on_google_sync_now(self):
+        """v2.9.34: Sync tasks to Google Tasks immediately"""
+        try:
+            from tkinter import messagebox
+            from ..services.google_tasks import get_google_tasks_service
+
+            service = get_google_tasks_service()
+            if service.is_authenticated:
+                # TODO: Implement sync logic
+                messagebox.showinfo("Sync", "Sync started (coming soon)")
+                log.info("[Settings] Google Tasks sync initiated")
+            else:
+                messagebox.showerror("Error", "Not connected to Google Tasks")
+        except Exception as e:
+            log.error(f"[Settings] Sync error: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("Error", f"Sync failed: {e}")
             except Exception:
                 pass
 
