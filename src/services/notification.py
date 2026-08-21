@@ -53,9 +53,9 @@ class WindowsNotificationService:
 
     def show_reminder_notification(self, note_title: str, note_content: str = None,
                                   on_click=None, duration: int = 8) -> bool:
-        """Show Windows native reminder notification with click callback (v2.9.5)
+        """Show Windows native reminder notification with click callback (v2.9.6)
 
-        v2.9.5: Priority chain with System Tray integration for unblockable notifications
+        v2.9.6: Priority chain with Win32 MessageBox as nuclear option
 
         Args:
             note_title: Title of the note (notification title)
@@ -67,6 +67,21 @@ class WindowsNotificationService:
         """
         try:
             self.on_click_callback = on_click
+
+            # v2.9.6: Priority 0: Win32 Native MessageBox (NUCLEAR OPTION - unblockable)
+            try:
+                from .win32_messagebox import get_win32_messagebox_service
+                mb_service = get_win32_messagebox_service()
+                result = mb_service.show_messagebox(
+                    title=note_title,
+                    message=note_content,
+                    on_click=on_click
+                )
+                if result:
+                    log.info("[Notification] Win32 MessageBox shown (nuclear option)")
+                    return True
+            except Exception as e:
+                log.debug(f"[Notification] Win32 MessageBox failed: {e}")
 
             # v2.9.5: Priority 1: Try System Tray Notification (unblockable)
             try:

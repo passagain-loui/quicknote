@@ -410,6 +410,19 @@ class Board:
         # Update scroll region
         self.root.after(100, lambda: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
 
+        # v2.9.6: Auto-scroll to top after loading notes (so user sees reminder task)
+        self.root.after(150, lambda: self._scroll_to_top())
+
+    def _scroll_to_top(self):
+        """v2.9.6: Auto-scroll canvas to top so reminder task is visible"""
+        try:
+            if hasattr(self, 'canvas') and self.canvas.winfo_exists():
+                self.canvas.update_idletasks()
+                self.canvas.yview_moveto(0.0)  # Move to top (0.0 = 0%)
+                log.info("[Board] Scrolled canvas to top")
+        except Exception as e:
+            log.warning(f"[Board] Failed to scroll to top: {e}")
+
     def _on_filter_changed(self, new_filter: str):
         """เมื่อเปลี่ยน filter (Active ↔ Completed)"""
         self.current_filter = new_filter

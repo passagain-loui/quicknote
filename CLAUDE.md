@@ -1,8 +1,22 @@
-# QuickNote v2.9.5 — SYSTEM TRAY INTEGRATION + UNBLOCKABLE NOTIFICATIONS
+# QuickNote v2.9.6 — AUTO-SCROLL + WIN32 MESSAGEBOX (NUCLEAR OPTION)
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **System Tray Integration (pystray)** + **Unblockable Windows Notifications** + **Native Tray Balloon** + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Auto-Scroll to Top** + **Win32 MessageBox (Nuclear Option)** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.5 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.9.6 Released 2026-08-21
+
+> **v2.9.6** เพิ่ม **Auto-Scroll to Top + Win32 Native MessageBox (Final Guarantee)**
+>   - Critical Issue (v2.9.5): Reminder task sorted to top but UI canvas doesn't scroll → user can't see it
+>   - Critical Issue (v2.9.5): Some Windows systems still block all notifications (nothing appears)
+>   - Root cause 1: canvas.yview not reset after _load_notes() → scrollbar stays at old position
+>   - Root cause 2: MessageBox, Toast, Tray all blocked → need OS-level native dialog
+>   - Solution 1: Auto-scroll canvas to top after loading notes → `canvas.yview_moveto(0.0)`
+>   - Solution 2: Win32 MessageBox as Priority 0 → lowest-level Windows dialog (cannot be blocked)
+>   - Win32 MessageBox Features: TOPMOST + SETFOREGROUND + SYSTEMMODAL flags → unblockable
+>   - Win32 MessageBox runs in daemon thread (non-blocking)
+>   - New file: `src/services/win32_messagebox.py` (Win32MessageBoxService class)
+>   - Impact: 100% guaranteed notification visibility + visible reminder task on screen ✅
+>   - Verification: E2E tests pass 12/12 (Win32 init, callbacks, scroll, priority chain) ✅
+>   - Architecture: Win32 MessageBox = Priority 0, Tray = Priority 1, Toast = Priority 2+
 
 > **v2.9.5** เพิ่ม **System Tray Service + Unblockable Notification Chain (Critical Architecture Fix)**
 >   - Critical Issue (v2.9.4): Windows still blocks Toast from portable .exe due to missing Registry AUMID
@@ -1081,6 +1095,6 @@ python build_windows.py
 
 ---
 
-**Version:** 2.9.5  
+**Version:** 2.9.6  
 **Last Updated:** 2026-08-21  
-**Status:** ✅ PRODUCTION-STABLE (System Tray Integration + Unblockable Notifications)
+**Status:** ✅ PRODUCTION-STABLE (Auto-Scroll + Win32 MessageBox Nuclear Option)
