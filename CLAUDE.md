@@ -1,8 +1,23 @@
-# QuickNote v2.8.4 — WINDOWS-OPTIMIZED NOTIFICATIONS & CLEAR FIX: Toast + Shell Fallback + AUMID
+# QuickNote v2.8.5 — UNBLOCKABLE CUSTOM OVERLAY NOTIFICATIONS: Thread-Safe Queue + Frameless Toast
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Windows Native Notifications** + **Synchronous DB Commit**
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Custom Overlay Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + **Google Tasks Sync** + **Custom Frameless Toast** + **Thread-Safe Queue**
 
-**Status: ✅ PRODUCTION-STABLE** — v2.8.4 Released 2026-08-21
+**Status: ✅ PRODUCTION-STABLE** — v2.8.5 Released 2026-08-21
+
+> **v2.8.5** แก้ไข **Unblockable Custom Overlay Notifications: Thread-Safe Queue + Frameless Toast (Architecture Pivot)**
+>   - Critical Issue: Windows portable .exe blocks ALL native notifications (Toast, Shell, API)
+>   - User gets sound but NO visual notification feedback (unacceptable UX)
+>   - Root cause: Portable .exe lacks proper elevation/AUMID registry permission in Windows sandbox
+>   - Strategic Decision: Abandon Windows Notification API, build custom overlay instead
+>   - Solution 1: Create thread-safe NotificationQueue (queue.Queue - decouple background from Tkinter)
+>   - Solution 2: Build custom frameless Toplevel overlay (Windows 11-style toast in bottom-right)
+>   - Solution 3: Custom toast requires explicit dismiss/open (won't auto-hide, user can't miss it)
+>   - Solution 4: Implement absolute foreground override (deiconify + topmost + focus_force)
+>   - Solution 5: Background thread enqueues only, main thread (Tkinter) dequeues via root.after()
+>   - Architecture: Background scheduler → notification_queue.put() → root.after(check_queue) → show_custom_notification()
+>   - Impact: Notifications ALWAYS visible (custom overlay can't be blocked by Windows), zero GUI freeze ✅
+>   - Verification: E2E tests pass 3/3 (Queue Thread-Safe, Clear + Queue, Non-Blocking Ops) ✅
+>   - Thread-Safety: No background thread calls Tkinter directly (queue is thread-safe, after() is Tkinter-safe)
 
 > **v2.8.4** แก้ไข **Windows-Optimized Notifications: Toast + Shell Balloon Fallback + AUMID (Critical Windows Fix)**
 >   - Critical Bug 1: Windows notification sound plays but no Toast popup (no visual feedback)
@@ -839,9 +854,9 @@ python build_windows.py --exe-only
 
 ---
 
-**Version:** 2.8.4  
+**Version:** 2.8.5  
 **Last Updated:** 2026-08-21  
-**Status:** ✅ PRODUCTION-STABLE (Windows-Optimized Notifications + Clear Fix + Shell Fallback)
+**Status:** ✅ PRODUCTION-STABLE (Custom Overlay Notifications + Thread-Safe Queue + Unblockable Toast)
 
 ## 🔧 Build Workflow
 

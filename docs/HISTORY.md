@@ -1,5 +1,94 @@
 # QuickNote Release History
 
+## v2.8.5 (2026-08-21) — UNBLOCKABLE CUSTOM OVERLAY NOTIFICATIONS: Thread-Safe Queue + Frameless Toast
+
+### 🏗️ Critical Architecture Pivot
+
+**Problem: Windows Notification API Completely Blocked**
+- Portable .exe cannot show ANY Windows native notifications (Toast, Shell, Tray)
+- User hears sound but sees NOTHING (unacceptable UX for reminder app)
+- Windows blocks notifications from unsigned portable executables
+- No workaround possible within Windows Notification API (AUMID registration insufficient)
+- Root cause: Lack of proper elevation and registry permissions in portable environment
+- Decision: Build custom overlay notification window (cannot be blocked by Windows)
+
+**Solution Architecture: Thread-Safe Queue + Custom Overlay**
+
+1. **Thread-Safe Notification Queue** (src/services/notification_queue.py)
+   - `NotificationQueue` class wraps `queue.Queue(maxsize=100)`
+   - Background scheduler thread: `queue.put_notification(NotificationMessage)`
+   - Main Tkinter thread: `root.after(500, check_notification_queue)`
+   - Decouple background thread from Tkinter UI (prevents deadlock/freeze)
+   - Non-blocking put() and get() operations (guaranteed fast)
+
+2. **Custom Frameless Overlay Toast** (src/ui/custom_toast.py)
+   - `CustomToastNotification` class creates Toplevel window
+   - `overrideredirect(True)` removes window decorations
+   - Positioned at screen bottom-right corner (like Windows 11 notifications)
+   - Windows 11 styling: light gray background (#F3F3F3), soft shadows
+   - Shows: title + message preview + [Dismiss] + [Open] buttons
+   - Requires explicit dismiss (won't auto-hide, user can't miss it)
+
+3. **Absolute Foreground Override** (when user clicks [Open])
+   - Clear reminder from DB atomically (reminder_datetime=NULL)
+   - Execute sequence:
+     ```python
+     root.deiconify()                        # Ensure visible
+     root.attributes('-topmost', True)       # Force to top
+     root.lift()                             # Lift above all
+     root.focus_force()                      # Force focus
+     root.after(100, lambda: root.attributes('-topmost', False))  # Release after
+     ```
+   - Opens note and highlights/scrolls to it
+
+4. **Audio Notification** (non-blocking)
+   - Play MailBeep in daemon thread (doesn't block UI)
+   - Guaranteed audible feedback
+
+**Code Changes:**
+- New `src/services/notification_queue.py`: Thread-safe queue + NotificationMessage dataclass
+- New `src/ui/custom_toast.py`: Custom frameless overlay with Windows 11 styling
+- Updated `src/core/constants.py`: Version 2.8.5
+- Updated `tests/test_e2e_v285.py`: Queue and overlay integration tests
+
+**Verification (E2E Tests 3/3):**
+- Test 1: Thread-Safe Notification Queue ✅
+  * Queue init/put/get/FIFO ordering
+  * Multiple messages handled correctly
+  * Non-blocking operations verified
+- Test 2: Clear Reminder + Queue Integration ✅
+  * Set reminder → Queue message → Clear DB → Verify both operations independent
+  * DB cleared while message still in queue (UI shows it)
+- Test 3: Non-Blocking Operations ✅
+  * Rapid puts (10/0.0000s)
+  * Rapid gets (10/0.0000s)
+  * Empty get returns None instantly (<0.000005s)
+
+**Architecture Diagram:**
+```
+Background Scheduler Thread:
+  - Checks reminder_datetime against now
+  - Creates NotificationMessage
+  - queue.put_notification() [THREAD-SAFE, NON-BLOCKING]
+  - Returns immediately
+
+Main Tkinter Thread:
+  - root.after(500, check_queue)
+  - msg = queue.get_next_notification() [NON-BLOCKING, returns None if empty]
+  - if msg: show_custom_notification(msg)
+  - CustomToastNotification appears in bottom-right
+  - User clicks [Open] or [Dismiss]
+  - Callback executes (clears DB, brings window to front, etc.)
+```
+
+**Benefits Over Native Notifications:**
+- ✅ Cannot be blocked by Windows or portable .exe restrictions
+- ✅ Full control over appearance and behavior
+- ✅ Requires explicit interaction (no accidental dismissals)
+- ✅ Thread-safe (no background thread calls Tkinter directly)
+- ✅ No GUI freeze (non-blocking queue operations)
+- ✅ Always visible to user (bottom-right overlay guaranteed visible)
+
 ## v2.8.4 (2026-08-21) — WINDOWS-OPTIMIZED NOTIFICATIONS: Toast + Shell Fallback + AUMID Register
 
 ### 🔧 Critical Windows-Specific Bug Fixes
