@@ -28,13 +28,18 @@ class Note:
     def from_dict(cls, data: dict) -> "Note":
         """สร้าง Note จาก dict (จาก database) — ทนข้อมูลเพี้ยนได้"""
         # สกัดฟิลด์ที่คาดหวัง ปฏิเสธอันที่เหลือ
-        # v2.8.2: Default new notes to collapsed=True (closed state)
+        # v2.8.6: Always default to collapsed=True for UI display (startup state)
+        collapsed_value = data.get("collapsed")
+        # If collapsed is 0/False/None, always set to True for default collapsed state
+        if not collapsed_value:
+            collapsed_value = True
+
         return cls(
             id=data.get("id", ""),
             title=data.get("title", ""),
             content=data.get("content", ""),
             status=data.get("status", "active"),
-            collapsed=bool(data.get("collapsed", True)),  # v2.8.2: Default True (collapsed)
+            collapsed=bool(collapsed_value),  # v2.8.6: Default True (all notes collapsed on load)
             created_at=data.get("created_at", datetime.now().isoformat()),
             completed_at=data.get("completed_at"),
             priority=data.get("priority", "none"),  # v1.3.0

@@ -6,9 +6,11 @@ from .theme import Theme
 from .titlebar import TitleBar
 from .note_card import NoteCard
 from .settings_window import SettingsWindow
+from .custom_toast import CustomToastNotification
 from ..core.models import Note
 from ..core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
 from ..core.database import get_all_notes, get_notes_by_status, get_note, create_note, delete_note, update_note, update_note_status_only
+from ..services.notification_queue import get_notification_queue
 
 
 def _get_screen_bounds() -> tuple:
@@ -246,6 +248,9 @@ class Board:
         # Start reminder checker (v1.3.0) — non-blocking, runs every 5 seconds
         self._check_reminders()
 
+        # v2.8.6: Start notification queue checker — non-blocking, runs every 500ms
+        self._check_notification_queue()
+
     def _get_safe_geometry(self, geometry: str) -> str:
         """ตรวจสอบ geometry — ถ้าไม่ปลอดภัยให้ center ที่จอ"""
         # Parse geometry string: "WxH+X+Y" or default
@@ -383,6 +388,8 @@ class Board:
             # Load notes
             for row in notes_data:
                 note = Note.from_dict(row)
+                # v2.8.6: Default all notes to collapsed on startup
+                note.collapsed = True
                 # ✓ v1.3.8: Pass tab info so NoteCard can show different icons
                 is_completed_tab = (self.current_filter == "completed")
                 card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=is_completed_tab)
@@ -823,6 +830,57 @@ class Board:
 
             # Scroll to note in the view
             self._show_note_in_view(note)
+        except Exception:
+            pass
+
+    def _check_notification_queue(self):
+        """v2.8.6: Check notification queue and display custom overlay toasts
+
+        Background scheduler enqueues notifications, main thread dequeues and displays.
+        This runs every 500ms to process queued notifications.
+        """
+        try:
+            # Process all queued notifications (can be multiple)
+            notification_queue = get_notification_queue()
+            while not notification_queue.is_empty():
+                msg = notification_queue.get_next_notification()
+                if msg:
+                    try:
+                        # Create custom overlay notification
+                        def on_open_callback():
+                            # Clear reminder from DB
+                            try:
+                                update_note(msg.note_id, clear_reminder=True)
+                            except Exception:
+                                pass
+                            # Bring main window to front and highlight the note
+                            self._on_open_note_from_notification(msg.note_id)
+
+                        CustomToastNotification(
+                            self.root,
+                            title=msg.title,
+                            message=msg.content,
+                            on_open=on_open_callback,
+                            on_dismiss=None
+                        )
+                    except Exception:
+                        pass  # Silently fail to avoid blocking UI
+
+        except Exception:
+            pass  # Silently fail
+
+        finally:
+            # Reschedule to check queue again in 500ms
+            self.root.after(500, self._check_notification_queue)
+
+    def _on_open_note_from_notification(self, note_id: str):
+        """Open note when user clicks [Open] on custom notification"""
+        try:
+            # Reload notes to update UI
+            self._load_notes()
+            # Find and highlight the note card
+            if note_id in self.note_cards:
+                self.note_cards[note_id]._show_content()
         except Exception:
             pass
 
