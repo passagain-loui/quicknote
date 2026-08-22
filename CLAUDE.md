@@ -1,8 +1,68 @@
-# QuickNote v2.9.34 — MODERN SETTINGS UI & GOOGLE TASKS OAUTH CONNECT (UX Polish)
+# QuickNote v2.9.35 — AUDIT-DRIVEN ARCHITECTURE FIX (Focus Flapping & DPI Scaling)
 
-แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Modern Settings Redesign** + **Google Tasks OAuth Integration** + **Tab Reordering** + **Minimal UI Styling** + **Connection Status Display** + **Elevated Toast Margin** + **1-Inch Taskbar Clearance** + **Strict Corner Position Lock** + **Center Override Removal** + **Bottom-Right Toast Positioning** + **Toast Notification Positioning** + **Bottom-Right Corner Layout** + **Screen Margin Handling** + **Taskbar Clearance** + **Non-Blocking Z-Order Lock** + **Transient Dialog Architecture** + **FocusOut Event Handler** + **OS-Level Z-Order Management** + **Main Thread UI Dispatch** + **Modal Deadlock Prevention** + **Daemon Thread Removal** + **Recently Dismissed Pinning** + **Settings Window Resize** + **Dismiss Timestamp Tracking** + **Snooze Duration UI Widget** + **Strict Topmost Lock** + **Grab Input Focus** + **Global Mouse Wheel Scrolling** + **Custom Snooze Duration** + **Complete Dismiss State Clearance** + **Configurable Alarm Duration** + **Dynamic Button Text** + **Selective Datetime Clearing** + **Alarm State Lock** + **Immediate Trigger Clamp** + **No Repeat Alarms** + **Red Border on Trigger** + **Isolated Test Database** + **Production DB Protection** + **Test Data Cleanup** + **Flicker-Free Topmost** + **Event-Based Focus Restoration** + **Immediate Board Re-render** + **Scheduler Triggers UI Refresh** + **Red Border Persistence** + **Alarm Task Sorting** + **Index 0 Guarantee** + **SQLite WAL Mode** + **Thread-Safe Concurrent Access** + **UI Refresh Debouncer** + **Tkinter Freeze Prevention** + **Active Alarm Highlight Frame** + **Dynamic Red Border** + **Real-Time Visual Feedback** + **Unified Queue Callback Architecture** + **Dialog-Only Delegation** + **No Direct DB Operations in Dialog** + **Fail-Safe Exception Isolation** + **DB Commit-First Logic** + **Fresh Data Fetches** + **No Object References in Queue** + **PyWinCtl Window Activation** + **5s Debounce Alarm Prevention** + **Modern OS-Level API** + **Scheduler Grace Period** + **Native Shell-Level Restore** + **WM_SYSCOMMAND** + **FlashWindow** + **Command Queue Pattern** + **Single-Thread DB Access** + **Cross-Thread Safe** + **Synchronous DB Commit** + **Task Highlight** + **Type-Safe Object Access** + **Startup Stability** + **Forced UI Re-render** + **Icon State Sync** + **Thread-Safe Custom Dialog** + **Database State Sync** + **Startup Alarm Storm Prevention** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Audit-Driven Fixes** + **Focus Flapping Elimination** + **DPI Scaling Awareness** + **Robust Event Cleanup** + **Modern Settings Redesign** + **Google Tasks OAuth Integration** + **Tab Reordering** + **Minimal UI Styling** + **Connection Status Display** + **Elevated Toast Margin** + **1-Inch Taskbar Clearance** + **Strict Corner Position Lock** + **Center Override Removal** + **Bottom-Right Toast Positioning** + **Toast Notification Positioning** + **Bottom-Right Corner Layout** + **Screen Margin Handling** + **Taskbar Clearance** + **Non-Blocking Z-Order Lock** + **Transient Dialog Architecture** + **OS-Level Z-Order Management** + **Main Thread UI Dispatch** + **Modal Deadlock Prevention** + **Daemon Thread Removal** + **Recently Dismissed Pinning** + **Settings Window Resize** + **Dismiss Timestamp Tracking** + **Snooze Duration UI Widget** + **Strict Topmost Lock** + **Grab Input Focus** + **Global Mouse Wheel Scrolling** + **Custom Snooze Duration** + **Complete Dismiss State Clearance** + **Configurable Alarm Duration** + **Dynamic Button Text** + **Selective Datetime Clearing** + **Alarm State Lock** + **Immediate Trigger Clamp** + **No Repeat Alarms** + **Red Border on Trigger** + **Isolated Test Database** + **Production DB Protection** + **Test Data Cleanup** + **Flicker-Free Topmost** + **Immediate Board Re-render** + **Scheduler Triggers UI Refresh** + **Red Border Persistence** + **Alarm Task Sorting** + **Index 0 Guarantee** + **SQLite WAL Mode** + **Thread-Safe Concurrent Access** + **UI Refresh Debouncer** + **Tkinter Freeze Prevention** + **Active Alarm Highlight Frame** + **Dynamic Red Border** + **Real-Time Visual Feedback** + **Unified Queue Callback Architecture** + **Dialog-Only Delegation** + **No Direct DB Operations in Dialog** + **Fail-Safe Exception Isolation** + **DB Commit-First Logic** + **Fresh Data Fetches** + **No Object References in Queue** + **PyWinCtl Window Activation** + **5s Debounce Alarm Prevention** + **Modern OS-Level API** + **Scheduler Grace Period** + **Native Shell-Level Restore** + **WM_SYSCOMMAND** + **FlashWindow** + **Command Queue Pattern** + **Single-Thread DB Access** + **Cross-Thread Safe** + **Synchronous DB Commit** + **Task Highlight** + **Type-Safe Object Access** + **Startup Stability** + **Forced UI Re-render** + **Icon State Sync** + **Thread-Safe Custom Dialog** + **Database State Sync** + **Startup Alarm Storm Prevention** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.34 Released 2026-08-22
+**Status: ✅ PRODUCTION-STABLE** — v2.9.35 Released 2026-08-22
+
+> **v2.9.35** แก้ไข **Audit-Driven Architecture Fix (Focus Flapping & DPI Scaling)**
+>   - Fix: Eliminate focus flapping loop (critical CPU/UX issue)
+>   - Fix: DPI-scaling aware positioning for high-DPI systems
+>   - Fix: Robust event cleanup in _safe_destroy()
+>   - Problem 1 (v2.9.34): Focus flapping loop via <FocusOut> event binding
+>     * User clicks main window → Dialog loses focus → _on_focus_out() triggered
+>     * Handler sets -topmost + lift() + focus_force() → Dialog regains focus
+>     * Main window loses focus → Cycle repeats (focus ping-pong)
+>     * Result: CPU spike, UI lag, poor responsiveness
+>   - Solution 1: Remove FocusOut event binding entirely
+>     * Removed self.bind("<FocusOut>", self._on_focus_out) from __init__
+>     * Removed _on_focus_out() method entirely (17 lines)
+>     * Single attributes("-topmost", True) at init is sufficient for Z-order lock
+>     * OS-level -topmost attribute persists without re-triggering
+>   - Problem 2 (v2.9.34): Hardcoded margins on high-DPI systems
+>     * Margins: 25px right, 160px bottom (physical pixel values)
+>     * On 96 DPI (1.0x): 25px = 25 pixels (correct)
+>     * On 192 DPI (2.0x): 25px = 25 pixels (WRONG, should be 50 pixels)
+>     * Result: Toast positioned too close to screen edges on scaled displays
+>   - Solution 2: DPI-aware margin scaling
+>     * Calculate scale factor: winfo_fpixels('1i') / 72.0
+>     * Scale margins: int(25 * scale), int(160 * scale)
+>     * Clamp bounds: max(0, x) and max(0, y) (no negative off-screen)
+>     * Now correct on all DPI settings (96-192 DPI)
+>   - Problem 3 (v2.9.34): Event cleanup risk in _safe_destroy()
+>     * Direct destroy() without unbinding events
+>     * Remaining bindings could cause exception cascade
+>   - Solution 3: Robust event cleanup
+>     * Call unbind_all() before destroy()
+>     * Clear WM_DELETE_WINDOW protocol explicitly
+>     * Exception isolation: Try-except blocks per step
+>     * Finally block ensures destroy() always happens
+>   - Implementation:
+>     * src/ui/unblockable_dialog.py: Focus fix + DPI scaling + cleanup
+>       - Removed bind("<FocusOut>") and _on_focus_out() method
+>       - Updated _position_bottom_right() with DPI scale calculation
+>       - Improved _safe_destroy() with unbind_all() and protocol clearing
+>     * src/core/constants.py: Updated APP_VERSION to "2.9.35"
+>     * tests/test_e2e_v2935.py: New 5-test suite (version, focus, DPI, cleanup, topmost)
+>   - Architecture:
+>     ```
+>     Before (v2.9.34):                    After (v2.9.35):
+>     Bind <FocusOut> event                No event binding
+>     ↓ Event triggers on blur             ↓ Static -topmost lock
+>     Set -topmost + lift + focus          No re-triggering
+>     ↓ Focus ping-pong loop               ↓ Stable Z-order
+>     High CPU, UI lag                     Low CPU, smooth UI
+>
+>     Hardcoded 25px margins              DPI-scale aware
+>     Same on all DPI                      Scales with display
+>     Wrong on 192 DPI                     Correct on 96-192 DPI
+>     Toast close to edge                  Toast properly positioned
+>
+>     Direct destroy()                     Robust event cleanup
+>     Potential exception cascade          Exception isolation
+>     Resource leak risk                   Guaranteed cleanup
+>     ```
+>   - Impact: Focus flapping eliminated + DPI scaling fixed + Clean resource management ✅
+>   - Verification: E2E tests pass 5/5 (version, focus fix, DPI scaling, cleanup, topmost) ✅
 
 > **v2.9.34** เพิ่ม **Modern Settings UI & Google Tasks OAuth Connect (UX Polish)**
 >   - Feature: Complete Settings window redesign with modern minimal aesthetic
