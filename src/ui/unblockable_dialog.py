@@ -267,29 +267,22 @@ class UnblockableCustomDialog(tk.Toplevel):
             self._safe_destroy()
 
     def _safe_destroy(self):
-        """v2.9.35: Safely destroy dialog with proper event unbinding
+        """v2.9.36: Safely destroy dialog with minimal scope impact
 
-        v2.9.35 IMPROVEMENTS:
-        - Unbind all events before destroying (prevents exception cascade)
-        - Clear WM_DELETE_WINDOW protocol (prevent double-destroy)
-        - Try destroy in finally block (guaranteed cleanup)
-        - Exception isolation: unbinding errors don't prevent destroy
+        v2.9.36 FIX: Removed unbind_all() to prevent scope leak
+        - unbind_all() was removing bindings from parent/root, causing issues
+        - Only clear WM_DELETE_WINDOW protocol (our specific binding)
+        - Let destroy() handle all cleanup naturally
         """
         try:
-            # Unbind all events to prevent exception cascade
-            try:
-                self.unbind_all()  # Remove all event bindings
-                log.debug("[UnblockableDialog] All events unbound")
-            except Exception as e:
-                log.warning(f"[UnblockableDialog] Failed to unbind events: {e}")
-
-            # Clear protocol handler to prevent double-destroy
+            # Clear WM_DELETE_WINDOW protocol to prevent double-destroy
             try:
                 self.protocol("WM_DELETE_WINDOW", lambda: None)
+                log.debug("[UnblockableDialog] WM_DELETE_WINDOW protocol cleared")
             except Exception as e:
                 log.warning(f"[UnblockableDialog] Failed to clear protocol: {e}")
         finally:
-            # Guaranteed destroy attempt (happens even if unbind fails)
+            # Guaranteed destroy attempt (happens even if protocol clear fails)
             try:
                 self.destroy()
                 log.debug("[UnblockableDialog] Dialog destroyed successfully")

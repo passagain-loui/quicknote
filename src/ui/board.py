@@ -371,19 +371,26 @@ class Board:
         self.root.geometry(f"{w}x{h}")
 
     def _load_notes(self):
-        """อ่านโน้ตตาม current_filter จาก DB แล้วแสดง"""
+        """v2.9.36: อ่านโน้ตตาม current_filter จาก DB แล้วแสดง (Reuse widgets when possible)"""
         # v2.3.0: Clear search when reloading notes (except from search event itself)
         if hasattr(self, 'search_var'):
             self.search_var.set("")
 
-        # ลบการ์ดเก่าออกทั้งหมด
-        for card in self.note_cards.values():
-            card.pack_forget()
-            card.destroy()
-        self.note_cards.clear()
-
-        # โหลดตาม filter
+        # v2.9.36: Smart widget reuse — Only destroy cards that are no longer in DB
+        # This reduces widget churn and improves performance during refreshes
         notes_data = get_notes_by_status(self.current_filter)
+        current_note_ids = {row['id'] for row in notes_data}
+
+        # Remove cards for notes no longer in current filter
+        cards_to_remove = [nid for nid in self.note_cards if nid not in current_note_ids]
+        for note_id in cards_to_remove:
+            try:
+                card = self.note_cards[note_id]
+                card.pack_forget()
+                card.destroy()
+                del self.note_cards[note_id]
+            except Exception:
+                pass
 
         if not notes_data:
             # Show empty state (create if not exists)
@@ -409,20 +416,25 @@ class Board:
                     pass
                 self._empty_state_created = False
 
-            # Load notes
+            # v2.9.36: Repack existing cards in new order + create new ones for missing notes
             for row in notes_data:
-                note = Note.from_dict(row)
-                # v2.8.6: Default all notes to collapsed on startup
-                note.collapsed = True
-                # ✓ v1.3.8: Pass tab info so NoteCard can show different icons
-                is_completed_tab = (self.current_filter == "completed")
-                card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=is_completed_tab)
-                card.on_update = lambda n=note: self._on_note_update(n)
-                card.on_status_update = lambda n=note: self._on_note_status_update(n)  # v1.3.9: status-only
-                card.on_pin_change = lambda: self._load_notes()  # v1.5.0: Re-sort on pin change
-                card.on_delete_note = lambda n=note: self._on_note_delete(n)
-                card.pack(fill="x", padx=4, pady=4)
-                self.note_cards[note.id] = card
+                note_id = row['id']
+
+                # If card exists, just repack in new order
+                if note_id in self.note_cards:
+                    self.note_cards[note_id].pack(fill="x", padx=4, pady=4)
+                else:
+                    # Create new card for notes not yet displayed
+                    note = Note.from_dict(row)
+                    note.collapsed = True
+                    is_completed_tab = (self.current_filter == "completed")
+                    card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=is_completed_tab)
+                    card.on_update = lambda n=note: self._on_note_update(n)
+                    card.on_status_update = lambda n=note: self._on_note_status_update(n)
+                    card.on_pin_change = lambda: self._load_notes()
+                    card.on_delete_note = lambda n=note: self._on_note_delete(n)
+                    card.pack(fill="x", padx=4, pady=4)
+                    self.note_cards[note_id] = card
 
         # Update scroll region
         self.root.after(100, lambda: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
