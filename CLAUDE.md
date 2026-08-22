@@ -1742,3 +1742,35 @@ python build_windows.py
 **Version:** 2.9.36  
 **Last Updated:** 2026-08-22  
 **Status:** ✅ PRODUCTION-STABLE (Code Refactoring: Thread-Safety & Smart Reuse)
+
+---
+
+# EXECUTIVE WORKFLOW PROTOCOL (4-PILLAR DUAL-PATHWAY)
+
+## 🏛️ ROLES & RESPONSIBILITIES
+
+1. **USER (Product Owner):** Executive Decision Maker & Audit Trigger.
+2. **GEMINI (System Architect & Orchestrator):** State Transition Planner, Prompt Engineer & System Overseer.
+3. **QWEN 2.5 CODER 14B (Independent Auditor):** Read-Only Static Code Reviewer. Strictly scans for vulnerabilities, Thread Safety, Locks, Leaks, and OS Edge Cases. DOES NOT WRITE CODE.
+4. **CLAUDE / TERMINAL AGENT (Executor & Builder):** Implements approved plans, writes E2E Tests, manages Git/Docs, and performs Clean PyInstaller Executable Builds.
+
+---
+
+## 🔄 WORKFLOW PATHWAYS
+
+### PATHWAY A: NORMAL TRACK (Fast Track - Minor Fixes & Features)
+- User requests feature ➔ Gemini designs State & Prompt ➔ Claude implements, runs E2E Test, and builds .exe.
+
+### PATHWAY B: AUDIT TRACK (Security Track - Core Refactoring & System Audit)
+- **Step 1 (Trigger):** User/Gemini initiates Audit Track.
+- **Step 2 (Audit):** Gemini prepares Audit Benchmark Prompt. User passes target files to Qwen 2.5 Coder 14B.
+- **Step 3 (Refactor - No Build):** Qwen reports vulnerabilities. Gemini translates findings into Refactoring Plan. Claude implements code fixes and runs E2E Tests **WITHOUT BUILDING .EXE**.
+- **Step 4 (Re-Audit):** User passes updated files back to Qwen 2.5 Coder 14B until Qwen responds: `FULL AUDIT PASSED: 100% CLEAN & PRODUCTION READY`.
+- **Step 5 (Final Build):** Upon 100% PASS, Claude performs Force Process Kill, Cleans build/dist, Builds final `.exe`, and updates Version/Docs/Git Tag.
+
+---
+
+## ⛔ STRICT EXECUTION LAWS
+- **State-First:** Define RAM/DB/UI State Transition before modifying code.
+- **Strict E2E Test:** Mocking forbidden. Simulate real Windows Events/Threads. 100% Pass required.
+- **No Early Build:** Never build `.exe` during Audit Track until Qwen gives explicit 100% PASS approval.
