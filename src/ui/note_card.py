@@ -159,9 +159,34 @@ class NoteCard(tk.Frame):
         footer = tk.Frame(main_frame, bg=theme.c("note_bg"), highlightthickness=0)
         footer.pack(fill="x", padx=12, pady=(0, 8))
 
-        # Left side: Reminder button + Delete button
+        # Left side: Action button + Reminder button + Delete button
         left_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
         left_frame.pack(side="left", fill="x", expand=False)
+
+        # v2.9.38: Action button (Complete ✔ / Restore ↩) — moved to LEFT side before Delete
+        if note.status == "completed":
+            action_text = "↩"  # Restore icon
+            action_color = "#34C759"  # Green
+        else:
+            action_text = "✔"  # Complete icon
+            action_color = "#007AFF"  # Blue
+
+        self.btn_action = tk.Button(
+            left_frame,
+            text=action_text,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=action_color,
+            activebackground=theme.c("note_bg"),
+            activeforeground=action_color,
+            font=("Segoe UI", 10, "bold"),
+            command=self._on_toggle_status,
+            padx=2,
+            pady=2,
+        )
+        self.btn_action.pack(side="left", padx=2)
 
         # Reminder button (v1.3.0) — ⏰ for setting reminder datetime
         # v2.9.9: Check reminder_triggered FIRST to ensure icon shows correct state
@@ -211,34 +236,9 @@ class NoteCard(tk.Frame):
         spacer = tk.Frame(footer, bg=theme.c("note_bg"))
         spacer.pack(side="left", fill="x", expand=True)
 
-        # Right side: Action button + Status badge + Priority badge
+        # Right side: Status badge + Priority badge
         right_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
         right_frame.pack(side="right", fill="x", expand=False, padx=2)
-
-        # v2.9.37: Action button (Complete ✔ / Restore ↩) based on note status
-        if note.status == "completed":
-            action_text = "↩"  # Restore icon
-            action_color = "#34C759"  # Green
-        else:
-            action_text = "✔"  # Complete icon
-            action_color = "#007AFF"  # Blue
-
-        self.btn_action = tk.Button(
-            right_frame,
-            text=action_text,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=action_color,
-            activebackground=theme.c("note_bg"),
-            activeforeground=action_color,
-            font=("Segoe UI", 10, "bold"),
-            command=self._on_toggle_status,
-            padx=2,
-            pady=2,
-        )
-        self.btn_action.pack(side="left", padx=2)
 
         # Status badge (Done / Active) — v2.5.3: Convert to Label for pixel-perfect alignment
         if note.status == "completed":
@@ -342,6 +342,21 @@ class NoteCard(tk.Frame):
             self.btn_action.config(text="↩", fg="#34C759")  # Restore (green)
         else:
             self.btn_action.config(text="✔", fg="#007AFF")  # Complete (blue)
+
+    def set_alarm_highlight(self, highlight: bool):
+        """v2.9.38: Change card border to bright red (#FF3B30) on alarm, reset on highlight=False
+
+        Used to visually highlight triggered reminders with prominent red border.
+        Call this when alarm triggers to make task stand out.
+        Call with highlight=False to reset to normal border when user dismisses/snoozes.
+        """
+        if highlight:
+            # Show bright red border when alarm is triggered
+            self.config(highlightthickness=3, highlightbackground="#FF3B30")
+        else:
+            # Reset to normal soft border
+            normal_color = self.theme.c("note_border_soft")
+            self.config(highlightthickness=2, highlightbackground=normal_color)
 
     def _on_toggle_fold(self):
         """ปุ่มพับ/กาง"""

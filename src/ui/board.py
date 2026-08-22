@@ -743,6 +743,7 @@ class Board:
                         # v2.9.14: Main thread marks reminder as triggered
                         # v2.9.26: Also clear reminder_datetime to completely remove alarm state
                         # v2.9.28: Mark note as recently dismissed to pin at top
+                        # v2.9.38: Clear alarm highlight when dismissed
                         note_id = cmd.get("note_id")
                         if note_id:
                             from src.core.database import update_note
@@ -753,6 +754,14 @@ class Board:
                             # v2.9.16: Set debounce timestamp to prevent alarm re-trigger
                             import time
                             self._last_action_timestamp = time.time()
+                            # v2.9.38: Clear alarm highlight when dismissed
+                            if note_id in self.note_cards:
+                                card = self.note_cards[note_id]
+                                if hasattr(card, 'set_alarm_highlight'):
+                                    try:
+                                        card.set_alarm_highlight(False)
+                                    except Exception as e:
+                                        log.debug(f"[Dismiss] Failed to clear alarm highlight: {e}")
                             # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
                             self._request_ui_refresh()
 
@@ -822,6 +831,7 @@ class Board:
                     elif action == "snooze_note":
                         # v2.9.14: Main thread reschedules reminder
                         # v2.9.26: Use custom snooze duration from settings (default 5 minutes)
+                        # v2.9.38: Clear alarm highlight when snoozed
                         note_id = cmd.get("note_id")
                         if note_id:
                             from src.core.database import update_note
@@ -836,6 +846,14 @@ class Board:
                             # v2.9.16: Set debounce timestamp to prevent alarm re-trigger
                             import time
                             self._last_action_timestamp = time.time()
+                            # v2.9.38: Clear alarm highlight when snoozed
+                            if note_id in self.note_cards:
+                                card = self.note_cards[note_id]
+                                if hasattr(card, 'set_alarm_highlight'):
+                                    try:
+                                        card.set_alarm_highlight(False)
+                                    except Exception as e:
+                                        log.debug(f"[Snooze] Failed to clear alarm highlight: {e}")
                             # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
                             self._request_ui_refresh()
 

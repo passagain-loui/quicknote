@@ -101,15 +101,19 @@ class WindowsNotificationService:
                             log.info("[Notification] Unblockable custom dialog shown (thread-safe, bottom-right positioned)")
 
                             # v2.9.37: Lift triggered note frame to top of Z-order for visibility
+                            # v2.9.38: Also highlight card with red border and move to Index 0
                             if parent_board and hasattr(parent_board, 'root') and hasattr(parent_root, '_current_reminder_note_id'):
                                 note_id = parent_root._current_reminder_note_id
                                 if note_id in parent_board.note_cards:
                                     note_frame = parent_board.note_cards[note_id]
                                     try:
+                                        # Move card to top of board order and highlight with red border
                                         note_frame.lift()
-                                        log.info(f"[Notification] Note frame lifted to top for visibility")
+                                        if hasattr(note_frame, 'set_alarm_highlight'):
+                                            note_frame.set_alarm_highlight(True)
+                                        log.info(f"[Notification] Note frame lifted to top and highlighted")
                                     except Exception as e:
-                                        log.debug(f"[Notification] Failed to lift note frame: {e}")
+                                        log.debug(f"[Notification] Failed to lift/highlight note frame: {e}")
                         except Exception as e:
                             log.warning(f"[Notification] Dialog creation failed in main thread: {e}")
                             raise
