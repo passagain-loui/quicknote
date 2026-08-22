@@ -163,13 +163,13 @@ class NoteCard(tk.Frame):
         left_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
         left_frame.pack(side="left", fill="x", expand=False)
 
-        # v2.9.38: Action button (Complete ✔ / Restore ↩) — moved to LEFT side before Delete
+        # v2.9.39: Action button (Complete ✓ / Restore ↩) — minimalist outline style
         if note.status == "completed":
             action_text = "↩"  # Restore icon
             action_color = "#34C759"  # Green
         else:
-            action_text = "✔"  # Complete icon
-            action_color = "#007AFF"  # Blue
+            action_text = "✓"  # Complete icon (minimalist outline, not heavy ✔)
+            action_color = "#666666"  # Muted gray by default
 
         self.btn_action = tk.Button(
             left_frame,
@@ -180,8 +180,8 @@ class NoteCard(tk.Frame):
             bg=theme.c("note_bg"),
             fg=action_color,
             activebackground=theme.c("note_bg"),
-            activeforeground=action_color,
-            font=("Segoe UI", 10, "bold"),
+            activeforeground="#34C759" if note.status == "completed" else "#28A745",  # Green on hover for complete
+            font=("Segoe UI", 10),  # Regular weight for minimalist look
             command=self._on_toggle_status,
             padx=2,
             pady=2,
@@ -334,14 +334,14 @@ class NoteCard(tk.Frame):
             self.status_badge.config(text="Active", bg="#DBEAFE", fg="#0EA5E9")
 
     def _update_action_button(self):
-        """v2.9.37: Update action button (Complete ✔ / Restore ↩) based on current note status"""
+        """v2.9.39: Update action button (Complete ✓ / Restore ↩) based on current note status with minimalist styling"""
         if not hasattr(self, 'btn_action'):
             return
 
         if self.note.status == "completed":
             self.btn_action.config(text="↩", fg="#34C759")  # Restore (green)
         else:
-            self.btn_action.config(text="✔", fg="#007AFF")  # Complete (blue)
+            self.btn_action.config(text="✓", fg="#666666")  # Complete (minimalist gray)
 
     def set_alarm_highlight(self, highlight: bool):
         """v2.9.38: Change card border to bright red (#FF3B30) on alarm, reset on highlight=False
@@ -357,6 +357,22 @@ class NoteCard(tk.Frame):
             # Reset to normal soft border
             normal_color = self.theme.c("note_border_soft")
             self.config(highlightthickness=2, highlightbackground=normal_color)
+
+    def update_reminder_state(self, active: bool):
+        """v2.9.39: Update reminder clock icon state (⏰ active / ⏱ inactive)
+
+        Call with active=False when user dismisses reminder to show ⏱ gray icon.
+        Call with active=True when setting a new reminder to show ⏰ red icon.
+        """
+        if not hasattr(self, 'btn_reminder'):
+            return
+
+        if active:
+            # Active reminder — show ⏰ in red/warning color
+            self.btn_reminder.config(text="⏰", fg=self.theme.priority_color("high"))
+        else:
+            # Inactive/dismissed reminder — show ⏱ in muted gray
+            self.btn_reminder.config(text="⏱", fg=self.theme.c("fg_muted"))
 
     def _on_toggle_fold(self):
         """ปุ่มพับ/กาง"""

@@ -370,6 +370,25 @@ class Board:
         h = max(180, self.root.winfo_pointery() - self.root.winfo_y())
         self.root.geometry(f"{w}x{h}")
 
+    def repack_card_to_top(self, note_id: str):
+        """v2.9.39: Move note card to top of board (called when alarm triggers)
+
+        This re-orders the card pack to appear at Index 0, making it the first visible card.
+        Called when a reminder is triggered to bring the note to the user's attention.
+        """
+        if note_id not in self.note_cards:
+            return
+
+        try:
+            card = self.note_cards[note_id]
+            # Unpack and repack at the beginning (uses pack() ordering)
+            card.pack_forget()
+            card.pack(before=self.inner_frame.winfo_children()[0] if self.inner_frame.winfo_children() else None,
+                     side="top", fill="x", padx=6, pady=4)
+            log.info(f"[Board] Card {note_id} repacked to top")
+        except Exception as e:
+            log.debug(f"[Board] Failed to repack card {note_id} to top: {e}")
+
     def _load_notes(self):
         """v2.9.36: อ่านโน้ตตาม current_filter จาก DB แล้วแสดง (Reuse widgets when possible)"""
         # v2.3.0: Clear search when reloading notes (except from search event itself)
@@ -744,6 +763,7 @@ class Board:
                         # v2.9.26: Also clear reminder_datetime to completely remove alarm state
                         # v2.9.28: Mark note as recently dismissed to pin at top
                         # v2.9.38: Clear alarm highlight when dismissed
+                        # v2.9.39: Clear reminder clock icon (⏰ → ⏱) when dismissed
                         note_id = cmd.get("note_id")
                         if note_id:
                             from src.core.database import update_note
@@ -755,6 +775,7 @@ class Board:
                             import time
                             self._last_action_timestamp = time.time()
                             # v2.9.38: Clear alarm highlight when dismissed
+                            # v2.9.39: Also update reminder state to show inactive clock icon
                             if note_id in self.note_cards:
                                 card = self.note_cards[note_id]
                                 if hasattr(card, 'set_alarm_highlight'):
@@ -762,6 +783,12 @@ class Board:
                                         card.set_alarm_highlight(False)
                                     except Exception as e:
                                         log.debug(f"[Dismiss] Failed to clear alarm highlight: {e}")
+                                # v2.9.39: Clear reminder icon (show ⏱ instead of ⏰)
+                                if hasattr(card, 'update_reminder_state'):
+                                    try:
+                                        card.update_reminder_state(False)
+                                    except Exception as e:
+                                        log.debug(f"[Dismiss] Failed to update reminder state: {e}")
                             # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
                             self._request_ui_refresh()
 
@@ -1067,6 +1094,12 @@ class Board:
                 self._load_notes()
             except Exception:
                 pass  # Silently fail if refresh doesn't work
+
+            # v2.9.39: REPACK CARD TO TOP — Move triggered note to Index 0 for maximum visibility
+            try:
+                self.repack_card_to_top(note_data["id"])
+            except Exception as e:
+                log.debug(f"[v2.9.39] Failed to repack card to top: {e}")
 
             # v2.9.8: Show custom dialog with full button support (thread-safe routing)
             # This completely avoids GUI freeze by using OS notification system
