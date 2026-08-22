@@ -416,13 +416,23 @@ class Board:
                     pass
                 self._empty_state_created = False
 
-            # v2.9.36: Repack existing cards in new order + create new ones for missing notes
+            # v2.9.36/v2.9.37: Repack existing cards in new order + create new ones for missing notes
             for row in notes_data:
                 note_id = row['id']
 
-                # If card exists, just repack in new order
+                # If card exists, update note data and repack in new order
                 if note_id in self.note_cards:
-                    self.note_cards[note_id].pack(fill="x", padx=4, pady=4)
+                    # v2.9.37: Update the card's note data (status might have changed)
+                    card = self.note_cards[note_id]
+                    card.note = Note.from_dict(row)
+                    card.note.collapsed = card.note.collapsed or True  # Preserve collapsed state
+                    # v2.9.37: Ensure action button state is updated
+                    if hasattr(card, '_update_action_button'):
+                        card._update_action_button()
+                    # v2.9.37: Ensure status badge is updated
+                    if hasattr(card, '_update_strikethrough'):
+                        card._update_strikethrough()
+                    card.pack(fill="x", padx=4, pady=4)
                 else:
                     # Create new card for notes not yet displayed
                     note = Note.from_dict(row)

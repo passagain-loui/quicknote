@@ -211,9 +211,34 @@ class NoteCard(tk.Frame):
         spacer = tk.Frame(footer, bg=theme.c("note_bg"))
         spacer.pack(side="left", fill="x", expand=True)
 
-        # Right side: Status badge + Priority badge
+        # Right side: Action button + Status badge + Priority badge
         right_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
         right_frame.pack(side="right", fill="x", expand=False, padx=2)
+
+        # v2.9.37: Action button (Complete ✔ / Restore ↩) based on note status
+        if note.status == "completed":
+            action_text = "↩"  # Restore icon
+            action_color = "#34C759"  # Green
+        else:
+            action_text = "✔"  # Complete icon
+            action_color = "#007AFF"  # Blue
+
+        self.btn_action = tk.Button(
+            right_frame,
+            text=action_text,
+            width=2,
+            height=1,
+            bd=0,
+            bg=theme.c("note_bg"),
+            fg=action_color,
+            activebackground=theme.c("note_bg"),
+            activeforeground=action_color,
+            font=("Segoe UI", 10, "bold"),
+            command=self._on_toggle_status,
+            padx=2,
+            pady=2,
+        )
+        self.btn_action.pack(side="left", padx=2)
 
         # Status badge (Done / Active) — v2.5.3: Convert to Label for pixel-perfect alignment
         if note.status == "completed":
@@ -307,6 +332,16 @@ class NoteCard(tk.Frame):
             self.title_entry.config(font=("Segoe UI", 9, "bold"))
             # Update status badge
             self.status_badge.config(text="Active", bg="#DBEAFE", fg="#0EA5E9")
+
+    def _update_action_button(self):
+        """v2.9.37: Update action button (Complete ✔ / Restore ↩) based on current note status"""
+        if not hasattr(self, 'btn_action'):
+            return
+
+        if self.note.status == "completed":
+            self.btn_action.config(text="↩", fg="#34C759")  # Restore (green)
+        else:
+            self.btn_action.config(text="✔", fg="#007AFF")  # Complete (blue)
 
     def _on_toggle_fold(self):
         """ปุ่มพับ/กาง"""

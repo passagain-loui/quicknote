@@ -99,6 +99,17 @@ class WindowsNotificationService:
                                 snooze_duration_minutes=snooze_duration_minutes  # v2.9.26
                             )
                             log.info("[Notification] Unblockable custom dialog shown (thread-safe, bottom-right positioned)")
+
+                            # v2.9.37: Lift triggered note frame to top of Z-order for visibility
+                            if parent_board and hasattr(parent_board, 'root') and hasattr(parent_root, '_current_reminder_note_id'):
+                                note_id = parent_root._current_reminder_note_id
+                                if note_id in parent_board.note_cards:
+                                    note_frame = parent_board.note_cards[note_id]
+                                    try:
+                                        note_frame.lift()
+                                        log.info(f"[Notification] Note frame lifted to top for visibility")
+                                    except Exception as e:
+                                        log.debug(f"[Notification] Failed to lift note frame: {e}")
                         except Exception as e:
                             log.warning(f"[Notification] Dialog creation failed in main thread: {e}")
                             raise
