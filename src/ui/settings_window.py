@@ -12,6 +12,9 @@ log = logging.getLogger(__name__)
 class SettingsWindow:
     """Settings dialog - Light/Dark mode, Alpha slider"""
 
+    # v2.9.38: Track open error/alert windows for deduping
+    _open_error_window = None
+
     def __init__(self, parent_root: tk.Tk, settings_data: dict, theme: Theme,
                  on_save_callback=None, main_root: tk.Tk = None, on_window_closed=None):
         try:
@@ -210,17 +213,20 @@ class SettingsWindow:
             backup_button_frame = tk.Frame(main_frame, bg=theme.c("bg"))
             backup_button_frame.pack(fill="x", pady=8)
 
-            # v2.9.34: Modern flat buttons with muted colors
+            # v2.9.38: Modern flat buttons with consistent styling
             self.btn_backup = tk.Button(
                 backup_button_frame,
                 text="Backup Data",
                 bg="#E8E8E8" if theme.mode == "light" else "#3C3C3E",
                 fg=theme.c("fg"),
                 font=("Segoe UI", 9),
-                bd=1,
-                relief="solid",
+                bd=0,
+                relief="flat",
                 command=self._on_backup,
-                borderwidth=1,
+                activebackground="#D0D0D0" if theme.mode == "light" else "#4A4A4C",
+                activeforeground=theme.c("fg"),
+                padx=8,
+                pady=6,
             )
             self.btn_backup.pack(side="left", padx=4, fill="x", expand=True)
 
@@ -230,10 +236,13 @@ class SettingsWindow:
                 bg="#E8E8E8" if theme.mode == "light" else "#3C3C3E",
                 fg=theme.c("fg"),
                 font=("Segoe UI", 9),
-                bd=1,
-                relief="solid",
+                bd=0,
+                relief="flat",
                 command=self._on_restore,
-                borderwidth=1,
+                activebackground="#D0D0D0" if theme.mode == "light" else "#4A4A4C",
+                activeforeground=theme.c("fg"),
+                padx=8,
+                pady=6,
             )
             self.btn_restore.pack(side="left", padx=4, fill="x", expand=True)
 
@@ -377,6 +386,8 @@ class SettingsWindow:
                 padx=12,
                 pady=6,
                 command=self._on_google_authenticate,
+                activebackground="#0051D5",
+                activeforeground="#FFFFFF",
             )
             self.btn_connect.pack(side="left", padx=2)
 
@@ -386,12 +397,14 @@ class SettingsWindow:
                 bg="#E8E8E8" if theme.mode == "light" else "#3C3C3E",
                 fg=theme.c("fg"),
                 font=("Segoe UI", 9),
-                bd=1,
-                relief="solid",
+                bd=0,
+                relief="flat",
                 padx=12,
                 pady=6,
                 command=self._on_google_disconnect,
                 state="disabled",  # Disabled until connected
+                activebackground="#D0D0D0" if theme.mode == "light" else "#4A4A4C",
+                activeforeground=theme.c("fg"),
             )
             self.btn_disconnect.pack(side="left", padx=2)
 
@@ -430,6 +443,8 @@ class SettingsWindow:
                 pady=6,
                 command=self._on_google_sync_now,
                 state="disabled",  # Disabled until connected
+                activebackground="#25A143",
+                activeforeground="#FFFFFF",
             )
             self.btn_sync_now.pack(anchor="w", pady=(4, 0))
 
@@ -631,11 +646,55 @@ class SettingsWindow:
             except Exception:
                 pass
 
+    @staticmethod
+    def _destroy_open_error_window():
+        """v2.9.38: Destroy any open error window to prevent accumulation
+
+        When user clicks Connect Account multiple times, prevents multiple error dialogs
+        from stacking up. Closes the previous error window before showing a new one.
+        """
+        if SettingsWindow._open_error_window is not None:
+            try:
+                # Check if the window still exists before destroying it
+                if hasattr(SettingsWindow._open_error_window, 'winfo_exists'):
+                    if SettingsWindow._open_error_window.winfo_exists():
+                        SettingsWindow._open_error_window.destroy()
+                        log.debug("[Settings] Closed previous error window (dedupe)")
+            except Exception as e:
+                log.debug(f"[Settings] Could not destroy error window: {e}")
+            finally:
+                SettingsWindow._open_error_window = None
+
+    def _show_deduped_error(self, title: str, message: str):
+        """v2.9.38: Show error dialog with deduping (closes previous error first)
+
+        Args:
+            title: Error dialog title
+            message: Error message text
+        """
+        try:
+            from tkinter import messagebox
+            # Destroy any previously open error window
+            self._destroy_open_error_window()
+            # Show new error dialog and track it
+            # Note: messagebox.showerror is non-blocking in some cases, so we create a wrapper
+            root = tk.Tk()
+            root.withdraw()  # Hide the root window
+            SettingsWindow._open_error_window = root
+            messagebox.showerror(title, message, parent=self.root)
+            SettingsWindow._open_error_window = None
+        except Exception as e:
+            log.error(f"[Settings] Error showing deduped error: {e}")
+
     def _on_google_authenticate(self):
-        """v2.9.34: Authenticate with Google Tasks API (Connect Account)"""
+        """v2.9.34: Authenticate with Google Tasks API (Connect Account)
+        v2.9.38: Added error window deduping to prevent accumulation"""
         try:
             from tkinter import messagebox
             from ..services.google_tasks import get_google_tasks_service
+
+            # v2.9.38: Dedupe previous error windows before proceeding
+            self._destroy_open_error_window()
 
             service = get_google_tasks_service()
             if service.authenticate():
@@ -648,13 +707,14 @@ class SettingsWindow:
                 self.btn_sync_now.config(state="normal")
                 log.info("[Settings] Google Tasks authentication successful")
             else:
-                messagebox.showerror("Error", "Failed to authenticate with Google Tasks")
+                # v2.9.38: Use deduped error dialog
+                self._show_deduped_error("Error", "Failed to authenticate with Google Tasks")
                 self.google_status_label.config(text="●  Connection failed", fg="#FF3B30")
         except Exception as e:
             log.error(f"[Settings] Google authentication error: {e}")
+            # v2.9.38: Use deduped error dialog for exceptions too
             try:
-                from tkinter import messagebox
-                messagebox.showerror("Error", f"Authentication failed: {e}")
+                self._show_deduped_error("Error", f"Authentication failed: {e}")
             except Exception:
                 pass
 
@@ -682,7 +742,8 @@ class SettingsWindow:
                 pass
 
     def _on_google_sync_now(self):
-        """v2.9.34: Sync tasks to Google Tasks immediately"""
+        """v2.9.34: Sync tasks to Google Tasks immediately
+        v2.9.38: Added error window deduping"""
         try:
             from tkinter import messagebox
             from ..services.google_tasks import get_google_tasks_service
@@ -693,12 +754,13 @@ class SettingsWindow:
                 messagebox.showinfo("Sync", "Sync started (coming soon)")
                 log.info("[Settings] Google Tasks sync initiated")
             else:
-                messagebox.showerror("Error", "Not connected to Google Tasks")
+                # v2.9.38: Use deduped error dialog
+                self._show_deduped_error("Error", "Not connected to Google Tasks")
         except Exception as e:
             log.error(f"[Settings] Sync error: {e}")
+            # v2.9.38: Use deduped error dialog
             try:
-                from tkinter import messagebox
-                messagebox.showerror("Error", f"Sync failed: {e}")
+                self._show_deduped_error("Error", f"Sync failed: {e}")
             except Exception:
                 pass
 

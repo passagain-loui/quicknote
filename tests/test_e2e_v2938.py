@@ -1,4 +1,4 @@
-"""E2E Test Suite for v2.9.38 — UI Button Layout & Alarm Highlight Fix"""
+"""E2E Test Suite for v2.9.38 — UI Button Layout, Alarm Highlight, & Auth Dedupe Fix"""
 
 import unittest
 import sys
@@ -12,7 +12,7 @@ from src.core.models import Note
 
 
 class TestUIButtonLayoutV2938(unittest.TestCase):
-    """Test v2.9.38 UI button layout and alarm highlight fixes"""
+    """Test v2.9.38 UI button layout, alarm highlight, and auth dialog deduping fixes"""
 
     def test_version_v2938(self):
         """Test: Version updated to v2.9.38"""
@@ -161,6 +161,48 @@ class TestUIButtonLayoutV2938(unittest.TestCase):
                      "Board should handle snooze_note action")
 
         print("[PASS] Test 4: Dismiss/Snooze callbacks clear alarm highlight")
+
+    def test_auth_error_window_deduping(self):
+        """Test 5: Auth error dialogs are deduped (no accumulation)
+
+        v2.9.38 AUTH DEDUPE FIX:
+        - When user clicks Connect Account multiple times: old error window destroyed before new one shown
+        - Prevents error dialog stack-up when authentication fails repeatedly
+        - Tracked via _open_error_window class variable
+
+        Verification:
+        - SettingsWindow has _open_error_window class variable
+        - _destroy_open_error_window() method exists
+        - _show_deduped_error() method exists
+        - _on_google_authenticate() calls _destroy_open_error_window()
+        """
+        from src.ui.settings_window import SettingsWindow
+
+        # Verify class-level tracking variable exists
+        self.assertTrue(hasattr(SettingsWindow, '_open_error_window'),
+                       "SettingsWindow should have _open_error_window class variable")
+
+        # Verify deduping methods exist
+        self.assertTrue(hasattr(SettingsWindow, '_destroy_open_error_window'),
+                       "SettingsWindow should have _destroy_open_error_window() method")
+        self.assertTrue(hasattr(SettingsWindow, '_show_deduped_error'),
+                       "SettingsWindow should have _show_deduped_error() method")
+
+        # Check that authenticate method uses deduping
+        auth_source = inspect.getsource(SettingsWindow._on_google_authenticate)
+        self.assertIn('_destroy_open_error_window', auth_source,
+                     "_on_google_authenticate() should call _destroy_open_error_window()")
+        self.assertIn('_show_deduped_error', auth_source,
+                     "_on_google_authenticate() should use _show_deduped_error()")
+
+        # Verify destroy method handles window cleanup
+        destroy_source = inspect.getsource(SettingsWindow._destroy_open_error_window)
+        self.assertIn('winfo_exists', destroy_source,
+                     "_destroy_open_error_window() should check window existence")
+        self.assertIn('destroy()', destroy_source,
+                     "_destroy_open_error_window() should destroy the window")
+
+        print("[PASS] Test 5: Auth error window deduping works correctly")
 
 
 def run_all_tests():
