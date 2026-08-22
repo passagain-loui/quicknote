@@ -687,53 +687,47 @@ class SettingsWindow:
             log.error(f"[Settings] Error showing deduped error: {e}")
 
     def _on_google_authenticate(self):
-        """v2.9.39: Authenticate with Google Tasks API via Browser OAuth
-        Opens system default web browser for OAuth login, displays authenticated email"""
+        """v2.9.39: One-Click Browser OAuth Flow (Embedded Credentials, No File Required)
+        Opens system default browser for Google sign-in with embedded OAuth configuration"""
         try:
             from tkinter import messagebox
             import webbrowser
-            import os
-            from pathlib import Path
 
             # v2.9.38: Dedupe previous error windows before proceeding
             self._destroy_open_error_window()
 
-            # v2.9.39: Check for credentials.json file (required for OAuth)
-            credentials_path = Path.home() / ".quicknote" / "credentials.json"
-            if not credentials_path.exists():
-                self._show_deduped_error("Missing Credentials",
-                    f"Please place your Google OAuth credentials.json file at:\n{credentials_path}\n\n"
-                    "Get credentials from:\nhttps://console.cloud.google.com")
-                return
+            # v2.9.39: Use embedded OAuth service (no credentials.json needed)
+            from ..services.auth_service import get_google_oauth_service
 
-            from ..services.google_tasks import get_google_tasks_service
+            oauth_service = get_google_oauth_service()
 
-            service = get_google_tasks_service()
-
-            # v2.9.39: Open OAuth flow in system browser
+            # v2.9.39: ONE-CLICK BROWSER FLOW — Open OAuth consent page directly
             try:
-                # Get OAuth URL from service
-                if hasattr(service, 'get_oauth_url'):
-                    oauth_url = service.get_oauth_url()
-                    # Open in system default browser
+                oauth_url = oauth_service.get_oauth_url()
+                if oauth_url:
+                    # Open in system default browser for user authentication
                     webbrowser.open(oauth_url)
                     messagebox.showinfo("Google Sign-In",
-                        "Your default browser is opening.\n\n"
-                        "Please sign in with your Google account and approve access.\n"
-                        "The authorization code will be used to complete the connection.")
-                    log.info("[Settings] OAuth browser flow initiated")
+                        "Your browser is opening for Google authentication.\n\n"
+                        "Please sign in with your Google account and grant permission.\n"
+                        "After approval, return to QuickNote to complete the setup.")
+                    log.info("[Settings] OAuth browser authentication initiated")
+                else:
+                    self._show_deduped_error("OAuth Error", "Could not initialize Google OAuth")
+                    return
             except Exception as e:
                 log.warning(f"[Settings] Could not open browser: {e}")
-                messagebox.showinfo("Manual Setup Required",
-                    "Please complete Google OAuth setup manually.\n\n"
-                    "Visit the Google Cloud Console to authorize this application.")
+                messagebox.showerror("Browser Error", f"Failed to open browser:\n{e}")
+                return
 
-            # Attempt authentication
-            if service.authenticate():
-                service.is_authenticated = True
-                # v2.9.39: Get authenticated email from service
-                email = getattr(service, 'authenticated_email', 'user@gmail.com')
-                messagebox.showinfo("Success", f"Connected to Google Tasks successfully\n\nAuthenticated as: {email}")
+            # Attempt authentication with embedded credentials
+            if oauth_service.authenticate():
+                # v2.9.39: Get authenticated email and display (fallback to placeholder)
+                email = oauth_service.get_authenticated_email()
+
+                messagebox.showinfo("Success",
+                    f"Connected to Google Tasks successfully\n\n"
+                    f"Authenticated as: {email}")
                 self.google_status_label.config(text=f"●  Connected as {email}", fg="#34C759")
                 self.btn_connect.config(state="disabled")
                 self.btn_disconnect.config(state="normal")
@@ -741,12 +735,14 @@ class SettingsWindow:
                 self.btn_sync_now.config(state="normal")
                 log.info(f"[Settings] Google Tasks authentication successful: {email}")
             else:
-                # v2.9.38: Use deduped error dialog
-                self._show_deduped_error("Error", "Failed to authenticate with Google Tasks")
+                # Authentication failed
+                self._show_deduped_error("Authentication Failed",
+                    "Could not authenticate with Google Tasks.\n\n"
+                    "Please check your internet connection and try again.")
                 self.google_status_label.config(text="●  Connection failed", fg="#FF3B30")
+
         except Exception as e:
             log.error(f"[Settings] Google authentication error: {e}")
-            # v2.9.38: Use deduped error dialog for exceptions too
             try:
                 self._show_deduped_error("Error", f"Authentication failed: {e}")
             except Exception:
