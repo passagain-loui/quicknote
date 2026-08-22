@@ -71,7 +71,7 @@ class UnblockableCustomDialog(tk.Toplevel):
         except Exception as e:
             log.warning(f"[UnblockableDialog] Failed to set transient: {e}")
 
-        # v2.9.24: Force dialog to stay on top (ONCE at init, no timer flicker)
+        # v2.9.35: Force dialog to stay on top (ONCE at init, ONLY ONCE to avoid focus flapping)
         self.attributes("-topmost", True)
         self.lift()  # Immediately bring to front
         self.focus_force()  # Force focus to this window
@@ -79,12 +79,12 @@ class UnblockableCustomDialog(tk.Toplevel):
         # Create UI
         self._create_ui()
 
-        # v2.9.24: Bind FocusOut event to restore topmost silently (no flicker loop)
-        self.bind("<FocusOut>", self._on_focus_out)
+        # v2.9.35: REMOVED FocusOut event binding (causes focus flapping loop)
+        # Single -topmost attribute at init is sufficient for Z-order lock
 
         # Apply Win32 forceful positioning AFTER window is created
         self.update_idletasks()
-        self._position_bottom_right()  # v2.9.31: Position as bottom-right toast notification
+        self._position_bottom_right()  # v2.9.33: Position as bottom-right toast notification (DPI-aware in v2.9.35)
         self._force_to_foreground()
 
     def _create_ui(self):
@@ -166,32 +166,20 @@ class UnblockableCustomDialog(tk.Toplevel):
         )
         snooze_btn.pack(side="left", padx=2, fill="x", expand=True)
 
-    def _on_focus_out(self, event=None):
-        """v2.9.30: Restore topmost when focus lost (non-blocking, prevents Z-order loss)
-
-        When user clicks main window and dialog loses focus, immediately:
-        1. Re-apply -topmost attribute
-        2. Call lift() to bring back to front
-        3. Re-focus to dialog
-
-        This prevents main window from stealing Z-order without blocking event loop.
-        """
-        try:
-            self.attributes("-topmost", True)
-            self.lift()  # Bring back to front if main window tried to steal it
-            self.focus_force()  # Re-focus to dialog
-            log.debug("[UnblockableDialog] Focus lost → topmost + lift + focus restored")
-        except Exception:
-            pass  # Dialog may have been destroyed
-
     def _position_bottom_right(self):
-        """v2.9.33: Position dialog at bottom-right corner with elevated margin (1 inch clearance)
+        """v2.9.35: Position dialog at bottom-right corner with DPI-aware scaling
 
-        Toast positioning (v2.9.33 elevated):
+        Toast positioning (v2.9.35 DPI-aware):
         - Places dialog in bottom-right corner of screen
-        - Leaves 20px margin from right edge + 160px from bottom (well above taskbar)
-        - Elevated positioning prevents taskbar overlap on various screen sizes
+        - DPI-scaling aware: margins scale with system DPI (96 DPI = 1 inch)
+        - Leaves 25px margin from right edge + 160px from bottom (well above taskbar)
+        - Elevated positioning prevents taskbar overlap on various screen sizes (96-192 DPI)
         - Classic Windows notification toast appearance with extra clearance
+
+        DPI Scaling:
+        - winfo_fpixels('1i') returns pixels per inch on current display
+        - Scale factor = 1i_pixels / 72.0 (points per inch in tkinter)
+        - Margins scale proportionally with DPI
         """
         try:
             self.update_idletasks()
@@ -200,13 +188,23 @@ class UnblockableCustomDialog(tk.Toplevel):
             screen_width = self.winfo_screenwidth()
             screen_height = self.winfo_screenheight()
 
-            # Calculate position: bottom-right with elevated margin
-            # 25px from right edge, 160px from bottom (elevated ~1 inch above taskbar)
-            x = screen_width - width - 25
-            y = screen_height - height - 160
+            # Calculate DPI scale factor (96 DPI = 1.0, 192 DPI = 2.0, etc.)
+            try:
+                scale = self.winfo_fpixels('1i') / 72.0  # Convert points to pixels
+            except Exception:
+                scale = 1.0  # Fallback to 1:1 if DPI detection fails
+
+            # Scale margins based on DPI
+            margin_x = int(25 * scale)
+            margin_y = int(160 * scale)
+
+            # Calculate position: bottom-right with DPI-scaled margins
+            # Ensure position stays within screen bounds (no negative coordinates)
+            x = max(0, screen_width - width - margin_x)
+            y = max(0, screen_height - height - margin_y)
 
             self.geometry(f"{width}x{height}+{x}+{y}")
-            log.debug(f"[UnblockableDialog] Positioned at elevated bottom-right: ({x}, {y})")
+            log.debug(f"[UnblockableDialog] Positioned at elevated bottom-right (DPI scale {scale:.2f}): ({x}, {y})")
         except Exception as e:
             log.warning(f"[UnblockableDialog] Failed to position at elevated bottom-right: {e}")
 
@@ -269,12 +267,34 @@ class UnblockableCustomDialog(tk.Toplevel):
             self._safe_destroy()
 
     def _safe_destroy(self):
-        """v2.9.30: Safely destroy dialog (no grab_release needed, using transient instead)"""
+        """v2.9.35: Safely destroy dialog with proper event unbinding
+
+        v2.9.35 IMPROVEMENTS:
+        - Unbind all events before destroying (prevents exception cascade)
+        - Clear WM_DELETE_WINDOW protocol (prevent double-destroy)
+        - Try destroy in finally block (guaranteed cleanup)
+        - Exception isolation: unbinding errors don't prevent destroy
+        """
         try:
-            self.destroy()
-            log.debug("[UnblockableDialog] Dialog destroyed")
-        except Exception as e:
-            log.warning(f"[UnblockableDialog] Failed to destroy: {e}")
+            # Unbind all events to prevent exception cascade
+            try:
+                self.unbind_all()  # Remove all event bindings
+                log.debug("[UnblockableDialog] All events unbound")
+            except Exception as e:
+                log.warning(f"[UnblockableDialog] Failed to unbind events: {e}")
+
+            # Clear protocol handler to prevent double-destroy
+            try:
+                self.protocol("WM_DELETE_WINDOW", lambda: None)
+            except Exception as e:
+                log.warning(f"[UnblockableDialog] Failed to clear protocol: {e}")
+        finally:
+            # Guaranteed destroy attempt (happens even if unbind fails)
+            try:
+                self.destroy()
+                log.debug("[UnblockableDialog] Dialog destroyed successfully")
+            except Exception as e:
+                log.warning(f"[UnblockableDialog] Failed to destroy: {e}")
 
 
     def _mark_reminder_triggered(self):
