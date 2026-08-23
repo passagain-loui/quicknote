@@ -371,20 +371,30 @@ class Board:
         self.root.geometry(f"{w}x{h}")
 
     def repack_card_to_top(self, note_id: str):
-        """v2.9.39: Move note card to top of board (called when alarm triggers)
+        """v2.9.41: Move note card to top of board (empty board safe)
 
         This re-orders the card pack to appear at Index 0, making it the first visible card.
-        Called when a reminder is triggered to bring the note to the user's attention.
+        Called when a reminder is triggered OR a new note is created to bring to top.
+        Handles both empty board and board with existing cards.
         """
         if note_id not in self.note_cards:
             return
 
         try:
             card = self.note_cards[note_id]
+            # Get all children in inner_frame
+            all_children = [c for c in self.inner_frame.winfo_children() if isinstance(c, tk.Frame)]
+
             # Unpack and repack at the beginning (uses pack() ordering)
             card.pack_forget()
-            card.pack(before=self.inner_frame.winfo_children()[0] if self.inner_frame.winfo_children() else None,
-                     side="top", fill="x", padx=6, pady=4)
+
+            if all_children and all_children[0] != card:
+                # If there are other cards, pack before the first one
+                card.pack(before=all_children[0], side="top", fill="x", padx=6, pady=4)
+            else:
+                # If board is empty or this is the only card, just pack normally
+                card.pack(side="top", fill="x", padx=6, pady=4)
+
             log.info(f"[Board] Card {note_id} repacked to top")
         except Exception as e:
             log.debug(f"[Board] Failed to repack card {note_id} to top: {e}")
@@ -629,10 +639,12 @@ class Board:
         self._load_notes()
 
     def _on_new(self):
-        """ปุ่ม + เพิ่มโน้ตใหม่ — v2.3.1: Reload to respect sorting (newest notes first)"""
+        """ปุ่ม + เพิ่มโน้ตใหม่ — v2.9.41: Ensure new note appears at top of board"""
         note_id = create_note(title="New Note", content="")
         # v2.3.1: Reload all notes to respect sorting order (newest first)
         self._load_notes()
+        # v2.9.41: Ensure newly created note is explicitly at top (handles empty board case)
+        self.repack_card_to_top(note_id)
         # Focus on newly created note's title field (should be first in list)
         if note_id in self.note_cards:
             card = self.note_cards[note_id]
