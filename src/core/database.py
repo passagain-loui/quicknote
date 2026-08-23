@@ -128,36 +128,37 @@ def get_notes_by_status(status: str) -> list[dict]:
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # v2.9.26: Sort to put TRIGGERED ALARMS (reminder_triggered = 1 AND datetime not NULL) at top
-    # v2.9.28: Also sort recently dismissed notes to top (last_dismissed_at recent)
+    # v2.9.40: Pin persistence — PINNED NOTES ARE PRIMARY SORT (always appear at top)
+    # v2.9.26: Secondary: Recently triggered alarms with datetime
+    # v2.9.28: Tertiary: Recently dismissed notes stay at top (pinned to top for quick access)
     # Triggered alarm = reminder_triggered = 1 AND reminder_datetime IS NOT NULL
     c.execute("""
         SELECT * FROM notes
         WHERE status = ?
         ORDER BY
-                 -- CRITICAL: Recently triggered alarms with datetime go to top (Index 0)
+                 -- v2.9.40 PRIMARY: PINNED NOTES FIRST (all pinned notes above unpinned)
+                 is_pinned DESC,
+                 -- SECONDARY: Recently triggered alarms with datetime go next
                  -- v2.9.26: Must check both triggered=1 AND datetime is NOT NULL
                  CASE
                    WHEN reminder_triggered = 1 AND reminder_datetime IS NOT NULL
-                   THEN 0  -- Just triggered with datetime: highest priority
+                   THEN 0  -- Just triggered with datetime: high priority
                    ELSE 1  -- Not triggered or datetime cleared: lower priority
                  END,
-                 -- v2.9.28: Secondary: Recently dismissed notes stay at top (pinned to top for quick access)
+                 -- TERTIARY: Recently dismissed notes stay high (pinned to top for quick access)
                  -- Use last_dismissed_at timestamp (most recent first) for recently dismissed notes
                  CASE WHEN last_dismissed_at IS NOT NULL THEN 0 ELSE 1 END,
                  last_dismissed_at DESC,
-                 -- Tertiary sort: by reminder time (soonest first)
+                 -- QUATERNARY: by reminder time (soonest first)
                  reminder_datetime ASC,
-                 -- Quaternary: pinned notes
-                 is_pinned DESC,
-                 -- Quinary: priority
+                 -- QUINARY: priority
                  CASE priority
                    WHEN 'high' THEN 0
                    WHEN 'medium' THEN 1
                    WHEN 'low' THEN 2
                    ELSE 3
                  END,
-                 -- Final: creation time (newest first)
+                 -- FINAL: creation time (newest first)
                  created_at DESC
     """, (status,))
     notes = [dict(row) for row in c.fetchall()]

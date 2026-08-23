@@ -426,7 +426,7 @@ class NoteCard(tk.Frame):
             self.on_update(self.note)
 
     def _on_toggle_pin(self):
-        """ปุ่ม pin (📌/📍) — toggle note pinning (v1.5.0)"""
+        """ปุ่ม pin (📌/📍) — toggle note pinning (v1.5.0, v2.9.40: immediate repack to top)"""
         self.note.is_pinned = not self.note.is_pinned
 
         # Update button appearance
@@ -438,9 +438,9 @@ class NoteCard(tk.Frame):
         from ..core.database import update_note
         update_note(self.note.id, is_pinned=self.note.is_pinned)
 
-        # Trigger board refresh to re-sort notes
+        # v2.9.40: Trigger board refresh to re-sort notes (pass note_id for immediate repack)
         if hasattr(self, 'on_pin_change') and callable(self.on_pin_change):
-            self.on_pin_change()
+            self.on_pin_change(self.note.id)
 
     def _on_title_change(self, event):
         """เมื่อเปลี่ยน title จากช่อง Entry"""

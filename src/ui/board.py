@@ -460,7 +460,7 @@ class Board:
                     card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=is_completed_tab)
                     card.on_update = lambda n=note: self._on_note_update(n)
                     card.on_status_update = lambda n=note: self._on_note_status_update(n)
-                    card.on_pin_change = lambda: self._load_notes()
+                    card.on_pin_change = lambda note_id=note.id: self._on_pin_changed(note_id)
                     card.on_delete_note = lambda n=note: self._on_note_delete(n)
                     card.pack(fill="x", padx=4, pady=4)
                     self.note_cards[note_id] = card
@@ -614,6 +614,19 @@ class Board:
             self.note_cards[note.id].destroy()
             del self.note_cards[note.id]
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_pin_changed(self, note_id: str):
+        """v2.9.40: Handle pin state change — move card to top immediately then reload from DB
+
+        When user clicks pin/unpin button:
+        1. Immediately repack card to top of UI
+        2. Reload all notes from DB to update sort order (now with is_pinned as primary)
+        """
+        # v2.9.40: Immediately move card to top
+        self.repack_card_to_top(note_id)
+
+        # Reload notes to sync with new DB sort order (is_pinned DESC as primary)
+        self._load_notes()
 
     def _on_new(self):
         """ปุ่ม + เพิ่มโน้ตใหม่ — v2.3.1: Reload to respect sorting (newest notes first)"""
