@@ -85,10 +85,20 @@ def build_exe(debug: bool = False) -> int:
         "--hidden-import=src.platform.hotkey",
         # v2.9.4: Add win10toast_click for click-aware notifications
         "--hidden-import=win10toast_click",
-        # v2.9.40: Add pystray for system tray support (CRITICAL FIX)
+        # v2.9.40: CRITICAL - Add ALL platform dependencies (pystray, pynput, PIL)
         "--hidden-import=pystray",
         "--hidden-import=pystray._win32",
         "--collect-all=pystray",
+        # pynput for global hotkey support (Windows-specific)
+        "--hidden-import=pynput",
+        "--hidden-import=pynput.keyboard",
+        "--hidden-import=pynput.mouse",
+        "--hidden-import=pynput.keyboard._win32",
+        "--hidden-import=pynput.mouse._win32",
+        # Pillow/PIL for image processing
+        "--hidden-import=PIL",
+        "--hidden-import=PIL.Image",
+        "--collect-all=PIL",
         # v2.5.5: Use --collect-all for tkcalendar + babel (--hidden-import misses submodules)
         "--collect-all=tkcalendar",  # Collects all submodules + data files
         "--collect-all=babel",        # Collects all babel locale data
