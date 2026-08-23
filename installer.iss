@@ -13,12 +13,10 @@ OutputBaseFilename=QuickNote_v2.9.39_Setup
 Compression=lzma
 SolidCompression=yes
 UninstallDisplayIcon={app}\QuickNote.exe
-VersionInfoVersion=2.9.39
+VersionInfoVersion=2.9.39.0
 VersionInfoCompany=Passagain P.
 VersionInfoProductName=QuickNote
-VersionInfoProductVersion=2.9.39
-VersionInfoFileDescription=QuickNote v2.9.39 Installer
-MinVersion=6.1.0
+VersionInfoProductVersion=2.9.39.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
