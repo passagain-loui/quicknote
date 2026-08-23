@@ -3,13 +3,13 @@
 
 [Setup]
 AppName=QuickNote
-AppVersion=2.9.39
+AppVersion=2.9.40
 AppPublisher=Passagain P.
 DefaultDirName={autopf}\QuickNote
 DefaultGroupName=QuickNote
 AllowNoIcons=yes
 OutputDir=dist
-OutputBaseFilename=QuickNote_v2.9.39_Setup
+OutputBaseFilename=QuickNote_v2.9.40_Setup
 Compression=lzma
 SolidCompression=yes
 UninstallDisplayIcon={app}\QuickNote.exe
@@ -25,7 +25,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\QuickNote_v2.9.39.exe"; DestDir: "{app}"; DestName: "QuickNote.exe"; Flags: ignoreversion
+Source: "dist\QuickNote_v2.9.40.exe"; DestDir: "{app}"; DestName: "QuickNote.exe"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "CLAUDE.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
