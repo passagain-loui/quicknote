@@ -2,7 +2,11 @@
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Minimalist Icon Design** + **Smart Task Re-ordering** + **Reminder State Clearing** + **Browser-Based OAuth** + **Modern Settings Integration** + **E2E Regression Tests** + **Qwen Audit Passed (100%)** + **Code Refactoring (Audit-Driven)** + **Thread-Safe Database Writes** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.39 Released 2026-08-22 (Qwen Audit: FULL PASS 100% | Build: 32.7 MB)
+**Status: ✅ PRODUCTION-STABLE** — v2.9.39 FINAL RELEASE 2026-08-22
+- Qwen Audit: FULL PASS 100% (Phase 1 + Phase 2)
+- E2E Tests: 19/19 PASSED
+- Portable Executable: 32.7 MB (ready for immediate distribution)
+- Installer Script: installer.iss (prepared, optional compilation)
 
 > **v2.9.39** เพิ่ม **Icon Harmonization, Task Re-pack & Google OAuth Browser Flow (PATHWAY B - Audit Track Completed - Phase 2 Refined)**
 >   - Feature 1: Minimalist icon harmonization (Complete ✔ → ✓, minimalist outline styling)
