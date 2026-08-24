@@ -14,6 +14,9 @@ class NoteCard(tk.Frame):
         self.theme = theme
         self.is_completed_tab = is_completed_tab  # ✓ v1.3.8: Track which tab we're in
 
+        # v2.9.43: Content debounce timer
+        self._content_save_timer = None
+
         # สีพาสเทลแบบสุ่ม (หรือตั้งเอง)
         color_list = list(PASTEL_PALETTE.values())
         self.color_idx = hash(note.id) % len(color_list)
@@ -311,7 +314,9 @@ class NoteCard(tk.Frame):
         content_to_show = self.note.content if self.note.content else ""
         self.content_text.insert("1.0", content_to_show)
         self.content_text.pack(fill="both", expand=True)
+        # v2.9.43: Bind both FocusOut (immediate save when user leaves) + KeyRelease (debounced save while typing)
         self.content_text.bind("<FocusOut>", self._on_content_change)
+        self.content_text.bind("<KeyRelease>", self._on_content_debounced)
 
     def _hide_content(self):
         """ซ่อน content area"""
@@ -450,10 +455,48 @@ class NoteCard(tk.Frame):
             self.on_update(self.note)
 
     def _on_content_change(self, event):
-        """เมื่อเปลี่ยน content จากช่อง Text"""
+        """v2.9.43: Immediate save when content loses focus (FocusOut event)"""
         new_content = self.content_text.get("1.0", "end-1c")
         self.note.content = new_content
         self.on_update(self.note)
+        # Cancel any pending debounced save since we just saved
+        if self._content_save_timer is not None:
+            try:
+                self.after_cancel(self._content_save_timer)
+            except tk.TclError:
+                pass
+            self._content_save_timer = None
+
+    def _on_content_debounced(self, event):
+        """v2.9.43: Debounced save while typing (prevent DB thrashing)
+
+        Saves content 500ms after last keystroke. If user keeps typing, timer resets.
+        This ensures changes aren't lost if user closes app without focus-out.
+        """
+        # Cancel previous timer if still pending
+        if self._content_save_timer is not None:
+            try:
+                self.after_cancel(self._content_save_timer)
+            except tk.TclError:
+                pass
+
+        # Schedule save 500ms from now
+        def save_content():
+            self._content_save_timer = None
+            if self.content_text:  # Guard against widget being destroyed
+                new_content = self.content_text.get("1.0", "end-1c")
+                if new_content != self.note.content:  # Only save if changed
+                    self.note.content = new_content
+                    self.on_update(self.note)
+
+        # Use root.after if available, else fallback to direct schedule
+        try:
+            # Try to get root window reference
+            root = self.winfo_toplevel()
+            self._content_save_timer = root.after(500, save_content)
+        except tk.TclError:
+            # Fallback: schedule via after() on self
+            self._content_save_timer = self.after(500, save_content)
 
     def _on_delete(self):
         """ปุ่ม delete"""
