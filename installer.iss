@@ -1,22 +1,23 @@
-; Inno Setup Script for QuickNote v2.9.39
+; Inno Setup Script for QuickNote v2.9.41
 ; This script creates a Windows installer for QuickNote
+; Updated: 2026-08-24
 
 [Setup]
 AppName=QuickNote
-AppVersion=2.9.40
+AppVersion=2.9.42
 AppPublisher=Passagain P.
 DefaultDirName={autopf}\QuickNote
 DefaultGroupName=QuickNote
 AllowNoIcons=yes
-OutputDir=dist
-OutputBaseFilename=QuickNote_v2.9.40_Setup
+OutputDir=installer_output
+OutputBaseFilename=QuickNote_v2.9.42_Setup
 Compression=lzma
 SolidCompression=yes
 UninstallDisplayIcon={app}\QuickNote.exe
-VersionInfoVersion=2.9.39.0
+VersionInfoVersion=2.9.42.0
 VersionInfoCompany=Passagain P.
 VersionInfoProductName=QuickNote
-VersionInfoProductVersion=2.9.39.0
+VersionInfoProductVersion=2.9.42.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -25,7 +26,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\QuickNote_v2.9.40.exe"; DestDir: "{app}"; DestName: "QuickNote.exe"; Flags: ignoreversion
+Source: "dist\QuickNote_v2.9.42.exe"; DestDir: "{app}"; DestName: "QuickNote.exe"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "CLAUDE.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 

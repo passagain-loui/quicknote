@@ -371,7 +371,7 @@ class Board:
         self.root.geometry(f"{w}x{h}")
 
     def repack_card_to_top(self, note_id: str):
-        """v2.9.41: Move note card to top of board (empty board safe)
+        """v2.9.42: Move note card to top of board (empty board safe)
 
         This re-orders the card pack to appear at Index 0, making it the first visible card.
         Called when a reminder is triggered OR a new note is created to bring to top.
@@ -382,18 +382,26 @@ class Board:
 
         try:
             card = self.note_cards[note_id]
-            # Get all children in inner_frame
-            all_children = [c for c in self.inner_frame.winfo_children() if isinstance(c, tk.Frame)]
+
+            # v2.9.42: Use pack_slaves() to get actual visual pack order (not winfo_children)
+            # pack_slaves() returns widgets in the order they are visually packed
+            card_slaves = self.inner_frame.pack_slaves()
+
+            # Filter only existing note card widgets (exclude destroyed widgets + non-cards)
+            card_widgets = [c for c in card_slaves if c.winfo_exists() and c in self.note_cards.values()]
 
             # Unpack and repack at the beginning (uses pack() ordering)
             card.pack_forget()
 
-            if all_children and all_children[0] != card:
-                # If there are other cards, pack before the first one
-                card.pack(before=all_children[0], side="top", fill="x", padx=6, pady=4)
+            if card_widgets and card_widgets[0] != card:
+                # If there are other cards, pack before the first one (makes this card Index 0)
+                card.pack(before=card_widgets[0], fill="x", padx=4, pady=4)
             else:
                 # If board is empty or this is the only card, just pack normally
-                card.pack(side="top", fill="x", padx=6, pady=4)
+                card.pack(fill="x", padx=4, pady=4)
+
+            # v2.9.42: Scroll to top so new card is visible
+            self.root.after(50, lambda: self._scroll_to_top())
 
             log.info(f"[Board] Card {note_id} repacked to top")
         except Exception as e:
