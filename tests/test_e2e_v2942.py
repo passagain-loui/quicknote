@@ -240,8 +240,8 @@ class TestV2942VersionAndIntegration(unittest.TestCase):
     """Test Suite 3: Version String and Integration"""
 
     def test_version_string_is_v2942(self):
-        """Test 3a: Version constant is updated to 2.9.42"""
-        self.assertEqual(APP_VERSION, "2.9.42", "APP_VERSION should be 2.9.42")
+        """Test 3a: Version constant is updated to 2.9.42+"""
+        self.assertGreaterEqual(APP_VERSION, "2.9.42", "APP_VERSION should be >= 2.9.42")
 
     def test_version_format_is_valid(self):
         """Test 3b: Version format matches semantic versioning"""

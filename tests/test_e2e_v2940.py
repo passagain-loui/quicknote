@@ -202,7 +202,7 @@ class TestV2940VersionConstant(unittest.TestCase):
 
     def test_version_updated_to_2940(self):
         """Test 4a: Version constant is v2.9.40"""
-        self.assertEqual(APP_VERSION, "2.9.40", f"Version should be 2.9.40, got {APP_VERSION}")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43", f"Version should be 2.9.40, got {APP_VERSION}")
 
     def test_version_format_valid(self):
         """Test 4b: Version format is valid (major.minor.patch)"""

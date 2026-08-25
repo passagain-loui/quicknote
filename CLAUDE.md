@@ -2107,3 +2107,50 @@ python build_windows.py
 - **State-First:** Define RAM/DB/UI State Transition before modifying code.
 - **Strict E2E Test:** Mocking forbidden. Simulate real Windows Events/Threads. 100% Pass required.
 - **No Early Build:** Never build `.exe` during Audit Track until Qwen gives explicit 100% PASS approval.
+---
+
+# 🔍 LOCALCORE GATEKEEPER PROTOCOL
+
+**LocalCore (Qwen 2.5 Coder 14B)** is the independent audit authority for all Audit Track verifications.
+
+## Installation & Paths
+
+- **Executable Path:** `C:\Program Files\LocalCore\LocalCore.exe` (Official)
+  - **Dev/Build Path:** `D:\AI\OpenCode\LocalCore\target\release\localcore.exe`
+- **Shared Audit Log:** `%LOCALAPPDATA%\LocalCore\logs\verify.log`
+
+## Verification Rule (Audit Track Protocol)
+
+When performing static code audit or verification during **PATHWAY B (Audit Track)**:
+
+```bash
+<LOCALCORE_EXE> --verify "<TEST_COMMAND>" --model "Qwen-2.5-Coder-14B"
+```
+
+### Exit Code Interpretation:
+- **Exit 0:** ✅ **FULL AUDIT PASSED: 100% CLEAN & PRODUCTION READY**
+- **Exit non-zero:** ❌ Audit failed — fix issues in code, then re-verify
+
+### Audit Loop Pattern:
+1. **Gemini** → Prepares audit benchmark prompt + target files
+2. **LocalCore** → Reads files, performs static analysis, outputs findings
+3. **Claude** → Implements fixes based on findings
+4. **LocalCore** → Re-audits until exit code 0
+5. **User** → Reviews findings before final build
+
+### Example Verification:
+```bash
+# First audit pass (may fail)
+C:\Program Files\LocalCore\LocalCore.exe --verify "audit src/core/database.py src/ui/settings_window.py" --model "Qwen-2.5-Coder-14B"
+
+# If exit code != 0 → Fix code
+# Re-verify until exit code 0
+C:\Program Files\LocalCore\LocalCore.exe --verify "audit src/core/database.py src/ui/settings_window.py" --model "Qwen-2.5-Coder-14B"
+```
+
+## When to Use LocalCore
+
+**PATHWAY A (Normal Track):** Skip LocalCore, use standard E2E tests only  
+**PATHWAY B (Audit Track):** MANDATORY LocalCore verification gate-keeping
+
+---

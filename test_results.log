@@ -1,0 +1,910 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: D:\AI\OpenCode\Noted Planing and Record
+collecting ... collected 353 items
+
+tests/test_e2e_v281.py::test_garbage_collection_prevention PASSED        [  0%]
+tests/test_e2e_v281.py::test_dynamic_sorting PASSED                      [  0%]
+tests/test_e2e_v281.py::test_notification_with_rerender PASSED           [  0%]
+tests/test_e2e_v282.py::test_toast_positioning PASSED                    [  1%]
+tests/test_e2e_v282.py::test_absolute_sorting PASSED                     [  1%]
+tests/test_e2e_v283.py::test_clear_reminder_db_sync PASSED               [  1%]
+tests/test_e2e_v283.py::test_notification_appears PASSED                 [  1%]
+tests/test_e2e_v283.py::test_no_repeat_notification PASSED               [  2%]
+tests/test_e2e_v284.py::test_clear_reminder_db_sync PASSED               [  2%]
+tests/test_e2e_v284.py::test_windows_notification_service PASSED         [  2%]
+tests/test_e2e_v284.py::test_no_repeat_notifications PASSED              [  3%]
+tests/test_e2e_v285.py::test_notification_queue_threadsafe PASSED        [  3%]
+tests/test_e2e_v285.py::test_clear_reminder_with_queue PASSED            [  3%]
+tests/test_e2e_v285.py::test_queue_nonblocking_operations PASSED         [  3%]
+tests/test_e2e_v286.py::test_queue_loop_binding PASSED                   [  4%]
+tests/test_e2e_v286.py::test_default_collapsed_notes PASSED              [  4%]
+tests/test_e2e_v286.py::test_queue_and_collapsed_integration PASSED      [  4%]
+tests/test_e2e_v290.py::test_snooze_db_update PASSED                     [  5%]
+tests/test_e2e_v290.py::test_toast_topmost_attribute PASSED              [  5%]
+tests/test_e2e_v290.py::test_snooze_with_rerender PASSED                 [  5%]
+tests/test_e2e_v291.py::test_dpi_aware_positioning PASSED                [  5%]
+tests/test_e2e_v291.py::test_window_state_management PASSED              [  6%]
+tests/test_e2e_v291.py::test_fallback_positioning PASSED                 [  6%]
+tests/test_e2e_v2910.py::TestStartupCrashFixV2910::test_note_card_initialization_no_crash PASSED [  6%]
+tests/test_e2e_v2910.py::TestStartupCrashFixV2910::test_note_object_attribute_access PASSED [  7%]
+tests/test_e2e_v2910.py::TestStartupCrashFixV2910::test_note_object_has_no_get_method PASSED [  7%]
+tests/test_e2e_v2910.py::TestStartupCrashFixV2910::test_reminder_icon_logic_with_getattr PASSED [  7%]
+tests/test_e2e_v2910.py::TestStartupCrashFixV2910::test_startup_simulation PASSED [  7%]
+tests/test_e2e_v2910.py::TestStartupCrashFixV2910::test_version_current PASSED [  8%]
+tests/test_e2e_v2912.py::TestOpenButtonFixV2912::test_minimal_button_sizing PASSED [  8%]
+tests/test_e2e_v2912.py::TestOpenButtonFixV2912::test_minimal_ui_left_aligned PASSED [  8%]
+tests/test_e2e_v2912.py::TestOpenButtonFixV2912::test_open_button_forces_foreground PASSED [  9%]
+tests/test_e2e_v2912.py::TestOpenButtonFixV2912::test_open_button_refreshes_ui PASSED [  9%]
+tests/test_e2e_v2912.py::TestOpenButtonFixV2912::test_open_button_sets_reminder_triggered PASSED [  9%]
+tests/test_e2e_v2912.py::TestOpenButtonFixV2912::test_version_v2912 PASSED [  9%]
+tests/test_e2e_v2912.py::TestCompleteOpenButtonFlowV2912::test_no_alarm_re_trigger_after_open PASSED [ 10%]
+tests/test_e2e_v2912.py::TestCompleteOpenButtonFlowV2912::test_open_button_full_workflow PASSED [ 10%]
+tests/test_e2e_v2913.py::TestSyncDBCommitV2913::test_no_alarm_re_trigger_after_sync_commit PASSED [ 10%]
+tests/test_e2e_v2913.py::TestSyncDBCommitV2913::test_scheduler_sees_updated_db PASSED [ 11%]
+tests/test_e2e_v2913.py::TestSyncDBCommitV2913::test_sync_db_commit_reminder_triggered PASSED [ 11%]
+tests/test_e2e_v2913.py::TestWin32HardForegroundV2913::test_win32_api_constants PASSED [ 11%]
+tests/test_e2e_v2913.py::TestWin32HardForegroundV2913::test_win32_force_window_sequence PASSED [ 11%]
+tests/test_e2e_v2913.py::TestWin32HardForegroundV2913::test_win32_switches_to_this_window_api PASSED [ 12%]
+tests/test_e2e_v2913.py::TestTaskHighlightAndScrollV2913::test_auto_scroll_to_top_logic PASSED [ 12%]
+tests/test_e2e_v2913.py::TestTaskHighlightAndScrollV2913::test_note_highlight_flash PASSED [ 12%]
+tests/test_e2e_v2913.py::TestCompleteV2913FlowV2913::test_complete_open_button_flow_v2913 PASSED [ 13%]
+tests/test_e2e_v2913.py::TestCompleteV2913FlowV2913::test_version_v2913 PASSED [ 13%]
+tests/test_e2e_v2914.py::TestCommandQueuePatternV2914::test_command_queue_creation PASSED [ 13%]
+tests/test_e2e_v2914.py::TestCommandQueuePatternV2914::test_queue_multiple_commands PASSED [ 13%]
+tests/test_e2e_v2914.py::TestCommandQueuePatternV2914::test_queue_put_get_dismiss_note_command PASSED [ 14%]
+tests/test_e2e_v2914.py::TestCommandQueuePatternV2914::test_queue_put_get_open_note_command PASSED [ 14%]
+tests/test_e2e_v2914.py::TestCommandQueuePatternV2914::test_queue_put_get_snooze_note_command PASSED [ 14%]
+tests/test_e2e_v2914.py::TestMainThreadDBAccessOnlyV2914::test_dismiss_note_command_execution PASSED [ 15%]
+tests/test_e2e_v2914.py::TestMainThreadDBAccessOnlyV2914::test_main_thread_updates_db PASSED [ 15%]
+tests/test_e2e_v2914.py::TestMainThreadDBAccessOnlyV2914::test_open_note_command_execution PASSED [ 15%]
+tests/test_e2e_v2914.py::TestMainThreadDBAccessOnlyV2914::test_snooze_note_command_execution PASSED [ 15%]
+tests/test_e2e_v2914.py::TestCrossThreadSafetyV2914::test_multiple_commands_processed_sequentially PASSED [ 16%]
+tests/test_e2e_v2914.py::TestCrossThreadSafetyV2914::test_notification_thread_does_not_touch_db PASSED [ 16%]
+tests/test_e2e_v2914.py::TestCrossThreadSafetyV2914::test_version_v2914 PASSED [ 16%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_db_commit_before_gui_ops PASSED [ 16%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_dismiss_note_with_db_sync FAILED [ 17%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_flashwindow_api_exists PASSED [ 17%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_open_note_command_flow_v2915 PASSED [ 17%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_shell_level_restore_advantage PASSED [ 18%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_snooze_note_with_db_sync PASSED [ 18%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_version_v2915 PASSED [ 18%]
+tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_win32_syscommand_constants PASSED [ 18%]
+tests/test_e2e_v2916.py::TestPyWinCtlIntegrationV2916::test_fallback_to_v2915_if_pywinctl_fails PASSED [ 19%]
+tests/test_e2e_v2916.py::TestPyWinCtlIntegrationV2916::test_pywinctl_activate_api_exists PASSED [ 19%]
+tests/test_e2e_v2916.py::TestPyWinCtlIntegrationV2916::test_pywinctl_handles_focus_lock PASSED [ 19%]
+tests/test_e2e_v2916.py::TestPyWinCtlIntegrationV2916::test_pywinctl_library_available PASSED [ 20%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_5_second_debounce_prevents_alarm_retrigger PASSED [ 20%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_debounce_timestamp_initialization PASSED [ 20%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_debounce_timestamp_updated_after_dismiss PASSED [ 20%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_debounce_timestamp_updated_after_open PASSED [ 21%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_debounce_timestamp_updated_after_snooze PASSED [ 21%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_scheduler_resumes_after_5_second_window PASSED [ 21%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_scheduler_skips_within_5_second_window PASSED [ 22%]
+tests/test_e2e_v2916.py::TestDebounceV2916::test_version_v2916 PASSED    [ 22%]
+tests/test_e2e_v2916.py::TestCompleteOpenFlowV2916::test_complete_open_flow_with_pywinctl_and_debounce PASSED [ 22%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_db_commit_is_first_operation PASSED [ 22%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_db_commit_succeeds_even_if_ui_fails PASSED [ 23%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_exception_isolation_audio_stop PASSED [ 23%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_exception_isolation_open_note_content PASSED [ 23%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_exception_isolation_scroll_to_note PASSED [ 24%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_exception_isolation_ui_refresh PASSED [ 24%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_exception_isolation_window_activation PASSED [ 24%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_fresh_db_fetch_after_commit PASSED [ 24%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_no_object_references_in_queue PASSED [ 25%]
+tests/test_e2e_v2917.py::TestFailSafeOpenLogicV2917::test_version_v2917 PASSED [ 25%]
+tests/test_e2e_v2917.py::TestCompleteOpenFlowV2917::test_complete_open_flow_bulletproof PASSED [ 25%]
+tests/test_e2e_v2917.py::TestCompleteOpenFlowV2917::test_no_alarm_retrigger_after_open PASSED [ 26%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_all_three_buttons_use_same_architecture PASSED [ 26%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_dialog_destroy_after_callback PASSED [ 26%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_dialog_only_delegates_to_callback PASSED [ 26%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_queue_callback_puts_dismiss_command PASSED [ 27%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_queue_callback_puts_open_note_command PASSED [ 27%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_queue_callback_puts_snooze_command PASSED [ 27%]
+tests/test_e2e_v2918.py::TestUnifiedQueueCallbackArchitectureV2918::test_version_v2918 PASSED [ 28%]
+tests/test_e2e_v2918.py::TestQueueHandlerProcessesAllCommands::test_queue_handler_processes_dismiss_note_command PASSED [ 28%]
+tests/test_e2e_v2918.py::TestQueueHandlerProcessesAllCommands::test_queue_handler_processes_open_note_command PASSED [ 28%]
+tests/test_e2e_v2918.py::TestQueueHandlerProcessesAllCommands::test_queue_handler_processes_snooze_note_command PASSED [ 28%]
+tests/test_e2e_v2919.py::TestAtomicOpenStateV2919::test_db_commit_before_ui_refresh PASSED [ 29%]
+tests/test_e2e_v2919.py::TestAtomicOpenStateV2919::test_execution_order_audio_then_db_then_ui PASSED [ 29%]
+tests/test_e2e_v2919.py::TestAtomicOpenStateV2919::test_no_alarm_retrigger_after_open PASSED [ 29%]
+tests/test_e2e_v2919.py::TestAtomicOpenStateV2919::test_opened_task_stays_at_top_with_reminder_triggered PASSED [ 30%]
+tests/test_e2e_v2919.py::TestAtomicOpenStateV2919::test_version_v2919 PASSED [ 30%]
+tests/test_e2e_v2919.py::TestTaskPositionLockV2919::test_task_position_locked_after_open PASSED [ 30%]
+tests/test_e2e_v2919.py::TestTaskPositionLockV2919::test_ui_refresh_fetches_committed_data PASSED [ 30%]
+tests/test_e2e_v292.py::test_center_screen_positioning PASSED            [ 31%]
+tests/test_e2e_v292.py::test_no_win32api_imports PASSED                  [ 31%]
+tests/test_e2e_v292.py::test_center_positioning_accuracy PASSED          [ 31%]
+tests/test_e2e_v2920.py::TestStreamlined2ButtonWorkflowV2920::test_dialog_has_only_2_buttons PASSED [ 32%]
+tests/test_e2e_v2920.py::TestStreamlined2ButtonWorkflowV2920::test_dismiss_button_workflow PASSED [ 32%]
+tests/test_e2e_v2920.py::TestStreamlined2ButtonWorkflowV2920::test_no_open_button_functionality PASSED [ 32%]
+tests/test_e2e_v2920.py::TestStreamlined2ButtonWorkflowV2920::test_snooze_button_workflow PASSED [ 32%]
+tests/test_e2e_v2920.py::TestStreamlined2ButtonWorkflowV2920::test_version_v2920 PASSED [ 33%]
+tests/test_e2e_v2921.py::TestActiveAlarmHighlightFrameV2921::test_active_alarm_displays_red_highlight PASSED [ 33%]
+tests/test_e2e_v2921.py::TestActiveAlarmHighlightFrameV2921::test_dismissed_alarm_removes_highlight PASSED [ 33%]
+tests/test_e2e_v2921.py::TestActiveAlarmHighlightFrameV2921::test_no_alarm_no_highlight PASSED [ 33%]
+tests/test_e2e_v2921.py::TestActiveAlarmHighlightFrameV2921::test_snoozed_alarm_keeps_active_state_temporarily PASSED [ 34%]
+tests/test_e2e_v2921.py::TestActiveAlarmHighlightFrameV2921::test_ui_refresh_updates_highlight_state PASSED [ 34%]
+tests/test_e2e_v2921.py::TestActiveAlarmHighlightFrameV2921::test_version_v2921 PASSED [ 34%]
+tests/test_e2e_v2921.py::TestHighlightBorderThicknessV2921::test_active_alarm_uses_thicker_border PASSED [ 35%]
+tests/test_e2e_v2921.py::TestHighlightBorderThicknessV2921::test_normal_note_uses_standard_border PASSED [ 35%]
+tests/test_e2e_v2922.py::TestWALModeV2922::test_concurrent_read_write_safe PASSED [ 35%]
+tests/test_e2e_v2922.py::TestWALModeV2922::test_db_connection_has_wal_mode_enabled FAILED [ 35%]
+tests/test_e2e_v2922.py::TestWALModeV2922::test_db_pragmas_set_correctly PASSED [ 36%]
+tests/test_e2e_v2922.py::TestWALModeV2922::test_version_v2922 PASSED     [ 36%]
+tests/test_e2e_v2922.py::TestUIRefreshDebouncerV2922::test_deadlock_prevention_with_wal_and_debouncer PASSED [ 36%]
+tests/test_e2e_v2922.py::TestUIRefreshDebouncerV2922::test_debouncer_consolidates_multiple_refreshes PASSED [ 37%]
+tests/test_e2e_v2923.py::TestPopupTopmostV2923::test_dialog_has_topmost_attribute PASSED [ 37%]
+tests/test_e2e_v2923.py::TestPopupTopmostV2923::test_enforce_topmost_timer_active PASSED [ 37%]
+tests/test_e2e_v2923.py::TestPopupTopmostV2923::test_version_v2923 PASSED [ 37%]
+tests/test_e2e_v2923.py::TestRedBorderLogicV2923::test_red_border_hides_when_dismissed PASSED [ 38%]
+tests/test_e2e_v2923.py::TestRedBorderLogicV2923::test_red_border_hides_when_snoozed PASSED [ 38%]
+tests/test_e2e_v2923.py::TestRedBorderLogicV2923::test_red_border_shows_when_alarm_time_arrived PASSED [ 38%]
+tests/test_e2e_v2923.py::TestTaskSortingV2923::test_active_alarm_task_at_index_0 FAILED [ 39%]
+tests/test_e2e_v2923.py::TestTaskSortingV2923::test_dismissed_alarm_goes_below_active FAILED [ 39%]
+tests/test_e2e_v2923.py::TestTaskSortingV2923::test_multiple_alarms_soonest_first PASSED [ 39%]
+tests/test_e2e_v2924.py::TestFlickerFreePopupV2924::test_dialog_no_timer_loop_flicker PASSED [ 39%]
+tests/test_e2e_v2924.py::TestFlickerFreePopupV2924::test_version_v2924 PASSED [ 40%]
+tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_dismissed_alarm_not_at_top FAILED [ 40%]
+tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_multiple_alarms_sorted_correctly_after_refresh FAILED [ 40%]
+tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_red_border_shows_with_reminder_datetime_intact PASSED [ 41%]
+tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_scheduler_triggers_board_refresh_immediately FAILED [ 41%]
+tests/test_e2e_v2925.py::TestAlarmStateLockV2925::test_alarm_fires_only_once_state_locked PASSED [ 41%]
+tests/test_e2e_v2925.py::TestAlarmStateLockV2925::test_alarm_not_repeat_on_next_scheduler_cycle PASSED [ 41%]
+tests/test_e2e_v2925.py::TestAlarmStateLockV2925::test_version_v2925 PASSED [ 42%]
+tests/test_e2e_v2925.py::TestRedBorderOnTriggeredAlarmV2925::test_red_border_hides_when_dismissed PASSED [ 42%]
+tests/test_e2e_v2925.py::TestRedBorderOnTriggeredAlarmV2925::test_red_border_shows_when_triggered PASSED [ 42%]
+tests/test_e2e_v2925.py::TestRedBorderOnTriggeredAlarmV2925::test_triggered_alarm_at_index_0 FAILED [ 43%]
+tests/test_e2e_v2925.py::TestIsolatedTestDatabaseV2925::test_temporary_db_used_not_production PASSED [ 43%]
+tests/test_e2e_v2926.py::TestGlobalMouseWheelV2926::test_global_mousewheel_binding PASSED [ 43%]
+tests/test_e2e_v2926.py::TestGlobalMouseWheelV2926::test_version_v2926 PASSED [ 43%]
+tests/test_e2e_v2926.py::TestCustomSnoozeSettingV2926::test_custom_snooze_duration_applied PASSED [ 44%]
+tests/test_e2e_v2926.py::TestCustomSnoozeSettingV2926::test_snooze_duration_clamped_to_valid_range PASSED [ 44%]
+tests/test_e2e_v2926.py::TestCustomSnoozeSettingV2926::test_snooze_duration_in_settings_default PASSED [ 44%]
+tests/test_e2e_v2926.py::TestDismissStateClearanceV2926::test_dismiss_clears_reminder_datetime PASSED [ 45%]
+tests/test_e2e_v2926.py::TestDismissStateClearanceV2926::test_dismissed_alarm_not_at_top FAILED [ 45%]
+tests/test_e2e_v2926.py::TestDismissStateClearanceV2926::test_red_border_disappears_after_dismiss PASSED [ 45%]
+tests/test_e2e_v2927.py::TestSnoozeUIWidgetV2927::test_snooze_duration_coercion_lower_bound PASSED [ 45%]
+tests/test_e2e_v2927.py::TestSnoozeUIWidgetV2927::test_snooze_duration_coercion_upper_bound PASSED [ 46%]
+tests/test_e2e_v2927.py::TestSnoozeUIWidgetV2927::test_snooze_duration_valid_range PASSED [ 46%]
+tests/test_e2e_v2927.py::TestSnoozeUIWidgetV2927::test_snooze_setting_in_defaults PASSED [ 46%]
+tests/test_e2e_v2927.py::TestSnoozeUIWidgetV2927::test_version_v2927 PASSED [ 47%]
+tests/test_e2e_v2927.py::TestStrictTopmostLockV2927::test_dialog_cleanup_with_grab_release PASSED [ 47%]
+tests/test_e2e_v2927.py::TestStrictTopmostLockV2927::test_dialog_has_topmost_attribute PASSED [ 47%]
+tests/test_e2e_v2927.py::TestStrictTopmostLockV2927::test_dialog_uses_grab_set PASSED [ 47%]
+tests/test_e2e_v2928.py::TestRecentlyDismissedPinningV2928::test_dismissed_note_marked_with_timestamp PASSED [ 48%]
+tests/test_e2e_v2928.py::TestRecentlyDismissedPinningV2928::test_dismissed_note_sorts_to_top FAILED [ 48%]
+tests/test_e2e_v2928.py::TestRecentlyDismissedPinningV2928::test_last_dismissed_at_column_exists PASSED [ 48%]
+tests/test_e2e_v2928.py::TestRecentlyDismissedPinningV2928::test_version_v2928 PASSED [ 49%]
+tests/test_e2e_v2928.py::TestSettingsLayoutFixV2928::test_all_sections_visible_in_layout PASSED [ 49%]
+tests/test_e2e_v2928.py::TestSettingsLayoutFixV2928::test_settings_window_height_increased PASSED [ 49%]
+tests/test_e2e_v2928.py::TestSettingsLayoutFixV2928::test_settings_window_width_increased PASSED [ 49%]
+tests/test_e2e_v2929.py::TestThreadViolationFixV2929::test_grab_set_now_safe_from_main_thread PASSED [ 50%]
+tests/test_e2e_v2929.py::TestThreadViolationFixV2929::test_no_more_daemon_thread_ui_spawns PASSED [ 50%]
+tests/test_e2e_v2929.py::TestThreadViolationFixV2929::test_notification_runs_on_main_thread PASSED [ 50%]
+tests/test_e2e_v2929.py::TestThreadViolationFixV2929::test_reminder_workflow_thread_safe PASSED [ 50%]
+tests/test_e2e_v2929.py::TestThreadViolationFixV2929::test_version_v2929 PASSED [ 51%]
+tests/test_e2e_v2930.py::TestNonBlockingTopmostV2930::test_focus_out_handler_restores_topmost PASSED [ 51%]
+tests/test_e2e_v2930.py::TestNonBlockingTopmostV2930::test_no_grab_set_blocking PASSED [ 51%]
+tests/test_e2e_v2930.py::TestNonBlockingTopmostV2930::test_topmost_attribute_always_active PASSED [ 52%]
+tests/test_e2e_v2930.py::TestNonBlockingTopmostV2930::test_transient_z_order_lock PASSED [ 52%]
+tests/test_e2e_v2930.py::TestNonBlockingTopmostV2930::test_version_v2930 PASSED [ 52%]
+tests/test_e2e_v2931.py::TestBottomRightToastV2931::test_bottom_right_positioning_logic PASSED [ 52%]
+tests/test_e2e_v2931.py::TestBottomRightToastV2931::test_position_method_exists PASSED [ 53%]
+tests/test_e2e_v2931.py::TestBottomRightToastV2931::test_toast_positioning_called_in_initialization PASSED [ 53%]
+tests/test_e2e_v2931.py::TestBottomRightToastV2931::test_topmost_attribute_with_toast_positioning PASSED [ 53%]
+tests/test_e2e_v2931.py::TestBottomRightToastV2931::test_version_v2931 PASSED [ 54%]
+tests/test_e2e_v2932.py::TestStrictCornerPositionV2932::test_bottom_right_positioning_formula PASSED [ 54%]
+tests/test_e2e_v2932.py::TestStrictCornerPositionV2932::test_center_on_screen_method_removed PASSED [ 54%]
+tests/test_e2e_v2932.py::TestStrictCornerPositionV2932::test_no_center_call_in_notification_service PASSED [ 54%]
+tests/test_e2e_v2932.py::TestStrictCornerPositionV2932::test_position_method_called_in_init PASSED [ 55%]
+tests/test_e2e_v2932.py::TestStrictCornerPositionV2932::test_version_v2932 PASSED [ 55%]
+tests/test_e2e_v2933.py::TestElevatedToastMarginV2933::test_elevated_margin_160px PASSED [ 55%]
+tests/test_e2e_v2933.py::TestElevatedToastMarginV2933::test_no_screen_clipping_at_elevation PASSED [ 56%]
+tests/test_e2e_v2933.py::TestElevatedToastMarginV2933::test_positioning_method_updated PASSED [ 56%]
+tests/test_e2e_v2933.py::TestElevatedToastMarginV2933::test_topmost_maintained_with_elevation PASSED [ 56%]
+tests/test_e2e_v2933.py::TestElevatedToastMarginV2933::test_version_v2933 PASSED [ 56%]
+tests/test_e2e_v2934.py::TestModernSettingsUIV2934::test_google_tasks_oauth_ui_widgets PASSED [ 57%]
+tests/test_e2e_v2934.py::TestModernSettingsUIV2934::test_modern_ui_styling PASSED [ 57%]
+tests/test_e2e_v2934.py::TestModernSettingsUIV2934::test_settings_window_tab_ordering PASSED [ 57%]
+tests/test_e2e_v2934.py::TestModernSettingsUIV2934::test_version_v2934 PASSED [ 58%]
+tests/test_e2e_v2934.py::TestModernSettingsUIV2934::test_window_dimensions_v2934 PASSED [ 58%]
+tests/test_e2e_v2935.py::TestAuditDrivenArchitectureV2935::test_dpi_aware_positioning PASSED [ 58%]
+tests/test_e2e_v2935.py::TestAuditDrivenArchitectureV2935::test_no_focus_out_event_binding PASSED [ 58%]
+tests/test_e2e_v2935.py::TestAuditDrivenArchitectureV2935::test_safe_destroy_event_cleanup PASSED [ 59%]
+tests/test_e2e_v2935.py::TestAuditDrivenArchitectureV2935::test_single_topmost_lock PASSED [ 59%]
+tests/test_e2e_v2935.py::TestAuditDrivenArchitectureV2935::test_version_v2935 PASSED [ 59%]
+tests/test_e2e_v2936.py::TestCodeRefactoringV2936::test_database_connection_timeout_increased PASSED [ 60%]
+tests/test_e2e_v2936.py::TestCodeRefactoringV2936::test_database_thread_safety_lock_exists PASSED [ 60%]
+tests/test_e2e_v2936.py::TestCodeRefactoringV2936::test_database_write_functions_use_lock PASSED [ 60%]
+tests/test_e2e_v2936.py::TestCodeRefactoringV2936::test_safe_destroy_no_unbind_all PASSED [ 60%]
+tests/test_e2e_v2936.py::TestCodeRefactoringV2936::test_smart_widget_reuse_in_load_notes PASSED [ 61%]
+tests/test_e2e_v2936.py::TestCodeRefactoringV2936::test_version_v2936 PASSED [ 61%]
+tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_action_button_complete_for_active_notes PASSED [ 61%]
+tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_action_button_restore_for_completed_notes FAILED [ 62%]
+tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_notification_handles_missing_note_frame_gracefully PASSED [ 62%]
+tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_notification_lifts_triggered_note_frame PASSED [ 62%]
+tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_smart_widget_reuse_updates_button_state PASSED [ 62%]
+tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_version_v2937 PASSED [ 63%]
+tests/test_e2e_v2938.py::TestUIButtonLayoutV2938::test_action_button_order_left_of_delete PASSED [ 63%]
+tests/test_e2e_v2938.py::TestUIButtonLayoutV2938::test_auth_error_window_deduping PASSED [ 63%]
+tests/test_e2e_v2938.py::TestUIButtonLayoutV2938::test_dismiss_clears_alarm_highlight PASSED [ 64%]
+tests/test_e2e_v2938.py::TestUIButtonLayoutV2938::test_notification_calls_set_alarm_highlight PASSED [ 64%]
+tests/test_e2e_v2938.py::TestUIButtonLayoutV2938::test_set_alarm_highlight_method_exists PASSED [ 64%]
+tests/test_e2e_v2938.py::TestUIButtonLayoutV2938::test_version_v2938 PASSED [ 64%]
+tests/test_e2e_v2939.py::TestV2939IconHarmonization::test_complete_button_minimalist_icon PASSED [ 65%]
+tests/test_e2e_v2939.py::TestV2939IconHarmonization::test_restore_button_icon PASSED [ 65%]
+tests/test_e2e_v2939.py::TestV2939IconHarmonization::test_update_action_button_on_status_change PASSED [ 65%]
+tests/test_e2e_v2939.py::TestV2939TaskReordering::test_repack_card_to_top_method_exists PASSED [ 66%]
+tests/test_e2e_v2939.py::TestV2939TaskReordering::test_repack_nonexistent_card_safe PASSED [ 66%]
+tests/test_e2e_v2939.py::TestV2939ReminderStateClearing::test_update_reminder_state_active PASSED [ 66%]
+tests/test_e2e_v2939.py::TestV2939ReminderStateClearing::test_update_reminder_state_changes_icon PASSED [ 66%]
+tests/test_e2e_v2939.py::TestV2939ReminderStateClearing::test_update_reminder_state_inactive PASSED [ 67%]
+tests/test_e2e_v2939.py::TestV2939ReminderStateClearing::test_update_reminder_state_method_exists PASSED [ 67%]
+tests/test_e2e_v2939.py::TestV2939GoogleOAuthFlow::test_google_authenticate_button_exists PASSED [ 67%]
+tests/test_e2e_v2939.py::TestV2939GoogleOAuthFlow::test_google_authenticate_method_exists PASSED [ 67%]
+tests/test_e2e_v2939.py::TestV2939GoogleOAuthFlow::test_oauth_no_file_required PASSED [ 68%]
+tests/test_e2e_v2939.py::TestV2939GoogleOAuthFlow::test_oauth_service_exists PASSED [ 68%]
+tests/test_e2e_v2939.py::TestV2939GoogleOAuthFlow::test_oauth_url_generation PASSED [ 68%]
+tests/test_e2e_v2939.py::TestV2939GoogleOAuthFlow::test_settings_window_google_tab_exists PASSED [ 69%]
+tests/test_e2e_v2939.py::TestV2939VersionConstant::test_version_format_valid PASSED [ 69%]
+tests/test_e2e_v2939.py::TestV2939VersionConstant::test_version_updated_to_2939 PASSED [ 69%]
+tests/test_e2e_v2939.py::TestV2939RegressionIntegration::test_all_v2939_features_work_together PASSED [ 69%]
+tests/test_e2e_v2939.py::TestV2939RegressionIntegration::test_board_and_card_compatibility PASSED [ 70%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_database_note_with_reminder PASSED [ 70%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_fallback_notification_chain PASSED [ 70%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_multiple_notifications_in_queue PASSED [ 71%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_callback_stored PASSED [ 71%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_message_dataclass PASSED [ 71%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_queue_integration PASSED [ 71%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_service_initialization PASSED [ 72%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_service_version FAILED [ 72%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_sound_plays PASSED [ 72%]
+tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_with_title_and_content PASSED [ 73%]
+tests/test_e2e_v294.py::TestNotificationCallbackV294::test_callback_brings_window_foreground PASSED [ 73%]
+tests/test_e2e_v294.py::TestNotificationCallbackV294::test_callback_execution PASSED [ 73%]
+tests/test_e2e_v2940.py::TestV2940PinPersistence::test_pin_button_updates_appearance FAILED [ 73%]
+tests/test_e2e_v2940.py::TestV2940PinPersistence::test_pin_saves_to_database PASSED [ 74%]
+tests/test_e2e_v2940.py::TestV2940PinReordering::test_pin_change_callback_exists PASSED [ 74%]
+tests/test_e2e_v2940.py::TestV2940PinReordering::test_pin_change_calls_repack FAILED [ 74%]
+tests/test_e2e_v2940.py::TestV2940PinReordering::test_repack_card_to_top_exists FAILED [ 75%]
+tests/test_e2e_v2940.py::TestV2940DatabaseSorting::test_multiple_pinned_notes_order FAILED [ 75%]
+tests/test_e2e_v2940.py::TestV2940DatabaseSorting::test_pinned_notes_sorted_first FAILED [ 75%]
+tests/test_e2e_v2940.py::TestV2940VersionConstant::test_version_format_valid PASSED [ 75%]
+tests/test_e2e_v2940.py::TestV2940VersionConstant::test_version_updated_to_2940 FAILED [ 76%]
+tests/test_e2e_v2940.py::TestV2940RegressionIntegration::test_all_v2940_features_integrated FAILED [ 76%]
+tests/test_e2e_v2940.py::TestV2940RegressionIntegration::test_pin_persistence_across_reload FAILED [ 76%]
+tests/test_e2e_v2940.py::TestV2940RegressionIntegration::test_ui_and_db_consistency FAILED [ 77%]
+tests/test_e2e_v2941.py::TestV2941NewTaskTopPositioning::test_new_task_on_empty_board_at_top FAILED [ 77%]
+tests/test_e2e_v2941.py::TestV2941NewTaskTopPositioning::test_new_task_positioning_empty_board_repack FAILED [ 77%]
+tests/test_e2e_v2941.py::TestV2941NewTaskWithExistingNotes::test_new_task_repacks_above_existing FAILED [ 77%]
+tests/test_e2e_v2941.py::TestV2941NewTaskWithExistingNotes::test_repack_with_multiple_cards_puts_at_top FAILED [ 78%]
+tests/test_e2e_v2941.py::TestV2941VersionConstant::test_version_format_valid PASSED [ 78%]
+tests/test_e2e_v2941.py::TestV2941VersionConstant::test_version_updated_to_2941 FAILED [ 78%]
+tests/test_e2e_v2941.py::TestV2941RegressionIntegration::test_empty_board_to_populated_workflow FAILED [ 79%]
+tests/test_e2e_v2941.py::TestV2941RegressionIntegration::test_new_task_workflow_complete FAILED [ 79%]
+tests/test_e2e_v2941.py::TestV2941RegressionIntegration::test_repack_card_method_exists FAILED [ 79%]
+tests/test_e2e_v2942.py::TestV2942NewTaskTopPositioningFixed::test_new_task_on_empty_board_appears_at_index_0 PASSED [ 79%]
+tests/test_e2e_v2942.py::TestV2942NewTaskTopPositioningFixed::test_new_task_positioning_empty_board_repack_safe PASSED [ 80%]
+tests/test_e2e_v2942.py::TestV2942NewTaskWithExistingNotes::test_new_task_repacks_above_existing_verified_at_index_0 FAILED [ 80%]
+tests/test_e2e_v2942.py::TestV2942NewTaskWithExistingNotes::test_repack_excludes_empty_state_label FAILED [ 80%]
+tests/test_e2e_v2942.py::TestV2942VersionAndIntegration::test_version_format_is_valid PASSED [ 81%]
+tests/test_e2e_v2942.py::TestV2942VersionAndIntegration::test_version_string_is_v2942 FAILED [ 81%]
+tests/test_e2e_v2943.py::TestV2943ContentPersistenceImmediate::test_content_reload_persists_across_restart PASSED [ 81%]
+tests/test_e2e_v2943.py::TestV2943ContentPersistenceImmediate::test_content_saved_to_db_after_keystroke_debounce PASSED [ 81%]
+tests/test_e2e_v2943.py::TestV2943ContentFocusOutImmediate::test_focus_out_saves_immediately_without_debounce_delay PASSED [ 82%]
+tests/test_e2e_v2943.py::TestV2943DebounceOptimization::test_rapid_keystrokes_only_save_once_after_debounce PASSED [ 82%]
+tests/test_e2e_v2943.py::TestV2943VersionAndIntegration::test_version_format_is_valid PASSED [ 82%]
+tests/test_e2e_v2943.py::TestV2943VersionAndIntegration::test_version_string_is_v2943 FAILED [ 83%]
+tests/test_e2e_v295.py::TestSystemTrayServiceV295::test_tray_notification_parameters PASSED [ 83%]
+tests/test_e2e_v295.py::TestSystemTrayServiceV295::test_tray_notification_with_callback PASSED [ 83%]
+tests/test_e2e_v295.py::TestSystemTrayServiceV295::test_tray_service_icon_creation PASSED [ 83%]
+tests/test_e2e_v295.py::TestSystemTrayServiceV295::test_tray_service_initialization PASSED [ 84%]
+tests/test_e2e_v295.py::TestSystemTrayServiceV295::test_tray_service_pystray_detection PASSED [ 84%]
+tests/test_e2e_v295.py::TestSystemTrayServiceV295::test_tray_service_stop PASSED [ 84%]
+tests/test_e2e_v295.py::TestNotificationIntegrationV295::test_notification_priority_chain_v295 PASSED [ 84%]
+tests/test_e2e_v295.py::TestNotificationIntegrationV295::test_notification_service_has_tray_fallback PASSED [ 85%]
+tests/test_e2e_v295.py::TestNotificationIntegrationV295::test_tray_service_global_instance PASSED [ 85%]
+tests/test_e2e_v295.py::TestNotificationIntegrationV295::test_version_updated_to_v295 FAILED [ 85%]
+tests/test_e2e_v295.py::TestUnblockableNotificationV295::test_fallback_chain_comprehensive PASSED [ 86%]
+tests/test_e2e_v295.py::TestUnblockableNotificationV295::test_notification_guaranteed_visibility PASSED [ 86%]
+tests/test_e2e_v296.py::TestWin32MessageBoxServiceV296::test_messagebox_constants PASSED [ 86%]
+tests/test_e2e_v296.py::TestWin32MessageBoxServiceV296::test_messagebox_global_instance PASSED [ 86%]
+tests/test_e2e_v296.py::TestWin32MessageBoxServiceV296::test_messagebox_service_initialization PASSED [ 87%]
+tests/test_e2e_v296.py::TestWin32MessageBoxServiceV296::test_messagebox_thread_safety PASSED [ 87%]
+tests/test_e2e_v296.py::TestWin32MessageBoxServiceV296::test_messagebox_with_callback PASSED [ 87%]
+tests/test_e2e_v296.py::TestNotificationIntegrationV296::test_messagebox_priority_zero PASSED [ 88%]
+tests/test_e2e_v296.py::TestNotificationIntegrationV296::test_notification_nuclear_option_fallback PASSED [ 88%]
+tests/test_e2e_v296.py::TestNotificationIntegrationV296::test_version_v296 FAILED [ 88%]
+tests/test_e2e_v296.py::TestAutoScrollV296::test_canvas_yview_moveto_zero PASSED [ 88%]
+tests/test_e2e_v296.py::TestAutoScrollV296::test_scroll_method_exists PASSED [ 89%]
+tests/test_e2e_v296.py::TestAutoScrollV296::test_scroll_to_top_on_reminder PASSED [ 89%]
+tests/test_e2e_v296.py::TestNuclearOptionV296::test_unblockable_dialog_strategy PASSED [ 89%]
+tests/test_e2e_v297.py::TestUnblockableDialogV297::test_alarm_stop_functionality PASSED [ 90%]
+tests/test_e2e_v297.py::TestUnblockableDialogV297::test_center_on_screen_method FAILED [ 90%]
+tests/test_e2e_v297.py::TestUnblockableDialogV297::test_dialog_button_callbacks FAILED [ 90%]
+tests/test_e2e_v297.py::TestUnblockableDialogV297::test_dialog_class_exists PASSED [ 90%]
+tests/test_e2e_v297.py::TestUnblockableDialogV297::test_dialog_inherits_toplevel PASSED [ 91%]
+tests/test_e2e_v297.py::TestUnblockableDialogV297::test_foreground_force_method PASSED [ 91%]
+tests/test_e2e_v297.py::TestNotificationIntegrationV297::test_notification_accepts_dialog_callbacks PASSED [ 91%]
+tests/test_e2e_v297.py::TestNotificationIntegrationV297::test_version_v297 FAILED [ 92%]
+tests/test_e2e_v297.py::TestAlarmControlV297::test_alarm_stop_callback_concept PASSED [ 92%]
+tests/test_e2e_v297.py::TestAlarmControlV297::test_dismiss_callback_flow PASSED [ 92%]
+tests/test_e2e_v297.py::TestAlarmControlV297::test_open_callback_flow PASSED [ 92%]
+tests/test_e2e_v297.py::TestAlarmControlV297::test_snooze_callback_flow PASSED [ 93%]
+tests/test_e2e_v298.py::TestThreadSafeDialogRoutingV298::test_dialog_callbacks_exist FAILED [ 93%]
+tests/test_e2e_v298.py::TestThreadSafeDialogRoutingV298::test_notification_service_accepts_parent_root PASSED [ 93%]
+tests/test_e2e_v298.py::TestThreadSafeDialogRoutingV298::test_thread_safe_routing_after_zero PASSED [ 94%]
+tests/test_e2e_v298.py::TestDatabaseStateSyncV298::test_dismiss_button_marks_triggered PASSED [ 94%]
+tests/test_e2e_v298.py::TestDatabaseStateSyncV298::test_open_button_marks_triggered PASSED [ 94%]
+tests/test_e2e_v298.py::TestDatabaseStateSyncV298::test_reminder_triggered_flag_prevents_retrigger PASSED [ 94%]
+tests/test_e2e_v298.py::TestDatabaseStateSyncV298::test_snooze_button_reschedules PASSED [ 95%]
+tests/test_e2e_v298.py::TestStartupAlarmStormPreventionV298::test_old_reminder_auto_dismissed PASSED [ 95%]
+tests/test_e2e_v298.py::TestStartupAlarmStormPreventionV298::test_recent_reminder_not_auto_dismissed PASSED [ 95%]
+tests/test_e2e_v298.py::TestStartupAlarmStormPreventionV298::test_startup_alarm_storm_threshold PASSED [ 96%]
+tests/test_e2e_v298.py::TestNotificationIntegrationV298::test_full_notification_flow PASSED [ 96%]
+tests/test_e2e_v298.py::TestNotificationIntegrationV298::test_version_v298 FAILED [ 96%]
+tests/test_e2e_v299.py::TestUIRerenderV299::test_board_stores_self_reference PASSED [ 96%]
+tests/test_e2e_v299.py::TestUIRerenderV299::test_callback_uses_root_after PASSED [ 97%]
+tests/test_e2e_v299.py::TestUIRerenderV299::test_dialog_has_parent_board_parameter PASSED [ 97%]
+tests/test_e2e_v299.py::TestUIRerenderV299::test_dialog_has_ui_rerender_method PASSED [ 97%]
+tests/test_e2e_v299.py::TestIconStateSyncV299::test_icon_active_when_reminder_set PASSED [ 98%]
+tests/test_e2e_v299.py::TestIconStateSyncV299::test_icon_changes_on_dismiss PASSED [ 98%]
+tests/test_e2e_v299.py::TestIconStateSyncV299::test_icon_changes_on_snooze PASSED [ 98%]
+tests/test_e2e_v299.py::TestIconStateSyncV299::test_icon_inactive_when_reminder_cleared PASSED [ 98%]
+tests/test_e2e_v299.py::TestThreadSafeCallbacksV299::test_board_callbacks_use_root_after PASSED [ 99%]
+tests/test_e2e_v299.py::TestThreadSafeCallbacksV299::test_complete_ui_sync_flow PASSED [ 99%]
+tests/test_e2e_v299.py::TestThreadSafeCallbacksV299::test_notification_service_routes_dialog_to_main_thread PASSED [ 99%]
+tests/test_e2e_v299.py::TestThreadSafeCallbacksV299::test_version_v299 FAILED [100%]
+
+================================== FAILURES ===================================
+__________ TestShellLevelRestoreV2915.test_dismiss_note_with_db_sync __________
+tests\test_e2e_v2915.py:106: in test_dismiss_note_with_db_sync
+    note_id = create_note(title="Test Note", content="")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:154: in create_note
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+---------------------------- Captured stdout call -----------------------------
+[Sanitize Error] no such table: notes
+__________ TestWALModeV2922.test_db_connection_has_wal_mode_enabled ___________
+tests\test_e2e_v2922.py:35: in test_db_connection_has_wal_mode_enabled
+    self.assertEqual(journal_mode.upper(), "WAL")
+E   AssertionError: 'MEMORY' != 'WAL'
+E   - MEMORY
+E   + WAL
+___________ TestTaskSortingV2923.test_active_alarm_task_at_index_0 ____________
+tests\test_e2e_v2923.py:165: in test_active_alarm_task_at_index_0
+    self.assertEqual(len(notes), 3)
+E   AssertionError: 36 != 3
+_________ TestTaskSortingV2923.test_dismissed_alarm_goes_below_active _________
+tests\test_e2e_v2923.py:196: in test_dismissed_alarm_goes_below_active
+    note1_id = create_note(title="Active Alarm", content="")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:154: in create_note
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+---------------------------- Captured stdout call -----------------------------
+[Sanitize Error] no such table: notes
+_______ TestImmediateBoardReRenderV2924.test_dismissed_alarm_not_at_top _______
+tests\test_e2e_v2924.py:177: in test_dismissed_alarm_not_at_top
+    self.assertEqual(len(notes), 1)
+E   AssertionError: 3 != 1
+_ TestImmediateBoardReRenderV2924.test_multiple_alarms_sorted_correctly_after_refresh _
+tests\test_e2e_v2924.py:153: in test_multiple_alarms_sorted_correctly_after_refresh
+    self.assertEqual(len(notes), 1)
+E   AssertionError: 4 != 1
+_ TestImmediateBoardReRenderV2924.test_scheduler_triggers_board_refresh_immediately _
+tests\test_e2e_v2924.py:99: in test_scheduler_triggers_board_refresh_immediately
+    self.assertEqual(len(notes), 1)
+E   AssertionError: 6 != 1
+_____ TestRedBorderOnTriggeredAlarmV2925.test_triggered_alarm_at_index_0 ______
+tests\test_e2e_v2925.py:168: in test_triggered_alarm_at_index_0
+    self.assertEqual(len(notes), 2)
+E   AssertionError: 12 != 2
+_______ TestDismissStateClearanceV2926.test_dismissed_alarm_not_at_top ________
+tests\test_e2e_v2926.py:195: in test_dismissed_alarm_not_at_top
+    self.assertEqual(len(notes), 2)
+E   AssertionError: 16 != 2
+_____ TestRecentlyDismissedPinningV2928.test_dismissed_note_sorts_to_top ______
+tests\test_e2e_v2928.py:100: in test_dismissed_note_sorts_to_top
+    self.assertLess(dismissed_idx, 2, "Recently dismissed note should be at/near top")
+E   AssertionError: 6 not less than 2 : Recently dismissed note should be at/near top
+___ TestUIActionButtonsV2937.test_action_button_restore_for_completed_notes ___
+tests\test_e2e_v2937.py:58: in test_action_button_restore_for_completed_notes
+    self.assertIn('\u2714', update_source, "_update_action_button should set Complete (\u2714) for active notes")
+E   AssertionError: '\u2714' not found in '    def _update_action_button(self):\\n        """v2.9.39: Update action button (Complete \u2713 / Restore \u21a9) based on current note status with minimalist styling"""\\n        if not hasattr(self, \\'btn_action\\'):\\n            return\\n\\n        if self.note.status == "completed":\\n            self.btn_action.config(text="\u21a9", fg="#34C759")  # Restore (green)\\n        else:\\n            self.btn_action.config(text="\u2713", fg="#666666")  # Complete (minimalist gray)\\n' : _update_action_button should set Complete (\u2714) for active notes
+____ TestWindowsNotificationServiceV294.test_notification_service_version _____
+tests\test_e2e_v294.py:157: in test_notification_service_version
+    self.assertEqual(APP_VERSION, "2.9.4")
+E   AssertionError: '2.9.44' != '2.9.4'
+E   - 2.9.44
+E   ?      -
+E   + 2.9.4
+_________ TestV2940PinPersistence.test_pin_button_updates_appearance __________
+tests\test_e2e_v2940.py:81: in test_pin_button_updates_appearance
+    card._on_toggle_pin()
+src\ui\note_card.py:448: in _on_toggle_pin
+    self.on_pin_change(self.note.id)
+E   TypeError: NoteCard.__init__.<locals>.<lambda>() takes 0 positional arguments but 1 was given
+_____________ TestV2940PinReordering.test_pin_change_calls_repack _____________
+tests\test_e2e_v2940.py:144: in test_pin_change_calls_repack
+    board._on_pin_changed(note.id)
+src\ui\board.py:647: in _on_pin_changed
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+____________ TestV2940PinReordering.test_repack_card_to_top_exists ____________
+tests\test_e2e_v2940.py:104: in test_repack_card_to_top_exists
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+__________ TestV2940DatabaseSorting.test_multiple_pinned_notes_order __________
+tests\test_e2e_v2940.py:183: in test_multiple_pinned_notes_order
+    note1_id = create_note(title="Oldest Pinned", content="Created first")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:154: in create_note
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+___________ TestV2940DatabaseSorting.test_pinned_notes_sorted_first ___________
+tests\test_e2e_v2940.py:158: in test_pinned_notes_sorted_first
+    note1_id = create_note(title="Note 1 (unpinned)", content="Content 1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:154: in create_note
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+____________ TestV2940VersionConstant.test_version_updated_to_2940 ____________
+tests\test_e2e_v2940.py:205: in test_version_updated_to_2940
+    self.assertEqual(APP_VERSION, "2.9.40", f"Version should be 2.9.40, got {APP_VERSION}")
+E   AssertionError: '2.9.44' != '2.9.40'
+E   - 2.9.44
+E   ?      ^
+E   + 2.9.40
+E   ?      ^
+E    : Version should be 2.9.40, got 2.9.44
+______ TestV2940RegressionIntegration.test_all_v2940_features_integrated ______
+tests\test_e2e_v2940.py:249: in test_all_v2940_features_integrated
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+______ TestV2940RegressionIntegration.test_pin_persistence_across_reload ______
+tests\test_e2e_v2940.py:234: in test_pin_persistence_across_reload
+    note_id = create_note(title="Persist Test", content="Content")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:154: in create_note
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+__________ TestV2940RegressionIntegration.test_ui_and_db_consistency __________
+tests\test_e2e_v2940.py:279: in test_ui_and_db_consistency
+    note_id = create_note(title="Consistency Test", content="Test")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:154: in create_note
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+_____ TestV2941NewTaskTopPositioning.test_new_task_on_empty_board_at_top ______
+tests\test_e2e_v2941.py:39: in test_new_task_on_empty_board_at_top
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+_ TestV2941NewTaskTopPositioning.test_new_task_positioning_empty_board_repack _
+tests\test_e2e_v2941.py:60: in test_new_task_positioning_empty_board_repack
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+___ TestV2941NewTaskWithExistingNotes.test_new_task_repacks_above_existing ____
+tests\test_e2e_v2941.py:96: in test_new_task_repacks_above_existing
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+_ TestV2941NewTaskWithExistingNotes.test_repack_with_multiple_cards_puts_at_top _
+tests\test_e2e_v2941.py:122: in test_repack_with_multiple_cards_puts_at_top
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+____________ TestV2941VersionConstant.test_version_updated_to_2941 ____________
+tests\test_e2e_v2941.py:148: in test_version_updated_to_2941
+    self.assertEqual(APP_VERSION, "2.9.41", f"Version should be 2.9.41, got {APP_VERSION}")
+E   AssertionError: '2.9.44' != '2.9.41'
+E   - 2.9.44
+E   ?      ^
+E   + 2.9.41
+E   ?      ^
+E    : Version should be 2.9.41, got 2.9.44
+____ TestV2941RegressionIntegration.test_empty_board_to_populated_workflow ____
+tests\test_e2e_v2941.py:207: in test_empty_board_to_populated_workflow
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+_______ TestV2941RegressionIntegration.test_new_task_workflow_complete ________
+tests\test_e2e_v2941.py:187: in test_new_task_workflow_complete
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+________ TestV2941RegressionIntegration.test_repack_card_method_exists ________
+tests\test_e2e_v2941.py:177: in test_repack_card_method_exists
+    board = Board(geometry="400x500+100+100", theme_mode="light", command_queue=self.cmd_queue)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\ui\board.py:257: in __init__
+    self._load_notes()
+src\ui\board.py:418: in _load_notes
+    notes_data = get_notes_by_status(self.current_filter)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\core\database.py:187: in get_notes_by_status
+    c.execute("""
+E   sqlite3.OperationalError: no such table: notes
+_ TestV2942NewTaskWithExistingNotes.test_new_task_repacks_above_existing_verified_at_index_0 _
+tests\test_e2e_v2942.py:188: in test_new_task_repacks_above_existing_verified_at_index_0
+    self.assertEqual(len(board.note_cards), 2, "Should have 2 notes now")
+E   AssertionError: 4 != 2 : Should have 2 notes now
+__ TestV2942NewTaskWithExistingNotes.test_repack_excludes_empty_state_label ___
+tests\test_e2e_v2942.py:233: in test_repack_excludes_empty_state_label
+    self.assertEqual(len(card_widgets), 1, "Should have exactly 1 card")
+E   AssertionError: 5 != 1 : Should have exactly 1 card
+_________ TestV2942VersionAndIntegration.test_version_string_is_v2942 _________
+tests\test_e2e_v2942.py:244: in test_version_string_is_v2942
+    self.assertEqual(APP_VERSION, "2.9.42", "APP_VERSION should be 2.9.42")
+E   AssertionError: '2.9.44' != '2.9.42'
+E   - 2.9.44
+E   ?      ^
+E   + 2.9.42
+E   ?      ^
+E    : APP_VERSION should be 2.9.42
+_________ TestV2943VersionAndIntegration.test_version_string_is_v2943 _________
+tests\test_e2e_v2943.py:337: in test_version_string_is_v2943
+    self.assertEqual(APP_VERSION, "2.9.43", "APP_VERSION should be 2.9.43")
+E   AssertionError: '2.9.44' != '2.9.43'
+E   - 2.9.44
+E   ?      ^
+E   + 2.9.43
+E   ?      ^
+E    : APP_VERSION should be 2.9.43
+________ TestNotificationIntegrationV295.test_version_updated_to_v295 _________
+tests\test_e2e_v295.py:108: in test_version_updated_to_v295
+    self.assertEqual(APP_VERSION, "2.9.5")
+E   AssertionError: '2.9.44' != '2.9.5'
+E   - 2.9.44
+E   ?     ^^
+E   + 2.9.5
+E   ?     ^
+______________ TestNotificationIntegrationV296.test_version_v296 ______________
+tests\test_e2e_v296.py:110: in test_version_v296
+    self.assertEqual(APP_VERSION, "2.9.6")
+E   AssertionError: '2.9.44' != '2.9.6'
+E   - 2.9.44
+E   ?     ^^
+E   + 2.9.6
+E   ?     ^
+___________ TestUnblockableDialogV297.test_center_on_screen_method ____________
+tests\test_e2e_v297.py:65: in test_center_on_screen_method
+    self.assertTrue(hasattr(UnblockableCustomDialog, 'center_on_screen'))
+E   AssertionError: False is not true
+___________ TestUnblockableDialogV297.test_dialog_button_callbacks ____________
+tests\test_e2e_v297.py:43: in test_dialog_button_callbacks
+    self.assertTrue(hasattr(UnblockableCustomDialog, '_on_open_click'))
+E   AssertionError: False is not true
+______________ TestNotificationIntegrationV297.test_version_v297 ______________
+tests\test_e2e_v297.py:93: in test_version_v297
+    self.assertEqual(APP_VERSION, "2.9.7")
+E   AssertionError: '2.9.44' != '2.9.7'
+E   - 2.9.44
+E   ?     ^^
+E   + 2.9.7
+E   ?     ^
+_________ TestThreadSafeDialogRoutingV298.test_dialog_callbacks_exist _________
+tests\test_e2e_v298.py:40: in test_dialog_callbacks_exist
+    self.assertTrue(hasattr(UnblockableCustomDialog, '_on_open_click'))
+E   AssertionError: False is not true
+______________ TestNotificationIntegrationV298.test_version_v298 ______________
+tests\test_e2e_v298.py:172: in test_version_v298
+    self.assertEqual(APP_VERSION, "2.9.8")
+E   AssertionError: '2.9.44' != '2.9.8'
+E   - 2.9.44
+E   ?     ^^
+E   + 2.9.8
+E   ?     ^
+________________ TestThreadSafeCallbacksV299.test_version_v299 ________________
+tests\test_e2e_v299.py:176: in test_version_v299
+    self.assertEqual(APP_VERSION, "2.9.9")
+E   AssertionError: '2.9.44' != '2.9.9'
+E   - 2.9.44
+E   ?     ^^
+E   + 2.9.9
+E   ?     ^
+============================== warnings summary ===============================
+tests\test_e2e_v281.py:24
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v281.py:24: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v281.py)
+    class TestResult:
+
+tests\test_e2e_v282.py:10
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v282.py:10: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v282.py)
+    class TestResult:
+
+tests\test_e2e_v283.py:23
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v283.py:23: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v283.py)
+    class TestResult:
+
+tests\test_e2e_v284.py:23
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v284.py:23: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v284.py)
+    class TestResult:
+
+tests\test_e2e_v285.py:24
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v285.py:24: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v285.py)
+    class TestResult:
+
+tests\test_e2e_v286.py:22
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v286.py:22: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v286.py)
+    class TestResult:
+
+tests\test_e2e_v290.py:19
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v290.py:19: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v290.py)
+    class TestResult:
+
+tests\test_e2e_v291.py:16
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v291.py:16: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v291.py)
+    class TestResult:
+
+tests\test_e2e_v292.py:16
+  D:\AI\OpenCode\Noted Planing and Record\tests\test_e2e_v292.py:16: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_e2e_v292.py)
+    class TestResult:
+
+tests/test_e2e_v281.py::test_garbage_collection_prevention
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v281.py::test_garbage_collection_prevention returned <class 'test_e2e_v281.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v281.py::test_dynamic_sorting
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v281.py::test_dynamic_sorting returned <class 'test_e2e_v281.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v281.py::test_notification_with_rerender
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v281.py::test_notification_with_rerender returned <class 'test_e2e_v281.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v282.py::test_toast_positioning
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v282.py::test_toast_positioning returned <class 'test_e2e_v282.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v282.py::test_absolute_sorting
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v282.py::test_absolute_sorting returned <class 'test_e2e_v282.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v283.py::test_clear_reminder_db_sync
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v283.py::test_clear_reminder_db_sync returned <class 'test_e2e_v283.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v283.py::test_notification_appears
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v283.py::test_notification_appears returned <class 'test_e2e_v283.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v283.py::test_no_repeat_notification
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v283.py::test_no_repeat_notification returned <class 'test_e2e_v283.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v284.py::test_clear_reminder_db_sync
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v284.py::test_clear_reminder_db_sync returned <class 'test_e2e_v284.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v284.py::test_windows_notification_service
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v284.py::test_windows_notification_service returned <class 'test_e2e_v284.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v284.py::test_no_repeat_notifications
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v284.py::test_no_repeat_notifications returned <class 'test_e2e_v284.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v285.py::test_notification_queue_threadsafe
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v285.py::test_notification_queue_threadsafe returned <class 'test_e2e_v285.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v285.py::test_clear_reminder_with_queue
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v285.py::test_clear_reminder_with_queue returned <class 'test_e2e_v285.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v285.py::test_queue_nonblocking_operations
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v285.py::test_queue_nonblocking_operations returned <class 'test_e2e_v285.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v286.py::test_queue_loop_binding
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v286.py::test_queue_loop_binding returned <class 'test_e2e_v286.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v286.py::test_default_collapsed_notes
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v286.py::test_default_collapsed_notes returned <class 'test_e2e_v286.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v286.py::test_queue_and_collapsed_integration
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v286.py::test_queue_and_collapsed_integration returned <class 'test_e2e_v286.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v290.py::test_snooze_db_update
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v290.py::test_snooze_db_update returned <class 'test_e2e_v290.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v290.py::test_toast_topmost_attribute
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v290.py::test_toast_topmost_attribute returned <class 'test_e2e_v290.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v290.py::test_snooze_with_rerender
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v290.py::test_snooze_with_rerender returned <class 'test_e2e_v290.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v291.py::test_dpi_aware_positioning
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v291.py::test_dpi_aware_positioning returned <class 'test_e2e_v291.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v291.py::test_window_state_management
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v291.py::test_window_state_management returned <class 'test_e2e_v291.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v291.py::test_fallback_positioning
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v291.py::test_fallback_positioning returned <class 'test_e2e_v291.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v292.py::test_center_screen_positioning
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v292.py::test_center_screen_positioning returned <class 'test_e2e_v292.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v292.py::test_no_win32api_imports
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v292.py::test_no_win32api_imports returned <class 'test_e2e_v292.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+tests/test_e2e_v292.py::test_center_positioning_accuracy
+  C:\Users\Passagain\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\_pytest\python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but tests/test_e2e_v292.py::test_center_positioning_accuracy returned <class 'test_e2e_v292.TestResult'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_e2e_v2915.py::TestShellLevelRestoreV2915::test_dismiss_note_with_db_sync
+FAILED tests/test_e2e_v2922.py::TestWALModeV2922::test_db_connection_has_wal_mode_enabled
+FAILED tests/test_e2e_v2923.py::TestTaskSortingV2923::test_active_alarm_task_at_index_0
+FAILED tests/test_e2e_v2923.py::TestTaskSortingV2923::test_dismissed_alarm_goes_below_active
+FAILED tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_dismissed_alarm_not_at_top
+FAILED tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_multiple_alarms_sorted_correctly_after_refresh
+FAILED tests/test_e2e_v2924.py::TestImmediateBoardReRenderV2924::test_scheduler_triggers_board_refresh_immediately
+FAILED tests/test_e2e_v2925.py::TestRedBorderOnTriggeredAlarmV2925::test_triggered_alarm_at_index_0
+FAILED tests/test_e2e_v2926.py::TestDismissStateClearanceV2926::test_dismissed_alarm_not_at_top
+FAILED tests/test_e2e_v2928.py::TestRecentlyDismissedPinningV2928::test_dismissed_note_sorts_to_top
+FAILED tests/test_e2e_v2937.py::TestUIActionButtonsV2937::test_action_button_restore_for_completed_notes
+FAILED tests/test_e2e_v294.py::TestWindowsNotificationServiceV294::test_notification_service_version
+FAILED tests/test_e2e_v2940.py::TestV2940PinPersistence::test_pin_button_updates_appearance
+FAILED tests/test_e2e_v2940.py::TestV2940PinReordering::test_pin_change_calls_repack
+FAILED tests/test_e2e_v2940.py::TestV2940PinReordering::test_repack_card_to_top_exists
+FAILED tests/test_e2e_v2940.py::TestV2940DatabaseSorting::test_multiple_pinned_notes_order
+FAILED tests/test_e2e_v2940.py::TestV2940DatabaseSorting::test_pinned_notes_sorted_first
+FAILED tests/test_e2e_v2940.py::TestV2940VersionConstant::test_version_updated_to_2940
+FAILED tests/test_e2e_v2940.py::TestV2940RegressionIntegration::test_all_v2940_features_integrated
+FAILED tests/test_e2e_v2940.py::TestV2940RegressionIntegration::test_pin_persistence_across_reload
+FAILED tests/test_e2e_v2940.py::TestV2940RegressionIntegration::test_ui_and_db_consistency
+FAILED tests/test_e2e_v2941.py::TestV2941NewTaskTopPositioning::test_new_task_on_empty_board_at_top
+FAILED tests/test_e2e_v2941.py::TestV2941NewTaskTopPositioning::test_new_task_positioning_empty_board_repack
+FAILED tests/test_e2e_v2941.py::TestV2941NewTaskWithExistingNotes::test_new_task_repacks_above_existing
+FAILED tests/test_e2e_v2941.py::TestV2941NewTaskWithExistingNotes::test_repack_with_multiple_cards_puts_at_top
+FAILED tests/test_e2e_v2941.py::TestV2941VersionConstant::test_version_updated_to_2941
+FAILED tests/test_e2e_v2941.py::TestV2941RegressionIntegration::test_empty_board_to_populated_workflow
+FAILED tests/test_e2e_v2941.py::TestV2941RegressionIntegration::test_new_task_workflow_complete
+FAILED tests/test_e2e_v2941.py::TestV2941RegressionIntegration::test_repack_card_method_exists
+FAILED tests/test_e2e_v2942.py::TestV2942NewTaskWithExistingNotes::test_new_task_repacks_above_existing_verified_at_index_0
+FAILED tests/test_e2e_v2942.py::TestV2942NewTaskWithExistingNotes::test_repack_excludes_empty_state_label
+FAILED tests/test_e2e_v2942.py::TestV2942VersionAndIntegration::test_version_string_is_v2942
+FAILED tests/test_e2e_v2943.py::TestV2943VersionAndIntegration::test_version_string_is_v2943
+FAILED tests/test_e2e_v295.py::TestNotificationIntegrationV295::test_version_updated_to_v295
+FAILED tests/test_e2e_v296.py::TestNotificationIntegrationV296::test_version_v296
+FAILED tests/test_e2e_v297.py::TestUnblockableDialogV297::test_center_on_screen_method
+FAILED tests/test_e2e_v297.py::TestUnblockableDialogV297::test_dialog_button_callbacks
+FAILED tests/test_e2e_v297.py::TestNotificationIntegrationV297::test_version_v297
+FAILED tests/test_e2e_v298.py::TestThreadSafeDialogRoutingV298::test_dialog_callbacks_exist
+FAILED tests/test_e2e_v298.py::TestNotificationIntegrationV298::test_version_v298
+FAILED tests/test_e2e_v299.py::TestThreadSafeCallbacksV299::test_version_v299
+================ 41 failed, 312 passed, 35 warnings in 14.72s =================
