@@ -2115,8 +2115,8 @@ python build_windows.py
 
 ## Installation & Paths
 
-- **Executable Path:** `C:\Program Files\LocalCore\LocalCore.exe` (Official)
-  - **Dev/Build Path:** `D:\AI\OpenCode\LocalCore\target\release\localcore.exe`
+- **Production Path:** `C:\Program Files\LocalCore\LocalCore.exe`
+- **Development Path:** `D:\AI\OpenCode\LocalCore\target\release\localcore.exe`
 - **Shared Audit Log:** `%LOCALAPPDATA%\LocalCore\logs\verify.log`
 
 ## Verification Rule (Audit Track Protocol)
