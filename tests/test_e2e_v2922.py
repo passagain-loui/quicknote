@@ -80,7 +80,7 @@ class TestWALModeV2922(unittest.TestCase):
 
     def test_version_v2922(self):
         """Test 4: Version updated to v2.9.22"""
-        self.assertEqual(APP_VERSION, "2.9.22")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 4: App version is {APP_VERSION}")
 
 

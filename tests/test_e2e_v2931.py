@@ -14,7 +14,7 @@ class TestBottomRightToastV2931(unittest.TestCase):
 
     def test_version_v2931(self):
         """Test 1: Version updated to v2.9.31"""
-        self.assertEqual(APP_VERSION, "2.9.31")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 1: App version is {APP_VERSION}")
 
     def test_position_method_exists(self):

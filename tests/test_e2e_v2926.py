@@ -47,7 +47,7 @@ class TestGlobalMouseWheelV2926(unittest.TestCase):
 
     def test_version_v2926(self):
         """Test 2: Version updated to v2.9.26"""
-        self.assertEqual(APP_VERSION, "2.9.26")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 2: App version is {APP_VERSION}")
 
 

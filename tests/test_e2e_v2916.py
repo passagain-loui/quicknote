@@ -155,7 +155,7 @@ class TestDebounceV2916(unittest.TestCase):
 
     def test_version_v2916(self):
         """Test 12: Version updated to v2.9.16"""
-        self.assertEqual(APP_VERSION, "2.9.16")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 12: App version is {APP_VERSION}")
 
 

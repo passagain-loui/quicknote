@@ -159,7 +159,7 @@ class TestUnifiedQueueCallbackArchitectureV2918(unittest.TestCase):
 
     def test_version_v2918(self):
         """Test 7: Version updated to v2.9.18"""
-        self.assertEqual(APP_VERSION, "2.9.18")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 7: App version is {APP_VERSION}")
 
 

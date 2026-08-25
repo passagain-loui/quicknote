@@ -533,23 +533,54 @@ class SettingsWindow:
             log.error(f"[Settings] Failed to update widget colors: {e}")
 
     def _on_close(self):
-        """Close settings window and save — v1.5.2: notify board to clear reference, v1.6.0: unregister listener"""
+        """v2.9.43+ Audit Fix: Close settings window with proper cleanup protocol
+
+        Handles: unbind events, null-check references, safe destroy to prevent Tkinter access violations
+        """
+        # Step 1: Unregister theme listener
         try:
             self.theme.unregister_theme_change_listener(self._on_theme_changed)  # v1.6.0
         except Exception as e:
-            log.error(f"[Settings] Failed to unregister theme listener: {e}")
+            log.debug(f"[Settings] Theme listener unregister: {e}")
+
+        # Step 2: Call save callback (if not None)
         try:
-            self.on_save()
+            if self.on_save:
+                self.on_save()
         except Exception as e:
             log.error(f"[Settings] on_save callback failed: {e}")
+
+        # Step 3: Call window closed callback (if not None)
         try:
-            self.on_window_closed()  # v1.5.2: notify board that window is closing
+            if self.on_window_closed:
+                self.on_window_closed()  # v1.5.2: notify board that window is closing
         except Exception as e:
-            log.error(f"[Settings] on_window_closed callback failed: {e}")
+            log.debug(f"[Settings] on_window_closed callback: {e}")
+
+        # Step 4: Unbind all events before destroy (v2.9.43+ Audit Fix)
         try:
-            self.root.destroy()
+            if self.root and self.root.winfo_exists():
+                # Unbind WM_DELETE_WINDOW protocol to prevent recursion
+                self.root.protocol("WM_DELETE_WINDOW", "")
+                # Unbind all events
+                self.root.unbind_all()
         except Exception as e:
-            log.error(f"[Settings] window destroy failed: {e}")
+            log.debug(f"[Settings] Event cleanup failed: {e}")
+
+        # Step 5: Null-check references and destroy window (v2.9.43+ Audit Fix)
+        try:
+            if hasattr(self, 'root') and self.root is not None:
+                if self.root.winfo_exists():
+                    self.root.destroy()
+        except tk.TclError as e:
+            log.debug(f"[Settings] Tcl error during destroy (expected during cleanup): {e}")
+        except Exception as e:
+            log.error(f"[Settings] Unexpected error during destroy: {e}")
+
+        # Step 6: Null references to prevent dangling pointers
+        self.root = None
+        self.parent = None
+        self.main_root = None
 
     def _on_backup(self):
         """v2.4.0: Backup database to user-selected location"""

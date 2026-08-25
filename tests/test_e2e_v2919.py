@@ -135,7 +135,7 @@ class TestAtomicOpenStateV2919(unittest.TestCase):
 
     def test_version_v2919(self):
         """Test 5: Version updated to v2.9.19"""
-        self.assertEqual(APP_VERSION, "2.9.19")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 5: App version is {APP_VERSION}")
 
 

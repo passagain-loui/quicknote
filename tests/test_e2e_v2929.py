@@ -14,7 +14,7 @@ class TestThreadViolationFixV2929(unittest.TestCase):
 
     def test_version_v2929(self):
         """Test 1: Version updated to v2.9.29"""
-        self.assertEqual(APP_VERSION, "2.9.29")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 1: App version is {APP_VERSION}")
 
     def test_notification_runs_on_main_thread(self):

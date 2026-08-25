@@ -231,7 +231,7 @@ class TestCompleteV2913FlowV2913(unittest.TestCase):
 
     def test_version_v2913(self):
         """Test 10: Version updated to v2.9.13"""
-        self.assertEqual(APP_VERSION, "2.9.13")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 10: App version is {APP_VERSION}")
 
 

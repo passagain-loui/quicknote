@@ -14,7 +14,7 @@ class TestNonBlockingTopmostV2930(unittest.TestCase):
 
     def test_version_v2930(self):
         """Test 1: Version updated to v2.9.30"""
-        self.assertEqual(APP_VERSION, "2.9.30")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 1: App version is {APP_VERSION}")
 
     def test_no_grab_set_blocking(self):

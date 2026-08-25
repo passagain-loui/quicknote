@@ -16,7 +16,7 @@ class TestUIActionButtonsV2937(unittest.TestCase):
 
     def test_version_v2937(self):
         """Test 1: Version updated to v2.9.37"""
-        self.assertEqual(APP_VERSION, "2.9.37")
+        self.assertGreaterEqual(APP_VERSION, "2.9.43")  # v2.9.43+: Version must be >= 2.9.43
         print(f"[PASS] Test 1: App version is {APP_VERSION}")
 
     def test_action_button_complete_for_active_notes(self):

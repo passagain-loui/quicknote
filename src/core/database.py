@@ -8,9 +8,49 @@ from pathlib import Path
 from typing import Optional
 
 
+import os
+
 APP_DIR = Path.home() / ".quicknote"
-DB_FILE = APP_DIR / "notes.db"
 DB_WRITE_LOCK = threading.Lock()  # v2.9.36: Thread-safe database writes
+
+
+def _get_db_file():
+    """v2.9.43+ Audit Fix: Get DB file path, checking environ at runtime for test isolation.
+
+    Allows tests to set os.environ['DB_PATH'] = ':memory:' for database isolation without
+    relying on module load-time evaluation.
+    """
+    db_path = os.environ.get('DB_PATH')
+    if db_path:
+        return db_path  # Test override: :memory: or test DB path
+    return str(APP_DIR / "notes.db")  # Default: production database
+
+
+# v2.9.43+ Audit: DB_FILE is now dynamic but maintain compatibility for tests that import it
+# Tests access DB_FILE as Path object; update it at runtime via _get_db_file()
+class _DynamicDBFile:
+    """Wrapper that returns Path object pointing to current DB_FILE (respects test environ)"""
+    def __str__(self):
+        return _get_db_file()
+
+    def __fspath__(self):
+        return _get_db_file()
+
+    def exists(self):
+        path = Path(_get_db_file())
+        return path.exists()
+
+    def with_suffix(self, suffix):
+        path = Path(_get_db_file())
+        return path.with_suffix(suffix)
+
+    def unlink(self, missing_ok=False):
+        path = Path(_get_db_file())
+        if path.exists() or not missing_ok:
+            path.unlink(missing_ok=missing_ok)
+
+
+DB_FILE = _DynamicDBFile()  # v2.9.43+: Dynamic DB_FILE for test environ compatibility
 
 
 def _get_db_connection():
@@ -19,9 +59,21 @@ def _get_db_connection():
     WAL (Write-Ahead Logging) allows multiple threads to read while one thread writes,
     preventing deadlocks between Background Scheduler Thread and Main GUI Thread.
     v2.9.36: Increased timeout to 20 seconds for better concurrent write handling
+    v2.9.43+: Dynamic DB_PATH evaluation for test isolation support + :memory: shared cache for tests
     """
-    conn = sqlite3.connect(DB_FILE, timeout=20.0, check_same_thread=False)  # 20s timeout, thread-safe
-    conn.execute("PRAGMA journal_mode=WAL;")        # Enable WAL mode
+    db_file = _get_db_file()  # v2.9.43+: Runtime environ check
+
+    # v2.9.43+: Support :memory: databases with shared cache for testing (URI mode)
+    if db_file == ':memory:':
+        # Use URI connection string with shared cache so :memory: persists across connections
+        conn = sqlite3.connect('file::memory:?cache=shared', uri=True, timeout=20.0, check_same_thread=False)
+    else:
+        conn = sqlite3.connect(db_file, timeout=20.0, check_same_thread=False)  # 20s timeout, thread-safe
+
+    # Skip WAL mode for :memory: (not applicable to in-memory databases)
+    if db_file != ':memory:':
+        conn.execute("PRAGMA journal_mode=WAL;")        # Enable WAL mode
+
     conn.execute("PRAGMA synchronous=NORMAL;")       # Balance safety and performance
     conn.execute("PRAGMA busy_timeout=5000;")         # 5-second busy timeout
     return conn
@@ -379,11 +431,12 @@ def backup_database(target_path: str) -> bool:
     """
     try:
         import shutil
-        # Ensure source database exists
-        if not DB_FILE.exists():
+        # Ensure source database exists (v2.9.43+: use dynamic DB_FILE)
+        db_file = Path(_get_db_file())
+        if not db_file.exists():
             return False
         # Copy database file to target location
-        shutil.copy2(str(DB_FILE), target_path)
+        shutil.copy2(str(db_file), target_path)
         return True
     except Exception as e:
         print(f"[Backup Error] {e}")
@@ -413,8 +466,9 @@ def restore_database(backup_path: str) -> bool:
         except Exception:
             pass
 
-        # Restore by copying backup over current database
-        shutil.copy2(str(backup_path), str(DB_FILE))
+        # Restore by copying backup over current database (v2.9.43+: use dynamic DB_FILE)
+        db_file = Path(_get_db_file())
+        shutil.copy2(str(backup_path), str(db_file))
 
         # Verify database integrity (run migrations)
         init_db()
@@ -426,4 +480,5 @@ def restore_database(backup_path: str) -> bool:
 
 if __name__ == "__main__":
     init_db()
-    print(f"[OK] Database initialized at {DB_FILE}")
+    db_file = _get_db_file()
+    print(f"[OK] Database initialized at {db_file}")
