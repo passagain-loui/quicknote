@@ -2239,6 +2239,71 @@ cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORL
 
 ---
 
+## TRI-AGENT WORKFLOW PROTOCOL v4.3 (STRICT ANTI-SIMULATION & ENFORCEMENT)
+
+### CRITICAL GATEKEEPER EXECUTION RULE (MANDATORY SHELL COMMAND)
+
+Execution Engine ต้องรันคำสั่งผ่าน Windows PATH และ Delayed Expansion (`/v:on`) ใน Terminal จริงเท่านั้น:
+
+```cmd
+cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORLEVEL!"
+```
+
+**หมายเหตุ:** แทนที่ `<MODEL_NAME>` ด้วยโมเดลจริง เช่น `Qwen-2.5-Coder-14B`
+
+### STRICT ANTI-SIMULATION RULE (CRITICAL - NO EXCEPTIONS)
+
+🔴 **ห้ามจำลอง (Simulate), มโน, หรือเขียนผลลัพธ์การรัน LocalCore ขึ้นมาเองเด็ดขาด**
+
+**Prohibited Actions:**
+- ❌ ห้ามเขียน "EXIT_CODE: 0" ขึ้นมาเองหากไม่ได้รันจริง
+- ❌ ห้ามข้ามขั้นตอนการรันคำสั่ง Gatekeeper จริงๆ
+- ❌ ห้ามประหมวดผลลัพธ์หรือจำลองค่า Exit Code
+- ❌ ห้ามไปทำ Version Bump, Build, หรือ Git Commit โดยไม่มีการรูป LocalCore จริง
+
+**Mandatory Verification:**
+- ✅ ต้องรันคำสั่ง Gatekeeper ผ่านทาง Terminal/Shell จริง
+- ✅ ต้องรับค่า EXIT_CODE จาก stdout ของ LocalCore ตัวจริง
+- ✅ ต้องหน่วงเวลาและรอคำตอบจนกว่าจะได้ผลลัพธ์แน่นอน
+- ✅ หากไม่มีการรันจริงถือว่าผิดโปรโตคอล
+
+### AUTOMATED VERIFICATION & RE-VERIFICATION LOOP (v4.3)
+
+#### INITIAL CHECK
+```
+รันคำสั่ง Gatekeeper ผ่าน Terminal จริง
+    ↓
+ได้ EXIT_CODE: 0 ➜ ไปขั้นตอน Release ทันที
+ได้ EXIT_CODE ≠ 0 ➜ เข้า FAIL LOOP
+```
+
+#### FAIL LOOP (AUTO-RETRY UNTIL PASS)
+1. **ห้ามหยุด:** ห้ามหยุดทำงานและห้ามถามผู้ใช้
+2. **Read Error:** อ่าน Error Trace จาก LocalCore stdout
+3. **Auto-Fix:** แก้ไขโค้ดตามข้อผิดพลาดที่พบ
+4. **Re-Run:** สั่งรันคำสั่ง Gatekeeper ซ้ำใน Terminal จริง (ขั้นตอน 1 ใหม่)
+5. **Repeat:** ทำซ้ำจนกว่า LocalCore จะพ่นค่า `EXIT_CODE: 0` จากการรันจริง
+
+### STRICT EXIT & DEPLOYMENT CONDITION (v4.3)
+
+🔴 **งานจะเสร็จสมบูรณ์และอนุญาตให้ดำเนินการต่อไปนี้ได้ ก็ต่อเมื่อได้ EXIT_CODE: 0 จากการรัน LocalCore จริง:**
+
+**Permitted Only After EXIT_CODE: 0:**
+- ✅ Version Bump (src/core/constants.py)
+- ✅ Build Binaries (PyInstaller .exe)
+- ✅ Git Commit & Push
+- ✅ Documentation Updates (CHANGELOG/HISTORY)
+- ✅ Release Artifacts
+
+**Prohibited Until EXIT_CODE: 0:**
+- ❌ Version number changes
+- ❌ Binary/executable builds
+- ❌ Git commit creation
+- ❌ Documentation versioning
+- ❌ Release publication
+
+---
+
 # EXECUTIVE WORKFLOW PROTOCOL (4-PILLAR DUAL-PATHWAY)
 
 ## 🏛️ ROLES & RESPONSIBILITIES
