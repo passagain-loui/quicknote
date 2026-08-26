@@ -2102,6 +2102,55 @@ python build_windows.py
 
 ---
 
+# 🔄 TRI-AGENT WORKFLOW PROTOCOL (DYNAMIC ENGINE)
+
+## ARCHITECTURE ROLES
+
+- **Master Architect:** Gemini (System Design & State Planning)
+- **Execution Engine:** Claude Code CLI / OpenCode CLI (Implementation & Testing)
+- **Gatekeeper Auditor:** LocalCore CLI (Read-Only Static Analysis)
+
+## GATEKEEPER EXECUTION PROTOCOL (DYNAMIC PATH & DELAYED EXPANSION)
+
+ALWAYS execute the installed system-wide LocalCore binary with Windows Delayed Expansion (`/V:ON`) enabled to ensure accurate exit code capture:
+
+### Dynamic Execution Command:
+```cmd
+cmd /v:on /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "<TEST_COMMAND>" --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORLEVEL!"
+```
+
+### Why Delayed Expansion Matters:
+- `/v:on` enables Windows Delayed Expansion
+- `!ERRORLEVEL!` (exclamation marks) instead of `%ERRORLEVEL%` (percent signs)
+- Ensures accurate exit code capture across all Windows CMD versions
+- Critical for reliable LocalCore verification loop
+
+### Tri-Agent Execution Flow:
+```
+User Request
+    ↓
+Gemini (Master Architect)
+    ├─ Design state transitions
+    ├─ Plan implementation strategy
+    └─ Identify audit requirements
+        ↓
+Claude Code (Execution Engine)
+    ├─ Implement code changes
+    ├─ Run E2E test suite
+    └─ Generate audit findings
+        ↓
+LocalCore (Gatekeeper Auditor)
+    ├─ Read-only static analysis
+    ├─ Verify architecture compliance
+    └─ Output audit verdict
+        ↓
+Self-Correction Loop
+    ├─ IF exit code = 0: APPROVED for production
+    └─ IF exit code ≠ 0: Fix → Re-audit → Repeat
+```
+
+---
+
 # EXECUTIVE WORKFLOW PROTOCOL (4-PILLAR DUAL-PATHWAY)
 
 ## 🏛️ ROLES & RESPONSIBILITIES
