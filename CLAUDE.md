@@ -1,13 +1,50 @@
+# QuickNote v2.9.46 — FINAL RESILIENCE & PRODUCTION POLISH (Single-Instance Signal + Graceful Shutdown) (EXIT_CODE 0)
+
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Pin Persistence + Database Primary Sort + Immediate Repack on Pin + New Task Top-Positioning + Empty Board Safe + Content Persistence (KeyRelease Debounce, Destroy-Safe) + Minimalist Icon Design + Smart Task Re-ordering + Browser-Based OAuth + Modern Settings Integration + E2E Regression Tests + Qwen Audit Passed (100%) + Code Refactoring (Audit-Driven) + Thread-Safe Database Writes + Architecture Audit Complete + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
+
+**Status: ✅ PRODUCTION-STABLE** — v2.9.46 RESILIENCE RELEASE 2026-08-26
+- LocalCore Gatekeeper: EXIT_CODE 0 · Full suite **334/334 OK** (7 new resilience tests)
+- Portable Executable: dist/QuickNote_v2.9.46.exe (33.2 MB)
+- Windows Installer: installer_output/QuickNote_v2.9.46_Setup.exe (35.1 MB, auto-versioned build)
+
+> **v2.9.46** เพิ่ม **Final Resilience & Production Polish**:
+>   1. Single-Instance Signal Listener (main.py): first instance now `accept()`s the lock socket —
+>      second launch sends "SHOW" → first window deiconify+topmost+lift+focus (was a silent no-op since the socket had no reader!)
+>   2. Graceful Shutdown (`graceful_shutdown()`): pynput listener + tray icon + tray service stopped on EVERY exit path
+>      (WM close, tray Quit, exception) via try/finally around mainloop — previously tray-Quit leaked live listeners
+>   3. Temp Cleanup (`cleanup_temp_artifacts()`): purges stale `qn_test_*` dirs (>7d) and old notes.db-wal/-shm sidecars (>1d)
+>   4. Build automation: `build_windows.py` auto-syncs installer.iss version from constants (regex lookbehind fix for 'vX.Y.Z'),
+>      correct Setup artifact name check, user-local ISCC path → one command builds exe + installer
+>   - Verification: LocalCore EXIT_CODE 0 · smoke: instance#2 exits(0), instance#1 window visible ✅
+
 # QuickNote v2.9.45 — DEEP BUG AUDIT (Debounce TclError Guard) (LocalCore EXIT_CODE 0 Release)
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Pin Persistence + Database Primary Sort + Immediate Repack on Pin + New Task Top-Positioning + Empty Board Safe + **Content Persistence (KeyRelease Debounce, Destroy-Safe)** + Minimalist Icon Design + Smart Task Re-ordering + Browser-Based OAuth + Modern Settings Integration + E2E Regression Tests + Qwen Audit Passed (100%) + Code Refactoring (Audit-Driven) + Thread-Safe Database Writes + Architecture Audit Complete + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
 
-**Status: ✅ PRODUCTION-STABLE** — v2.9.45 DEEP-AUDIT RELEASE 2026-08-26
+**Status: ✅ PRODUCTION-STABLE** — v2.9.45 DEEP-AUDIT + BUILD-RELEASE 2026-08-26
 - LocalCore Gatekeeper: EXIT_CODE 0 (`--verify "python -m unittest discover -s tests" --model "Qwen-2.5-Coder-14B"`)
-- Critical suite: tests.test_e2e_v2943 → 6/6 OK
-- Bugs found & fixed: 1 (Debounce TclError on destroyed widget)
+- Full suite: **327/327 OK** (was 244/327 when gate first truly executed)
+- Bugs found & fixed: 7 categories (see below) + rebuilt .exe smoke-tested visible
+- Portable Executable: dist/QuickNote_v2.9.45.exe (33.2 MB)
+- Windows Installer: installer_output/QuickNote_v2.9.45_Setup.exe (35.09 MB, LZMA, Inno Setup 6)
 
-> **v2.9.45** แก้ไข **Deep Bug Audit Fix (Debounce TclError Guard - TRI-AGENT PROTOCOL v3.3)**
+> **v2.9.45 Phase 3 (Installer Release)** — Inno Setup compilation + gatekeeper verification:
+>   - installer.iss: version bumped 2.9.43 → 2.9.45 (6 refs: AppVersion, OutputBaseFilename, VersionInfo*, Source path)
+>   - ISCC found at user-local path (`%LOCALAPPDATA%\Programs\Inno Setup 6`) — build_windows.py `find_iscc()` now checks it (was registry/HKLM-only → always skipped)
+>   - Compile: Successful (5.2 sec) → QuickNote_v2.9.45_Setup.exe
+>   - LocalCore Gatekeeper (dir-verify): **EXIT_CODE: 0** — VALIDATION PASSED ✅
+
+> **v2.9.45 Phase 2 (Build Release)** — Gate self-correction loop findings & fixes:
+>   1. Charmap crash on ✓/✔ prints → UTF-8 stdio bootstrap in every test file
+>   2. DB isolation leaks (DB_PATH/APP_DIR never restored; `:memory:` evaporates) → save/restore + per-suite temp-file DBs across 22 suites; production DB no longer touched by tests
+>   3. database.py: try/finally on all connection users — no more leaked-locking connections
+>   4. board.py `_ensure_mapped()`: windowed .exe invisible-bug (lost withdraw/deiconify race on Tk 9.0) fixed via deferred re-map
+>   5. Stale asserts modernized: version tuples, ✓ icon, removed `_on_open_click`/`center_on_screen`, pin callback signature
+>   6. Tk 9.0.2 upstream AV (tcl9tk90.dll, confirmed via WER): tests withdraw Settings windows + gc.collect() per test
+>   7. Smoke tests added: window visibility polling for built binary (caught bug #4)
+>   - Verification: LocalCore EXIT_CODE 0 · 327/327 OK ×2 hostile-env runs · smoke PASS ✅
+
+> **v2.9.45 Phase 1** แก้ไข **Deep Bug Audit Fix (Debounce TclError Guard - TRI-AGENT PROTOCOL v3.3)**
 >   - Bug (found in audit): `save_content()` debounce callback crashed with tk.TclError if NoteCard was destroyed while timer pending
 >   - Root Cause: `if self.content_text:` truthiness guard — destroyed widget references remain truthy in Python; `.get()` on destroyed widget raises `TclError: invalid command name`
 >   - Solution: Use `winfo_exists()` liveness check + wrap in try-except `tk.TclError` (safe no-op)
@@ -2148,6 +2185,57 @@ Self-Correction Loop
     ├─ IF exit code = 0: APPROVED for production
     └─ IF exit code ≠ 0: Fix → Re-audit → Repeat
 ```
+
+## TRI-AGENT RESPONSIBILITY MATRIX (v4.2)
+
+### Master Architect (Gemini)
+**หน้าที่:** ออกแบบสถาปัตยกรรม, วิเคราะห์ Root Cause ระดับภาพรวม, กำหนดเป้าหมาย, ออกคำสั่ง Structured Task  
+**ขอบเขต:** เป็นผู้สั่งการหลัก ไม่เขียนโค้ดลงไฟล์โดยตรง
+
+### Execution Engine (Claude Code / OpenCode)
+**หน้าที่:** อ่านคำสั่งจาก Gemini, เขียน/แก้ไขโค้ดในระบบ, รัน Auto-Fix, ยิงคำสั่งตรวจทานซ้ำ  
+**ขอบเขต:** เป็นผู้ลงมือปฏิบัติการ รับผิดชอบการวิ่ง Loop จนงานสำเร็จ 100%
+
+### Gatekeeper Auditor (LocalCore CLI)
+**หน้าที่:** สแกนโค้ด Read-Only, รัน Automated Test (Cargo/NPM/Pytest), ส่งค่า Exit Code  
+**ขอบเขต:** เป็นผู้ตรวจข้อสอบ ไม่แก้ไขโค้ด ไม่รันซ้ำเองจนกว่าจะได้คำสั่งยิง Verify ใหม่
+
+## GATEKEEPER EXECUTION RULE (v4.2)
+
+Execution Engine ต้องใช้คำสั่งนี้ผ่าน Windows PATH และ Delayed Expansion (`/v:on`) เสมอ:
+
+```cmd
+cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORLEVEL!"
+```
+
+**หมายเหตุ:** Execution Engine ต้องเปลี่ยน `<MODEL_NAME>` เป็นชื่อโมเดล Local ที่ใช้งาน (เช่น `Qwen-2.5-Coder-14B`)
+
+## STEP-BY-STEP WORKFLOW & ACTION OWNERSHIP (v4.2)
+
+### [STEP 1] TASK CREATION & ARCHITECTURE (เจ้าของ: Gemini)
+- Gemini ทำการวิเคราะห์ปัญหา วางโครงสร้างการแก้ไข ออกคำสั่ง [TASK] ให้ Execution Engine
+
+### [STEP 2] CODE IMPLEMENTATION (เจ้าของ: Claude / OpenCode)
+- Claude / OpenCode ทำการแก้ไขโค้ดใน Codebase แบบ One-Shot ให้เรียบร้อยตามคำสั่ง
+
+### [STEP 3] INITIAL GATEKEEPER AUDIT (เจ้าของ: LocalCore CLI)
+- Claude / OpenCode รันคำสั่ง Gatekeeper Execution Rule
+- LocalCore ประมวลผลและคืนค่า EXIT_CODE (0=PASS, 101/102/103=FAIL)
+
+### [STEP 4] EVALUATION & AUTO-RETRY LOOP (เจ้าของร่วม: Claude / OpenCode & LocalCore)
+
+**กรณี EXIT_CODE = 0 (PASS):**
+- Claude / OpenCode ทำการ Bump Version, บันทึกประวัติใน CHANGELOG/HISTORY และสรุปจบงานส่ง Gemini
+
+**กรณี EXIT_CODE ≠ 0 (FAIL: 101, 102, 103):**
+- Claude / OpenCode ห้ามหยุดทำงานและห้ามถามผู้ใช้
+- Claude / OpenCode อ่าน Log Error จาก LocalCore → แก้ไขโค้ดทันที → สั่งรัน Step 3 ซ้ำอีกรอบ
+- LocalCore ทำการตรวจซ้ำ (Re-Verify) และส่งค่า EXIT_CODE ใหม่อีกครั้ง
+- วนลูป Step 3 และ Step 4 ซ้ำจนกว่า LocalCore จะส่งคืนค่า EXIT_CODE: 0 เท่านั้น
+
+## STRICT COMPLETION RULE (v4.2)
+
+🔴 **งานจะถูกตัดสินว่าเสร็จสิ้นสมบูรณ์ (Complete) ก็ต่อเมื่อ LocalCore คืนค่า EXIT_CODE: 0 ในการตรวจครั้งล่าสุดเท่านั้น!**
 
 ---
 
