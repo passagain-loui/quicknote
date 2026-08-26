@@ -2149,8 +2149,10 @@ When performing static code audit or verification during **PATHWAY B (Audit Trac
 
 ### Dynamic Execution Command (Recommended):
 ```cmd
-cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "<TEST_COMMAND>" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:%ERRORLEVEL%"
+cmd /v:on /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "<TEST_COMMAND>" --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORLEVEL!"
 ```
+
+**Note:** `/v:on` enables Windows Delayed Expansion for accurate exit code capture across all CMD versions
 
 ### Direct Execution Command (Alternative):
 ```bash
@@ -2171,11 +2173,11 @@ cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "<TEST_COMMAND>" --mod
 ### Example Verification (Dynamic):
 ```cmd
 # First audit pass (may fail)
-cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "pytest tests/test_e2e_v2943.py" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:%ERRORLEVEL%"
+cmd /v:on /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "pytest tests/test_e2e_v2943.py" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:!ERRORLEVEL!"
 
 # If EXIT_CODE != 0 → Fix code
 # Re-verify until EXIT_CODE = 0
-cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "pytest tests/test_e2e_v2943.py" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:%ERRORLEVEL%"
+cmd /v:on /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "pytest tests/test_e2e_v2943.py" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:!ERRORLEVEL!"
 ```
 
 ## When to Use LocalCore
