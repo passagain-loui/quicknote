@@ -1,3 +1,27 @@
+# QuickNote v2.9.45 — DEEP BUG AUDIT (Debounce TclError Guard) (LocalCore EXIT_CODE 0 Release)
+
+แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + Pin Persistence + Database Primary Sort + Immediate Repack on Pin + New Task Top-Positioning + Empty Board Safe + **Content Persistence (KeyRelease Debounce, Destroy-Safe)** + Minimalist Icon Design + Smart Task Re-ordering + Browser-Based OAuth + Modern Settings Integration + E2E Regression Tests + Qwen Audit Passed (100%) + Code Refactoring (Audit-Driven) + Thread-Safe Database Writes + Architecture Audit Complete + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
+
+**Status: ✅ PRODUCTION-STABLE** — v2.9.45 DEEP-AUDIT RELEASE 2026-08-26
+- LocalCore Gatekeeper: EXIT_CODE 0 (`--verify "python -m unittest discover -s tests" --model "Qwen-2.5-Coder-14B"`)
+- Critical suite: tests.test_e2e_v2943 → 6/6 OK
+- Bugs found & fixed: 1 (Debounce TclError on destroyed widget)
+
+> **v2.9.45** แก้ไข **Deep Bug Audit Fix (Debounce TclError Guard - TRI-AGENT PROTOCOL v3.3)**
+>   - Bug (found in audit): `save_content()` debounce callback crashed with tk.TclError if NoteCard was destroyed while timer pending
+>   - Root Cause: `if self.content_text:` truthiness guard — destroyed widget references remain truthy in Python; `.get()` on destroyed widget raises `TclError: invalid command name`
+>   - Solution: Use `winfo_exists()` liveness check + wrap in try-except `tk.TclError` (safe no-op)
+>   - Implementation:
+>     * src/ui/note_card.py: `save_content()` closure — winfo_exists() guard + TclError isolation
+>     * src/core/constants.py: Version bump to "2.9.45"
+>   - Audit Scan Results (4 pillars, all PASS):
+>     * Database Isolation: `_get_db_file()` runtime DB_PATH environ + :memory: shared cache VERIFIED
+>     * Widget Lifetime: SettingsWindow 6-step cleanup + null-check destroy VERIFIED
+>     * Thread Safety: root.after()/command_queue dispatch from all daemon threads + DB_WRITE_LOCK VERIFIED
+>     * State Persistence: FocusOut immediate + KeyRelease 500ms debounce dual-path VERIFIED
+>   - Verification: LocalCore EXIT_CODE 0 + tests.test_e2e_v2943 6/6 OK + py_compile OK
+>   - Impact: Debounce save never crashes after card destruction + audit trail complete ✅
+
 # QuickNote v2.9.44 — ARCHITECTURE AUDIT FIXES (Infrastructure Hardening) (Verification-Complete Release)
 
 แอปจดโน้ตเบา ๆ ที่ค้างบนหน้าจอตลอดเวลา — Python + tkinter + SQLite3 + macOS Pastel UI + Calendar + Active Reminders + **Pin Persistence** + **Database Primary Sort** + **Immediate Repack on Pin** + **New Task Top-Positioning** + **Empty Board Safe** + **Content Persistence (KeyRelease Debounce)** + **Minimalist Icon Design** + **Smart Task Re-ordering** + **Browser-Based OAuth** + **Modern Settings Integration** + **E2E Regression Tests** + **Qwen Audit Passed (100%)** + **Code Refactoring (Audit-Driven)** + **Thread-Safe Database Writes** + **Architecture Audit Complete** + System Tray Integration + Unblockable Notifications + Audio + Quick Presets + Real-Time Search + Unbreakable Scheduler + Database Backup/Restore + Data Persistence + Google Tasks Sync + Thread-Safe Queue + Snooze 5m Feature
@@ -2123,6 +2147,12 @@ python build_windows.py
 
 When performing static code audit or verification during **PATHWAY B (Audit Track)**:
 
+### Dynamic Execution Command (Recommended):
+```cmd
+cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "<TEST_COMMAND>" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:%ERRORLEVEL%"
+```
+
+### Direct Execution Command (Alternative):
 ```bash
 <LOCALCORE_EXE> --verify "<TEST_COMMAND>" --model "Qwen-2.5-Coder-14B"
 ```
@@ -2138,14 +2168,14 @@ When performing static code audit or verification during **PATHWAY B (Audit Trac
 4. **LocalCore** → Re-audits until exit code 0
 5. **User** → Reviews findings before final build
 
-### Example Verification:
-```bash
+### Example Verification (Dynamic):
+```cmd
 # First audit pass (may fail)
-C:\Program Files\LocalCore\LocalCore.exe --verify "audit src/core/database.py src/ui/settings_window.py" --model "Qwen-2.5-Coder-14B"
+cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "pytest tests/test_e2e_v2943.py" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:%ERRORLEVEL%"
 
-# If exit code != 0 → Fix code
-# Re-verify until exit code 0
-C:\Program Files\LocalCore\LocalCore.exe --verify "audit src/core/database.py src/ui/settings_window.py" --model "Qwen-2.5-Coder-14B"
+# If EXIT_CODE != 0 → Fix code
+# Re-verify until EXIT_CODE = 0
+cmd /c ""%ProgramFiles%\LocalCore\LocalCore.exe" --verify "pytest tests/test_e2e_v2943.py" --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:%ERRORLEVEL%"
 ```
 
 ## When to Use LocalCore
