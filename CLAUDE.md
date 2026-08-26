@@ -2239,7 +2239,21 @@ cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORL
 
 ---
 
-## TRI-AGENT WORKFLOW PROTOCOL v4.3 (STRICT ANTI-SIMULATION & ENFORCEMENT)
+## TRI-AGENT WORKFLOW PROTOCOL v4.4 (MANDATED ROLES & TRACEABILITY)
+
+### AI ROLES & EXPLICIT RESPONSIBILITIES (v4.4)
+
+#### Master Architect (Gemini)
+**หน้าที่:** ออกแบบสถาปัตยกรรมระดับสูง วิเคราะห์ภาพรวม และออกคำสั่งแบบ Structured Task  
+**ข้อจำกัด:** เป็นผู้วางแผนและสั่งการ ห้ามลงมือแก้ไขโค้ดในโปรเจกต์โดยตรง
+
+#### Execution Engine (Claude Code / OpenCode)
+**หน้าที่:** รับคำสั่งจาก Master Architect, เขียนโค้ด, ทำ Auto-Fix, รันคำสั่งผ่าน Terminal จริง  
+**ข้อจำกัด:** ห้ามแอบอ้างผลลัพธ์ (No Simulation), ห้ามข้ามขั้นตอนการตรวจสอบ
+
+#### Gatekeeper Auditor (LocalCore CLI)
+**หน้าที่:** สแกนตรวจสอบโค้ดแบบ Read-Only, พ่นค่า EXIT_CODE, บันทึก Log ในระบบ  
+**ข้อจำกัด:** เป็นผู้ตรวจทานเด็ดขาด ห้ามแก้ไขโค้ด
 
 ### CRITICAL GATEKEEPER EXECUTION RULE (MANDATORY SHELL COMMAND)
 
@@ -2266,6 +2280,22 @@ cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORL
 - ✅ ต้องรับค่า EXIT_CODE จาก stdout ของ LocalCore ตัวจริง
 - ✅ ต้องหน่วงเวลาและรอคำตอบจนกว่าจะได้ผลลัพธ์แน่นอน
 - ✅ หากไม่มีการรันจริงถือว่าผิดโปรโตคอล
+
+### STRICT ANTI-SIMULATION & LOG TRACEABILITY (ZERO-TOLERANCE) (v4.4)
+
+🔴 **ห้ามใช้คำสั่งเทสภายใน (pytest/cargo test) แล้วนำมาอ้างแทน Gatekeeper เด็ดขาด**
+
+**Prohibited Test Shortcuts:**
+- ❌ รัน `pytest tests/test_e2e_v2943.py` แล้วเอา Exit Code มาอ้างอิง
+- ❌ ใช้ test framework exit code แทน LocalCore verification
+- ❌ ยืมข้อมูล exit code จาก CI/CD pipelines แทนการรัน LocalCore
+- ❌ บอกว่า "tests passed" เป็นการทดแทน Gatekeeper approval
+
+**Mandatory LocalCore Execution:**
+- ✅ บังคับให้ข้อมูลและ Request ต้องวิ่งเข้าประมวลผลผ่าน LocalCore CLI จริง
+- ✅ ต้องมีร่องรอยและ Log หลักฐานในระบบ LocalCore
+- ✅ หาก EXIT_CODE: 0 แต่ไม่มี Log หลักฐาน = "เป็นโมฆะทันที" (Invalid Execution)
+- ✅ ต้องแสดงหลักฐาน Log จาก `%LOCALAPPDATA%\LocalCore\logs\verify.log`
 
 ### AUTOMATED VERIFICATION & RE-VERIFICATION LOOP (v4.3)
 
