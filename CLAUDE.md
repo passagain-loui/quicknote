@@ -2255,15 +2255,27 @@ cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORL
 **หน้าที่:** สแกนตรวจสอบโค้ดแบบ Read-Only, พ่นค่า EXIT_CODE, บันทึก Log ในระบบ  
 **ข้อจำกัด:** เป็นผู้ตรวจทานเด็ดขาด ห้ามแก้ไขโค้ด
 
-### CRITICAL GATEKEEPER EXECUTION RULE (MANDATORY SHELL COMMAND)
+### CRITICAL GATEKEEPER EXECUTION RULE (SILENT BACKGROUND MODE) (v4.6)
 
-Execution Engine ต้องรันคำสั่งผ่าน Windows PATH และ Delayed Expansion (`/v:on`) ใน Terminal จริงเท่านั้น:
+เพื่อป้องกันไม่ให้หน้าต่าง LocalCore เด้งซ้อนทับ Execution Engine ต้องใช้คำสั่งรันแบบซ่อนหน้าต่าง:
 
-```cmd
-cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORLEVEL!"
+**PowerShell Silent Execution (Recommended - v4.6):**
+```powershell
+powershell -Command "$p = Start-Process -FilePath 'C:\Program Files\LocalCore\localcore.exe' -ArgumentList '--verify', '--model', 'Qwen-2.5-Coder-14B' -NoNewWindow -PassThru; $p.WaitForExit(); exit $p.ExitCode"
 ```
 
-**หมายเหตุ:** แทนที่ `<MODEL_NAME>` ด้วยโมเดลจริง เช่น `Qwen-2.5-Coder-14B`
+**CMD with Delayed Expansion (Alternative):**
+```cmd
+cmd /v:on /c "localcore --verify --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:!ERRORLEVEL!"
+```
+
+**Key Differences:**
+- **PowerShell (Recommended):** Silent background, no window pop-up, cleaner execution
+- **CMD (Alternative):** May show console window, traditional approach
+
+**หมายเหตุ:** 
+- PowerShell version ใช้ `-NoNewWindow` เพื่อให้รันแบบซ่อน (no GUI intrusion)
+- CMD version ใช้ Delayed Expansion (`/v:on`) สำหรับการจับ Exit Code ที่แม่นยำ
 
 ### STRICT ANTI-SIMULATION RULE (CRITICAL - NO EXCEPTIONS)
 
