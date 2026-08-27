@@ -2239,7 +2239,43 @@ cmd /v:on /c "localcore --verify --model "<MODEL_NAME>" & echo EXIT_CODE:!ERRORL
 
 ---
 
-## TRI-AGENT WORKFLOW PROTOCOL v4.4 (MANDATED ROLES & TRACEABILITY)
+## TRI-AGENT WORKFLOW PROTOCOL v4.7 (COMPLETE MASTER SPECIFICATION)
+
+### AI ROLES & EXPLICIT RESPONSIBILITIES (v4.7)
+
+#### Master Architect (Gemini)
+**หน้าที่:** ออกแบบสถาปัตยกรรมระดับสูง วิเคราะห์ภาพรวม ออกคำสั่ง Structured Task  
+**ข้อจำกัด:** เป็นผู้วางแผนและสั่งการ ห้ามลงมือแก้ไขโค้ดในโปรเจกต์โดยตรง
+
+#### Execution Engine (Claude Code / OpenCode)
+**หน้าที่:** รับคำสั่ง เขียนโค้ด คิดวิเคราะห์รอบด้านเพื่อให้แก้ไขจบในครั้งเดียวและประหยัดโทเค็น ทำ Auto-Fix รันตรวจสอบ  
+**ข้อจำกัด:** ห้ามแอบอ้างผลลัพธ์ ห้ามข้ามขั้นตอน ห้ามจำลองการตรวจสอบ
+
+#### Gatekeeper Auditor (LocalCore CLI)
+**หน้าที่:** สแกนตรวจสอบ Read-Only พ่นค่า EXIT_CODE บันทึก Log ลงระบบ  
+**ข้อจำกัด:** ห้ามแก้ไขโค้ด
+
+### PROJECT ROOT & MARKER VALIDATION RULE (v4.7 - CRITICAL)
+
+🔴 **ก่อนรัน LocalCore ทุกครั้ง ต้องตรวจสอบและ `cd` เข้าโฟลเดอร์หลัก (Project Root)**
+
+**Mandatory Project Root Markers:**
+- ✅ `pyproject.toml` (Python projects)
+- ✅ `package.json` (Node projects)
+- ✅ `Cargo.toml` (Rust projects)
+- ✅ `pom.xml` (Java Maven)
+
+**Critical Rule:**
+- ❌ ห้ามรันจากโฟลเดอร์แม่เด็ดขาด
+- ❌ ห้ารันจากโฟลเดอร์ย่อยระดับลึก
+- ✅ ต้องหา Project Root และย้าย Working Directory ทันที
+- ✅ หากพบ `no markers` error ให้ค้นหา Root folder ซ้ำทันที
+
+**Verification:**
+- `pwd` → ต้องเห็น marker files ในไดเรกทอรี์ปัจจุบัน
+- `ls` → ต้องเห็น `pyproject.toml`, `package.json` ฯลฯ
+
+### TRI-AGENT WORKFLOW PROTOCOL v4.4 (MANDATED ROLES & TRACEABILITY)
 
 ### AI ROLES & EXPLICIT RESPONSIBILITIES (v4.4)
 
@@ -2343,6 +2379,26 @@ cmd /v:on /c "localcore --verify --model "Qwen-2.5-Coder-14B" & echo EXIT_CODE:!
 - ❌ Git commit creation
 - ❌ Documentation versioning
 - ❌ Release publication
+
+### STRICT VERSION BUMP & RELEASE PROTOCOL (v4.7)
+
+**Version Increment (SemVer - Semantic Versioning):**
+- **MAJOR (X.0.0):** เปลี่ยนแปลงสถาปัตยกรรมครั้งใหญ่ หรือมี Breaking Changes
+- **MINOR (0.X.0):** เพิ่มฟีเจอร์ใหม่หรือฟังก์ชันหลักที่ผ่านการตรวจแล้ว
+- **PATCH (0.0.X):** แก้ไขบั๊ก ปรับปรุงโค้ดภายใน หรือทำ Auto-Fix
+
+**Mandatory Documentation & Audit Trail Sync (v4.7):**
+- ✅ ก่อน Build หรือ Commit ต้องอัปเดตเอกสาร:
+  - `CHANGELOG.md` — บันทึกการเปลี่ยนแปลงใหม่
+  - `HISTORY.md` — บันทึกประวัติและ Timestamp
+  - Version Variable ในโค้ดต้องตรงกันทุกจุด
+  - Git tags ต้องระบุเลขเวอร์ชัน
+
+**Deployment Gateway (v4.7 - Final Steps):**
+1. ✅ Wait for `EXIT_CODE: 0` from LocalCore verification
+2. ✅ Build Binaries ได้ทันที
+3. ✅ Git Commit ระบุเลขเวอร์ชัน (เช่น `"chore: release v0.3.10"`)
+4. ✅ Push ขึ้นรีโมทรีโปเป็นขั้นตอนสุดท้าย
 
 ---
 
