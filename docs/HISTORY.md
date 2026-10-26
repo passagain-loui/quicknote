@@ -1,5 +1,12 @@
 # QuickNote Release History
 
+## v3.0.1 (2026-10-26) — Patch: saved caption when animations are off (403 tests OK)
+
+- Bug: ป้าย "บันทึกแล้ว" ไม่เคยแสดงเมื่อผู้ใช้ปิด Animation effects ของ Windows (`_animate` ข้ามไปเฟรมสุดท้ายแล้วลบข้อความทันที) — เจอจาก CI เพราะ runner ปิด animation
+- Fix: โหมดไม่มี animation ค้างป้ายไว้ `SAVED_CAPTION_MS` แล้วลบด้วย `after` (ไม่ fade) + เทส `test_saved_caption_visible_when_windows_animations_off`
+- CI: Python 3.14 + `unittest discover -s tests/v3`, UTF-8 stdio, tag `v*` สร้าง release และแนบ portable exe อัตโนมัติ
+- เทส: เลิก import `pynput` ใน `test_settings_tray` (ใช้ `parse_hotkey` จริงแทน), เทสป้าย "บันทึกแล้ว" ใช้ `pump_until`
+
 ## v3.0.0 (2026-10-26) — Windows 11 Redesign + Bug-Report Fixes (402 tests OK)
 
 รายละเอียดเต็มของแต่ละ bug อยู่ใน `docs/v3/BUG_REPORT_v2.9.46.md` และสัญญาการออกแบบอยู่ใน `docs/v3/ARCHITECTURE.md` (ข้อ 0 = การตัดสินใจ)

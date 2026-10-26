@@ -1,5 +1,15 @@
 # QuickNote Changelog
 
+## v3.0.1 (2026-10-26) — Patch: saved caption + CI
+
+### แก้บั๊ก
+- **ป้าย "บันทึกแล้ว" ไม่ขึ้นเมื่อปิด Animation effects ของ Windows:** animation ข้ามไปจบทันทีแล้วลบข้อความ ผู้ใช้จึงไม่เห็นว่าบันทึกแล้ว ตอนนี้ค้างป้ายไว้ 1.5 วินาทีแล้วค่อยลบ (ไม่ fade) — `src/ui/note_card.py`
+
+### CI / Release
+- CI ใช้ Python 3.14 และรัน `tests/v3` (เลิกรัน `tests/legacy`), บังคับ UTF-8 บน runner, build เฉพาะ exe
+- push tag `v*` → CI build portable exe และแนบเข้า GitHub Release อัตโนมัติ (`contents: write`, action-gh-release v2)
+- เทสที่เคยผ่านแค่เครื่อง dev: เลิกพึ่ง `pynput` ในเทส Settings, เทสป้าย "บันทึกแล้ว" รอตามเงื่อนไขแทนเวลาตายตัว + เพิ่มเทสกรณีปิด animation (403 tests)
+
 ## v3.0.0 (2026-10-26) — Windows 11 Redesign + Bug-Report Fixes
 
 ### Windows 11 redesign (docs/v3/DESIGN_SPEC_WIN11.md)

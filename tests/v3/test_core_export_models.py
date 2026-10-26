@@ -10,7 +10,8 @@ from tests.v3.core_base import CoreTestCase, db
 
 class ConstantsTests(unittest.TestCase):
     def test_values(self):
-        self.assertEqual(APP_VERSION, "3.0.0")
+        # ไม่ล็อกเลขเป๊ะ (บทเรียน v2: เทสพังทุกครั้งที่ bump) — ตรวจแค่รูปแบบ SemVer + major 3
+        self.assertRegex(APP_VERSION, r"^3\.\d+\.\d+$")
         self.assertEqual(MIN_ALPHA, 0.3)
         self.assertEqual(APP_ID, "PassagainP.QuickNote")
 
