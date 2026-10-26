@@ -633,6 +633,20 @@ class CardTest(BoardTestCase):
         self.assertTrue(self.pump_until(lambda: card._saved_lbl.cget("text") == ""),
                         "ป้ายต้องหายเองหลัง ~1.5 วินาที")
 
+    def test_saved_caption_visible_when_windows_animations_off(self) -> None:
+        # ผู้ใช้ปิด "Animation effects" (และ runner ของ CI ก็ปิด) — ป้ายต้องยังโผล่แล้วค่อยหาย
+        from unittest import mock
+        from src.ui import win11
+        with mock.patch.object(win11, "animations_enabled", return_value=False):
+            nid = db.create_note("t", collapsed=False)
+            self.board._load_notes()
+            card = self.card(nid)
+            card._text.insert("1.0", "hello")
+            self.assertTrue(self.pump_until(lambda: card._saved_lbl.cget("text") == t("card.saved")))
+            self.pump(0.5)
+            self.assertEqual(card._saved_lbl.cget("text"), t("card.saved"), "ต้องค้างไว้ ไม่หายทันที")
+            self.assertTrue(self.pump_until(lambda: card._saved_lbl.cget("text") == ""))
+
     def test_shortcut_forwarding_from_entry(self) -> None:
         nid = db.create_note("kb", collapsed=False)
         self.board._load_notes()

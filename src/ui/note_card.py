@@ -17,6 +17,7 @@ from typing import Callable
 
 from ..core.models import Note
 from ..core.reminders import format_reminder
+from . import win11
 from .icons import ICONS
 from .strings import get_language, t
 from .theme import Theme, blend
@@ -194,6 +195,7 @@ class NoteCard(RoundedFrame):
         self._removing = False
         self._saved = {"title": note.title, "content": note.content}
         self._save_job: str | None = None
+        self._saved_job: str | None = None  # ตัวลบป้าย "บันทึกแล้ว" ตอนปิด animation
         self._fit_w = 0
         self._chip_sig: tuple | None = None
         self._title_entry: tk.Entry | None = None
@@ -974,8 +976,25 @@ class NoteCard(RoundedFrame):
 
     def _show_saved(self) -> None:
         """caption "บันทึกแล้ว" จางหายใน 1.5 วินาที"""
-        self._saved_lbl.configure(text=t("card.saved"))
         start, bg = self.th.c("text_secondary"), self._saved_lbl.cget("bg")
+        self._saved_lbl.configure(text=t("card.saved"), fg=start)
+        if self._saved_job is not None:
+            try:
+                self.after_cancel(self._saved_job)
+            except (tk.TclError, ValueError):
+                pass
+            self._saved_job = None
+        if not win11.animations_enabled():
+            # ผู้ใช้ปิด animation ของ Windows: _animate จะข้ามไปจบทันที ป้ายจะไม่เคยโผล่
+            # จึงค้างป้ายไว้ตามเวลาเดิมแล้วค่อยลบ (ไม่ fade)
+            def clear() -> None:
+                self._saved_job = None
+                try:
+                    self._saved_lbl.configure(text="")
+                except tk.TclError:
+                    pass
+            self._saved_job = self.after(SAVED_CAPTION_MS, clear)
+            return
 
         def step(p: float) -> None:
             self._saved_lbl.configure(fg=blend(start, bg, p))
