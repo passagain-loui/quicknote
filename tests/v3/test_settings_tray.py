@@ -23,9 +23,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import pystray  # noqa: E402
-from pynput import keyboard  # noqa: E402
 
 from src.core import database as db  # noqa: E402
+from src.platform.hotkey import parse_hotkey  # noqa: E402
 from src.core import settings as settings_mod  # noqa: E402
 from src.core.constants import MIN_ALPHA  # noqa: E402
 from src.platform import autostart, tray as tray_mod  # noqa: E402
@@ -281,11 +281,13 @@ class HotkeyTest(SettingsTestCase):
         self.assertEqual(sw.format_hotkey("<cmd>+<f5>"), "Win+F5")
         self.assertEqual(sw.format_hotkey("<ctrl>+<page_up>"), "Ctrl+PageUp")
 
-    def test_generated_combos_are_valid_for_pynput(self) -> None:
+    def test_generated_combos_are_valid_for_register_hotkey(self) -> None:
+        # ตัวลงทะเบียนจริงคือ Win32 RegisterHotKey (platform/hotkey.py) ไม่ใช่ pynput แล้ว
         for mods, code, sym in (({"ctrl", "alt"}, 78, "n"), ({"cmd", "shift"}, 0x74, "F5"), ({"ctrl"}, 0x20, "space"),
                                 ({"alt"}, 0xBC, "comma")):
             combo = sw.compose_hotkey(mods, sw.key_token(code, sym))
-            keyboard.HotKey.parse(combo)  # ไม่ raise = GlobalHotKeys รับได้
+            mod_flags, vk = parse_hotkey(combo)  # ไม่ raise = ลงทะเบียนได้
+            self.assertTrue(mod_flags and vk, combo)
 
     def start(self, name: str = "new_note") -> sw._HotkeyRecorder:
         win = self.open()

@@ -126,6 +126,16 @@ class BoardTestCase(CoreTestCase):
             time.sleep(0.005)
         self.root.update()
 
+    def pump_until(self, cond, timeout: float = 5.0) -> bool:
+        """รอจนเงื่อนไขจริง — runner ของ CI ช้ากว่าเครื่อง dev มาก การรอแบบเวลาตายตัวจึง flaky"""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            self.root.update()
+            if cond():
+                return True
+            time.sleep(0.005)
+        return bool(cond())
+
     # --- helpers
     def card(self, note_id: str):
         return self.board.note_cards[note_id]

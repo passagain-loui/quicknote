@@ -628,10 +628,10 @@ class CardTest(BoardTestCase):
         self.board._load_notes()
         card = self.card(nid)
         card._text.insert("1.0", "hello")
-        self.pump(0.8)
-        self.assertEqual(card._saved_lbl.cget("text"), t("card.saved"))
-        self.pump(1.8)
-        self.assertEqual(card._saved_lbl.cget("text"), "")
+        self.assertTrue(self.pump_until(lambda: card._saved_lbl.cget("text") == t("card.saved")),
+                        "ป้าย 'บันทึกแล้ว' ต้องขึ้นหลัง debounce")
+        self.assertTrue(self.pump_until(lambda: card._saved_lbl.cget("text") == ""),
+                        "ป้ายต้องหายเองหลัง ~1.5 วินาที")
 
     def test_shortcut_forwarding_from_entry(self) -> None:
         nid = db.create_note("kb", collapsed=False)
