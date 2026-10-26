@@ -6,12 +6,17 @@ on:
   pull_request:
     branches: [ main ]
 
+# console ของ runner เป็น cp1252 — โค้ด/สคริปต์ print ภาษาไทย จะ UnicodeEncodeError ถ้าไม่บังคับ UTF-8
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 jobs:
   test-and-verify:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.14']
 
     steps:
     - uses: actions/checkout@v4
@@ -25,16 +30,17 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov
 
+    # v3: เทสอยู่ที่ tests/v3 (tests/legacy เป็นของ v2 ที่ import โมดูลที่ลบแล้ว ห้ามรัน)
     - name: Run full test suite
       run: |
-        python -m pytest tests/ -v --tb=short --color=yes 2>&1 | tee test_results.log
+        python -m unittest discover -s tests/v3 -t . -v 2>&1 | tee test_results.log
 
     - name: Extract test results
       id: test_results
+      if: always()
       run: |
-        $output = Get-Content test_results.log | Select-String "passed|failed" | Select-Object -Last 1
+        $output = Get-Content test_results.log | Select-String "^Ran |^OK|^FAILED" | Select-Object -Last 2
         Write-Output "summary=$output" >> $env:GITHUB_OUTPUT
 
     - name: Upload test results
@@ -55,13 +61,12 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
 
     - name: Get version
       id: version
@@ -70,7 +75,7 @@ jobs:
         Write-Output "number=$version" >> $env:GITHUB_OUTPUT
 
     - name: Build Windows executable
-      run: python build_windows.py
+      run: python build_windows.py --exe-only   # runner ไม่มี Inno Setup
 
     - name: Verify executable exists
       run: |
