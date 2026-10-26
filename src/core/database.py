@@ -1,501 +1,421 @@
-"""SQLite3 database for QuickNote — ดูแลโครงสร้างดาตาเบสและฟังก์ชันพื้นฐาน"""
+"""SQLite3 database for QuickNote v3 — โครงสร้างตาราง + API ตามสัญญา docs/v3/ARCHITECTURE.md ข้อ 2
 
+กฎ: ทุก write อยู่ใต้ DB_WRITE_LOCK, ทุก connection ปิดใน finally,
+เวลาทั้งหมดเป็น local-time string (ห้ามใช้ datetime('now') ของ SQLite เพราะเป็น UTC)
+"""
+
+import logging
+import os
+import re
 import sqlite3
-import uuid
 import threading
+import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
+from .reminders import FMT, next_occurrence
 
-import os
+log = logging.getLogger("quicknote.db")
 
 APP_DIR = Path.home() / ".quicknote"
-DB_WRITE_LOCK = threading.Lock()  # v2.9.36: Thread-safe database writes
+DB_WRITE_LOCK = threading.Lock()  # scheduler thread / main thread / tray เขียนพร้อมกันได้
+
+# คีย์ที่ update_fields ยอมรับ (H6: เขียนเฉพาะที่ส่งมา ไม่ยุ่ง reminder/status)
+_UPDATABLE = {"title", "content", "collapsed", "priority", "color", "is_pinned"}
+_PRIORITIES = ("none", "low", "medium", "high")
+_COLORS = ("none", "yellow", "green", "pink", "purple", "blue", "gray")
+_REPEATS = ("none", "daily", "weekdays", "weekly")
+
+_BACKUP_NAME = re.compile(r"^notes_\d{8}\.db$")
 
 
-def _get_db_file():
-    """v2.9.43+ Audit Fix: Get DB file path, checking environ at runtime for test isolation.
+def get_app_dir() -> Path:
+    """โฟลเดอร์ข้อมูลของแอป — env QUICKNOTE_HOME ชนะ (อ่านตอนเรียก) เพื่อรันแอปจริงเทสโดยไม่แตะ ~/.quicknote"""
+    home = os.environ.get("QUICKNOTE_HOME")
+    return Path(home) if home else APP_DIR
 
-    Allows tests to set os.environ['DB_PATH'] = ':memory:' for database isolation without
-    relying on module load-time evaluation.
-    """
-    db_path = os.environ.get('DB_PATH')
+
+def _get_db_file() -> str:
+    """path ของ DB — อ่าน env DB_PATH ตอนเรียก เพื่อให้ test แยก DB ได้ (รองรับ ':memory:')"""
+    db_path = os.environ.get("DB_PATH")
     if db_path:
-        return db_path  # Test override: :memory: or test DB path
-    return str(APP_DIR / "notes.db")  # Default: production database
+        return db_path
+    return str(get_app_dir() / "notes.db")
 
 
-# v2.9.43+ Audit: DB_FILE is now dynamic but maintain compatibility for tests that import it
-# Tests access DB_FILE as Path object; update it at runtime via _get_db_file()
-class _DynamicDBFile:
-    """Wrapper that returns Path object pointing to current DB_FILE (respects test environ)"""
-    def __str__(self):
-        return _get_db_file()
-
-    def __fspath__(self):
-        return _get_db_file()
-
-    def exists(self):
-        path = Path(_get_db_file())
-        return path.exists()
-
-    def with_suffix(self, suffix):
-        path = Path(_get_db_file())
-        return path.with_suffix(suffix)
-
-    def unlink(self, missing_ok=False):
-        path = Path(_get_db_file())
-        if path.exists() or not missing_ok:
-            path.unlink(missing_ok=missing_ok)
+def _now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
 
 
-DB_FILE = _DynamicDBFile()  # v2.9.43+: Dynamic DB_FILE for test environ compatibility
-
-
-def _get_db_connection():
-    """v2.9.36: Create SQLite connection with WAL mode + enhanced timeout for thread-safe access
-
-    WAL (Write-Ahead Logging) allows multiple threads to read while one thread writes,
-    preventing deadlocks between Background Scheduler Thread and Main GUI Thread.
-    v2.9.36: Increased timeout to 20 seconds for better concurrent write handling
-    v2.9.43+: Dynamic DB_PATH evaluation for test isolation support + :memory: shared cache for tests
-    """
-    db_file = _get_db_file()  # v2.9.43+: Runtime environ check
-
-    # v2.9.43+: Support :memory: databases with shared cache for testing (URI mode)
-    if db_file == ':memory:':
-        # Use URI connection string with shared cache so :memory: persists across connections
-        conn = sqlite3.connect('file::memory:?cache=shared', uri=True, timeout=20.0, check_same_thread=False)
+def _get_db_connection() -> sqlite3.Connection:
+    """connection ใหม่แบบ WAL (reader ไม่บล็อก writer) — ผู้เรียกต้อง close เอง"""
+    db_file = _get_db_file()
+    if db_file == ":memory:":
+        # shared cache ทำให้ :memory: อยู่ข้าม connection ได้ (ใช้ใน test)
+        conn = sqlite3.connect("file::memory:?cache=shared", uri=True,
+                               timeout=20.0, check_same_thread=False)
     else:
-        conn = sqlite3.connect(db_file, timeout=20.0, check_same_thread=False)  # 20s timeout, thread-safe
-
-    # Skip WAL mode for :memory: (not applicable to in-memory databases)
-    if db_file != ':memory:':
-        conn.execute("PRAGMA journal_mode=WAL;")        # Enable WAL mode
-
-    conn.execute("PRAGMA synchronous=NORMAL;")       # Balance safety and performance
-    conn.execute("PRAGMA busy_timeout=5000;")         # 5-second busy timeout
+        conn = sqlite3.connect(db_file, timeout=20.0, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")
     return conn
 
 
-def init_db() -> None:
-    """v2.9.36: สร้างโฟลเดอร์แอป + ตาราง notes ถ้ายังไม่มี (thread-safe with lock)"""
-    with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent initialization
-        APP_DIR.mkdir(exist_ok=True)
+@contextmanager
+def _read() -> Iterator[sqlite3.Connection]:
+    conn = _get_db_connection()
+    try:
+        conn.row_factory = sqlite3.Row
+        yield conn
+    finally:
+        conn.close()
 
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure (prevents file-lock leaks)
-            c = conn.cursor()
 
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS notes (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    content TEXT DEFAULT '',
-                    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed')),
-                    collapsed BOOLEAN DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    completed_at TIMESTAMP,
-                    priority TEXT DEFAULT 'none' CHECK(priority IN ('none', 'low', 'medium', 'high')),
-                    reminder_datetime TEXT,
-                    reminder_triggered BOOLEAN DEFAULT 0,
-                    is_pinned BOOLEAN DEFAULT 0,
-                    last_dismissed_at TIMESTAMP
-                )
-            """)
-
+@contextmanager
+def _write() -> Iterator[sqlite3.Connection]:
+    """lock → connection → commit (rollback เมื่อพลาด) → close เสมอ"""
+    with DB_WRITE_LOCK:
+        conn = _get_db_connection()
+        try:
+            conn.row_factory = sqlite3.Row
+            yield conn
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
-    _migrate_db_schema()  # v1.3.0: ensure old DB gets new columns
-    sanitize_reminders()  # v2.2.2: clean corrupted reminder times on startup
+
+# ---------------------------------------------------------------- schema
+
+def init_db() -> None:
+    """สร้างโฟลเดอร์ + ตาราง + migrate + ล้างโน้ตที่ soft-delete ค้าง + ซ่อมเวลาเตือนเพี้ยน"""
+    db_file = _get_db_file()
+    if db_file != ":memory:":
+        Path(db_file).parent.mkdir(parents=True, exist_ok=True)
+
+    with _write() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                content TEXT DEFAULT '',
+                status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed')),
+                collapsed BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                priority TEXT DEFAULT 'none' CHECK(priority IN ('none', 'low', 'medium', 'high')),
+                reminder_datetime TEXT,
+                reminder_triggered BOOLEAN DEFAULT 0,
+                is_pinned BOOLEAN DEFAULT 0,
+                last_dismissed_at TIMESTAMP,
+                color TEXT DEFAULT 'none',
+                reminder_repeat TEXT DEFAULT 'none',
+                deleted_at TEXT
+            )
+        """)
+
+    _migrate_db_schema()
+    purge_deleted()
+    _sanitize_reminders()
 
 
 def _migrate_db_schema() -> None:
-    """v2.9.36: ตรวจและเพิ่มคอลัมน์ใหม่สำหรับ v1.3.0+ (priority, reminders, pinning) — thread-safe"""
-    with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent schema changes
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
-
-        try:
-            # ตรวจว่าคอลัมน์มีอยู่หรือไม่
-            c.execute("PRAGMA table_info(notes)")
-            columns = {row[1] for row in c.fetchall()}
-
-            # เพิ่มคอลัมน์ใหม่ถ้ายังไม่มี
-            if "priority" not in columns:
-                c.execute("ALTER TABLE notes ADD COLUMN priority TEXT DEFAULT 'none'")
-            if "reminder_datetime" not in columns:
-                c.execute("ALTER TABLE notes ADD COLUMN reminder_datetime TEXT")
-            if "reminder_triggered" not in columns:
-                c.execute("ALTER TABLE notes ADD COLUMN reminder_triggered BOOLEAN DEFAULT 0")
-            if "is_pinned" not in columns:
-                # v1.5.0: Add pinning support
-                c.execute("ALTER TABLE notes ADD COLUMN is_pinned BOOLEAN DEFAULT 0")
-            if "last_dismissed_at" not in columns:
-                # v2.9.28: Track when note was last dismissed (for pinning at top)
-                c.execute("ALTER TABLE notes ADD COLUMN last_dismissed_at TIMESTAMP")
-
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            # ถ้า constraint ขัดแย้ง ให้ rollback ซ้ำ ไม่ต้องทำลายฐานข้อมูล
-            conn.rollback()
-        finally:
-            conn.close()
+    """เพิ่มคอลัมน์ที่ DB เก่าไม่มี — idempotent (ทำซ้ำกี่ครั้งก็ไม่พัง)"""
+    wanted = {
+        "priority": "TEXT DEFAULT 'none'",
+        "reminder_datetime": "TEXT",
+        "reminder_triggered": "BOOLEAN DEFAULT 0",
+        "is_pinned": "BOOLEAN DEFAULT 0",
+        "last_dismissed_at": "TIMESTAMP",
+        "color": "TEXT DEFAULT 'none'",
+        "reminder_repeat": "TEXT DEFAULT 'none'",
+        "deleted_at": "TEXT",
+    }
+    with _write() as conn:  # L8: connection ปิดใน finally ของ _write เสมอ
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+        for name, ddl in wanted.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE notes ADD COLUMN {name} {ddl}")
+        # อัปเกรดจาก v2.x ครั้งแรก (ยังไม่มีคอลัมน์ color): v2 ไม่เคยบันทึก collapsed จริง
+        # จึงพับทุกใบไว้ก่อน ไม่งั้นเปิดมาจะกางพร้อมกันหลายใบ ขัดกฎ "กางทีละใบ"
+        if "color" not in columns:
+            conn.execute("UPDATE notes SET collapsed = 1")
 
 
-def create_note(title: str, content: str = "") -> str:
-    """v2.9.36: เพิ่มโน้ตใหม่ — คืนค่า id (thread-safe with lock)"""
-    with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent note creation
-        note_id = uuid.uuid4().hex
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure
-            c = conn.cursor()
-
-            c.execute("""
-                INSERT INTO notes (id, title, content, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (note_id, title, content, datetime.now().isoformat()))
-
-            conn.commit()
-            return note_id
-        finally:
-            conn.close()
+def _sanitize_reminders() -> None:
+    """ล้าง reminder_datetime ที่ไม่ใช่ 'YYYY-MM-DD HH:MM' (กัน scheduler เทียบ string เพี้ยน)"""
+    with _write() as conn:
+        rows = conn.execute(
+            "SELECT id, reminder_datetime FROM notes WHERE reminder_datetime IS NOT NULL").fetchall()
+        for row in rows:
+            try:
+                datetime.strptime(str(row["reminder_datetime"]), FMT)
+            except ValueError:
+                log.warning("clearing corrupt reminder on %s: %r", row["id"], row["reminder_datetime"])
+                conn.execute(
+                    "UPDATE notes SET reminder_datetime = NULL, reminder_triggered = 0 WHERE id = ?",
+                    (row["id"],))
 
 
-def get_all_notes() -> list[dict]:
-    """อ่านทุกโน้ต คืนเป็น list of dict"""
-    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-    try:  # v2.9.45: guarantee close on any failure
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
+# ---------------------------------------------------------------- read
 
-        c.execute("SELECT * FROM notes ORDER BY created_at DESC")
-        notes = [dict(row) for row in c.fetchall()]
-
-        return notes
-    finally:
-        conn.close()
-
-
-def get_notes_by_status(status: str) -> list[dict]:
-    """อ่านโน้ตตามสถานะ (active/completed) — v2.8.2: Absolute sort by newest triggered reminder"""
-    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-    try:  # v2.9.45: guarantee close on any failure
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-
-        # v2.9.40: Pin persistence — PINNED NOTES ARE PRIMARY SORT (always appear at top)
-        # v2.9.26: Secondary: Recently triggered alarms with datetime
-        # v2.9.28: Tertiary: Recently dismissed notes stay at top (pinned to top for quick access)
-        # Triggered alarm = reminder_triggered = 1 AND reminder_datetime IS NOT NULL
-        c.execute("""
-            SELECT * FROM notes
-            WHERE status = ?
-            ORDER BY
-                     -- v2.9.40 PRIMARY: PINNED NOTES FIRST (all pinned notes above unpinned)
-                     is_pinned DESC,
-                     -- SECONDARY: Recently triggered alarms with datetime go next
-                     -- v2.9.26: Must check both triggered=1 AND datetime is NOT NULL
-                     CASE
-                       WHEN reminder_triggered = 1 AND reminder_datetime IS NOT NULL
-                       THEN 0  -- Just triggered with datetime: high priority
-                       ELSE 1  -- Not triggered or datetime cleared: lower priority
-                     END,
-                     -- TERTIARY: Recently dismissed notes stay high (pinned to top for quick access)
-                     -- Use last_dismissed_at timestamp (most recent first) for recently dismissed notes
-                     CASE WHEN last_dismissed_at IS NOT NULL THEN 0 ELSE 1 END,
-                     last_dismissed_at DESC,
-                     -- QUATERNARY: by reminder time (soonest first)
-                     reminder_datetime ASC,
-                     -- QUINARY: priority
-                     CASE priority
-                       WHEN 'high' THEN 0
-                       WHEN 'medium' THEN 1
-                       WHEN 'low' THEN 2
-                       ELSE 3
-                     END,
-                     -- FINAL: creation time (newest first)
-                     created_at DESC
-        """, (status,))
-        notes = [dict(row) for row in c.fetchall()]
-
-        return notes
-    finally:
-        conn.close()
-
-
-def update_note(note_id: str, title: Optional[str] = None,
-                content: Optional[str] = None, status: Optional[str] = None,
-                collapsed: Optional[bool] = None, priority: Optional[str] = None,
-                reminder_datetime: Optional[str] = None,
-                reminder_triggered: Optional[bool] = None,
-                is_pinned: Optional[bool] = None,
-                clear_reminder: bool = False,
-                clear_reminder_datetime: bool = False,
-                mark_dismissed: bool = False) -> None:  # v2.9.28: Mark note as recently dismissed
-    """v2.9.36: อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (thread-safe with lock)"""
-    with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent note updates
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure
-            c = conn.cursor()
-
-            updates = []
-            params = []
-
-            if title is not None:
-                updates.append("title = ?")
-                params.append(title)
-            if content is not None:
-                updates.append("content = ?")
-                params.append(content)
-            if status is not None:
-                updates.append("status = ?")
-                params.append(status)
-                if status == "completed":
-                    updates.append("completed_at = ?")
-                    params.append(datetime.now().isoformat())
-            if collapsed is not None:
-                updates.append("collapsed = ?")
-                params.append(collapsed)
-            if priority is not None:
-                updates.append("priority = ?")
-                params.append(priority)
-            # v2.8.3: Handle reminder_datetime clearing
-            # v2.9.26: Added clear_reminder_datetime for selective clearing (keeps reminder_triggered state)
-            if clear_reminder:
-                updates.append("reminder_datetime = NULL")
-                updates.append("reminder_triggered = 0")
-            elif clear_reminder_datetime:
-                updates.append("reminder_datetime = NULL")
-            elif reminder_datetime is not None:
-                updates.append("reminder_datetime = ?")
-                params.append(reminder_datetime)
-            if reminder_triggered is not None and not clear_reminder:
-                updates.append("reminder_triggered = ?")
-                params.append(reminder_triggered)
-            if is_pinned is not None:
-                # v1.5.0: Add pinning support
-                updates.append("is_pinned = ?")
-                params.append(is_pinned)
-
-            # v2.9.28: Mark note as recently dismissed (for pinning at top of board)
-            if mark_dismissed:
-                updates.append("last_dismissed_at = ?")
-                params.append(datetime.now().isoformat())
-
-            if updates:
-                params.append(note_id)
-                sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
-                c.execute(sql, params)
-                conn.commit()
-        finally:
-            conn.close()
-
-
-def update_note_status_only(note_id: str, status: str,
-                           reminder_triggered: Optional[bool] = None) -> None:
-    """v2.9.36: อัปเดตสถานะของโน้ตเท่านั้น (thread-safe with lock)"""
-    with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent status updates
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure
-            c = conn.cursor()
-
-            updates = []
-            params = []
-
-            # Always update status
-            updates.append("status = ?")
-            params.append(status)
-
-            if status == "completed":
-                updates.append("completed_at = ?")
-                params.append(datetime.now().isoformat())
-
-            # Optional: update reminder_triggered
-            if reminder_triggered is not None:
-                updates.append("reminder_triggered = ?")
-                params.append(reminder_triggered)
-
-            if updates:
-                params.append(note_id)
-                sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
-                c.execute(sql, params)
-                conn.commit()
-        finally:
-            conn.close()
-
-
-def delete_note(note_id: str) -> None:
-    """v2.9.36: ลบโน้ต (thread-safe with lock)"""
-    with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent note deletion
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure
-            c = conn.cursor()
-            c.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-            conn.commit()
-        finally:
-            conn.close()
+# M4: ไม่มี reminder_datetime ในลำดับ — กฎคือ pinned → กำลังดัง → priority → ใหม่สุด
+# rowid DESC เป็น tiebreak เพราะ created_at ละเอียดแค่วินาที
+_ORDER_BY = """
+    ORDER BY COALESCE(is_pinned, 0) DESC,
+             CASE WHEN reminder_triggered = 1 AND reminder_datetime IS NOT NULL THEN 0 ELSE 1 END,
+             CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END,
+             created_at DESC,
+             rowid DESC
+"""
 
 
 def get_note(note_id: str) -> Optional[dict]:
-    """อ่านโน้ตเดียว"""
-    conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-    try:  # v2.9.45: guarantee close on any failure
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-
-        c.execute("SELECT * FROM notes WHERE id = ?", (note_id,))
-        row = c.fetchone()
-
+    """อ่านโน้ตเดียว (รวมที่ soft-delete แล้ว เพื่อให้ undo ใช้ได้)"""
+    with _read() as conn:
+        row = conn.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
         return dict(row) if row else None
-    finally:
-        conn.close()
 
 
-def get_next_due_reminder() -> Optional[str]:
-    """v2.2.3: Get the next due reminder datetime for UI display
-
-    Returns the earliest reminder_datetime that:
-    - Has a value (not NULL)
-    - Not yet triggered
-    - Chronologically in the future (greater than current time)
-
-    Format: "YYYY-MM-DD HH:MM" or None if no due reminders
-    """
-    try:
-        from datetime import datetime
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure
-            c = conn.cursor()
-
-            # Get current time in ISO format (YYYY-MM-DD HH:MM)
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-            # Find earliest reminder that's not triggered and in the future
-            c.execute("""
-                SELECT MIN(reminder_datetime) FROM notes
-                WHERE reminder_datetime IS NOT NULL
-                AND reminder_triggered = 0
-                AND reminder_datetime > ?
-            """, (now_str,))
-
-            result = c.fetchone()
-
-            if result and result[0]:
-                return result[0]
-            return None
-        finally:
-            conn.close()
-    except Exception:
-        return None
+def get_notes_by_status(status: str) -> list[dict]:
+    with _read() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notes WHERE status = ? AND deleted_at IS NULL" + _ORDER_BY, (status,))
+        return [dict(r) for r in rows]
 
 
-def sanitize_reminders() -> None:
-    """v2.2.2: Clean corrupted reminder datetime values
+def count_by_status() -> dict[str, int]:
+    counts = {"active": 0, "completed": 0}
+    with _read() as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) AS n FROM notes WHERE deleted_at IS NULL GROUP BY status")
+        for r in rows:
+            counts[r["status"]] = r["n"]
+    return counts
 
-    Fixes reminders with invalid format:
-    - Length != 16 chars (YYYY-MM-DD HH:MM is exactly 16)
-    - Format doesn't match YYYY-MM-DD HH:MM pattern
 
-    Sets reminder_datetime = NULL for any corrupted values
-    """
-    try:
-        conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        try:  # v2.9.45: guarantee close on any failure
-            c = conn.cursor()
+def get_due_reminders(now: str) -> list[dict]:
+    """reminder ที่ถึงเวลาแล้วและยังไม่ดัง — scheduler เรียกทุก 5 วินาที จึง query เฉพาะที่จำเป็น (L8)"""
+    with _read() as conn:
+        rows = conn.execute("""
+            SELECT * FROM notes
+            WHERE status = 'active' AND deleted_at IS NULL
+              AND reminder_triggered = 0
+              AND reminder_datetime IS NOT NULL AND reminder_datetime <= ?
+            ORDER BY reminder_datetime ASC
+        """, (now,))
+        return [dict(r) for r in rows]
 
-            # Get all reminders
-            c.execute("SELECT id, reminder_datetime FROM notes WHERE reminder_datetime IS NOT NULL")
-            rows = c.fetchall()
 
-            cleaned = 0
-            for row_id, reminder_str in rows:
-                # Validate format: must be exactly "YYYY-MM-DD HH:MM" (16 chars)
-                if not reminder_str or len(str(reminder_str)) != 16:
-                    # Invalid length — clear it
-                    c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
-                    cleaned += 1
-                    continue
+def get_next_reminder() -> Optional[dict]:
+    """reminder อนาคตที่ใกล้ที่สุด (สำหรับ tooltip ถาด / status bar)"""
+    now = datetime.now().strftime(FMT)
+    with _read() as conn:
+        row = conn.execute("""
+            SELECT id, title, reminder_datetime FROM notes
+            WHERE status = 'active' AND deleted_at IS NULL
+              AND reminder_triggered = 0
+              AND reminder_datetime IS NOT NULL AND reminder_datetime > ?
+            ORDER BY reminder_datetime ASC LIMIT 1
+        """, (now,)).fetchone()
+        return dict(row) if row else None
 
-                # Validate format: must parse as YYYY-MM-DD HH:MM
-                try:
-                    datetime.strptime(str(reminder_str), "%Y-%m-%d %H:%M")
-                except (ValueError, TypeError):
-                    # Invalid format — clear it
-                    c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
-                    cleaned += 1
 
-            if cleaned > 0:
-                conn.commit()
-                print(f"[Sanitize] Cleaned {cleaned} corrupted reminder(s)")
-        finally:
-            conn.close()
-    except Exception as e:
-        print(f"[Sanitize Error] {e}")
+# ---------------------------------------------------------------- write
 
+def create_note(title: str, content: str = "", collapsed: bool = True) -> str:
+    note_id = uuid.uuid4().hex
+    with _write() as conn:
+        conn.execute(
+            "INSERT INTO notes (id, title, content, collapsed, created_at) VALUES (?, ?, ?, ?, ?)",
+            (note_id, title, content, int(bool(collapsed)), _now()))
+    return note_id
+
+
+def update_fields(note_id: str, **fields) -> None:
+    """เขียนเฉพาะ key ที่ส่งมา (C1/H6) — key นอกรายการ → ValueError"""
+    bad = set(fields) - _UPDATABLE
+    if bad:
+        raise ValueError(f"update_fields: field not allowed: {sorted(bad)}")
+    if not fields:
+        return
+    if "priority" in fields and fields["priority"] not in _PRIORITIES:
+        raise ValueError(f"invalid priority: {fields['priority']!r}")
+    if "color" in fields and fields["color"] not in _COLORS:
+        raise ValueError(f"invalid color: {fields['color']!r}")
+    values = {k: (int(bool(v)) if k in ("collapsed", "is_pinned") else v) for k, v in fields.items()}
+    # ชื่อคอลัมน์มาจาก whitelist ด้านบนเท่านั้น จึงต่อ SQL ได้อย่างปลอดภัย
+    sets = ", ".join(f"{k} = ?" for k in values)
+    with _write() as conn:
+        conn.execute(f"UPDATE notes SET {sets} WHERE id = ?", (*values.values(), note_id))
+
+
+def set_status(note_id: str, status: str) -> None:
+    """completed → ตั้ง completed_at; active → ล้าง (M5)"""
+    if status not in ("active", "completed"):
+        raise ValueError(f"invalid status: {status!r}")
+    completed_at = _now() if status == "completed" else None
+    with _write() as conn:
+        conn.execute("UPDATE notes SET status = ?, completed_at = ? WHERE id = ?",
+                     (status, completed_at, note_id))
+
+
+def set_reminder(note_id: str, when: Optional[str], repeat: str = "none") -> None:
+    """when=None → ล้างทั้ง datetime และ repeat; มีค่า → triggered=0 (ดังใหม่ได้)"""
+    if when is None:
+        sql, params = ("UPDATE notes SET reminder_datetime = NULL, reminder_repeat = 'none', "
+                       "reminder_triggered = 0 WHERE id = ?"), (note_id,)
+    else:
+        datetime.strptime(when, FMT)  # ValueError ถ้ารูปแบบผิด — ดีกว่าเก็บค่าที่ scheduler เทียบไม่ได้
+        if repeat not in _REPEATS:
+            raise ValueError(f"invalid repeat: {repeat!r}")
+        sql, params = ("UPDATE notes SET reminder_datetime = ?, reminder_repeat = ?, "
+                       "reminder_triggered = 0 WHERE id = ?"), (when, repeat, note_id)
+    with _write() as conn:
+        conn.execute(sql, params)
+
+
+def mark_ringing(note_id: str) -> None:
+    """กำลังดัง — คง datetime ไว้เพื่อให้การ์ดแสดงและเรียงขึ้นบน"""
+    with _write() as conn:
+        conn.execute("UPDATE notes SET reminder_triggered = 1 WHERE id = ?", (note_id,))
+
+
+def dismiss_reminder(note_id: str) -> None:
+    """ปิดการเตือน: ครั้งเดียว → ล้าง datetime; ทำซ้ำ → เลื่อนไปรอบถัดไป"""
+    with _write() as conn:
+        row = conn.execute("SELECT reminder_datetime, reminder_repeat FROM notes WHERE id = ?",
+                           (note_id,)).fetchone()
+        if row is None:
+            return
+        repeat = row["reminder_repeat"] or "none"
+        when = row["reminder_datetime"]
+        if repeat == "none" or not when:
+            conn.execute("UPDATE notes SET reminder_datetime = NULL, reminder_triggered = 0 "
+                         "WHERE id = ?", (note_id,))
+        else:
+            conn.execute("UPDATE notes SET reminder_datetime = ?, reminder_triggered = 0 "
+                         "WHERE id = ?", (next_occurrence(when, repeat), note_id))
+
+
+def snooze_reminder(note_id: str, when: str) -> None:
+    datetime.strptime(when, FMT)
+    with _write() as conn:
+        conn.execute("UPDATE notes SET reminder_datetime = ?, reminder_triggered = 0 WHERE id = ?",
+                     (when, note_id))
+
+
+def soft_delete(note_id: str) -> None:
+    with _write() as conn:
+        conn.execute("UPDATE notes SET deleted_at = ? WHERE id = ?", (_now(), note_id))
+
+
+def undo_delete(note_id: str) -> None:
+    with _write() as conn:
+        conn.execute("UPDATE notes SET deleted_at = NULL WHERE id = ?", (note_id,))
+
+
+def purge_deleted() -> None:
+    """ลบจริงทุก row ที่ soft-delete (เรียกตอนเริ่มแอป — พ้นช่วง Undo แล้ว)"""
+    with _write() as conn:
+        conn.execute("DELETE FROM notes WHERE deleted_at IS NOT NULL")
+
+
+def delete_all_completed() -> int:
+    """ลบจริงโน้ตที่เสร็จแล้วทั้งหมด คืนจำนวนที่ถูกลบ"""
+    with _write() as conn:
+        return conn.execute("DELETE FROM notes WHERE status = 'completed'").rowcount
+
+
+# ---------------------------------------------------------------- backup / restore
 
 def backup_database(target_path: str) -> bool:
-    """v2.4.0: Backup database to specified location
-
-    Args:
-        target_path: Full file path where backup should be saved (e.g., "C:/Users/user/Desktop/notes_backup.db")
-
-    Returns:
-        True if backup successful, False otherwise
-    """
+    """สำรองด้วย sqlite3 backup API — รวมข้อมูลที่ยังอยู่ใน WAL (C9; shutil.copy2 พลาดส่วนนี้)"""
     try:
-        import shutil
-        # Ensure source database exists (v2.9.43+: use dynamic DB_FILE)
-        db_file = Path(_get_db_file())
-        if not db_file.exists():
-            return False
-        # Copy database file to target location
-        shutil.copy2(str(db_file), target_path)
+        Path(target_path).parent.mkdir(parents=True, exist_ok=True)
+        with DB_WRITE_LOCK:  # กันมี writer แทรกกลางการ copy
+            src = _get_db_connection()
+            try:
+                dst = sqlite3.connect(target_path)
+                try:
+                    src.backup(dst)
+                    # ให้ไฟล์สำรองเป็นไฟล์เดียวจบ (ไม่ต้องพก -wal/-shm ไปด้วย)
+                    dst.execute("PRAGMA journal_mode=DELETE")
+                finally:
+                    dst.close()
+            finally:
+                src.close()
         return True
     except Exception as e:
-        print(f"[Backup Error] {e}")
+        log.error("backup failed: %s", e)
         return False
 
 
 def restore_database(backup_path: str) -> bool:
-    """v2.4.0: Restore database from backup file
+    """กู้คืน: ตรวจไฟล์ → เก็บ snapshot ก่อนกู้ → เขียนทับผ่าน backup API → init_db()
 
-    Args:
-        backup_path: Full file path of backup database to restore (e.g., "C:/Users/user/Desktop/notes_backup.db")
-
-    Returns:
-        True if restore successful, False otherwise
+    คืน False และไม่แตะข้อมูลเดิมถ้าไฟล์ไม่ใช่ SQLite / ไม่ใช่ไฟล์ QuickNote
     """
     try:
-        import shutil
-        # Ensure backup file exists
-        backup_file = Path(backup_path)
-        if not backup_file.exists():
+        if not Path(backup_path).is_file():
             return False
-
-        # Close any open connections (safety measure)
+        uri = Path(backup_path).resolve().as_uri() + "?mode=ro"
+        src = sqlite3.connect(uri, uri=True)
         try:
-            conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-            conn.close()
-        except Exception:
-            pass
+            if src.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                return False
+            cols = {r[1] for r in src.execute("PRAGMA table_info(notes)")}
+            if not {"id", "title", "status"} <= cols:
+                return False
 
-        # Restore by copying backup over current database (v2.9.43+: use dynamic DB_FILE)
-        db_file = Path(_get_db_file())
-        shutil.copy2(str(backup_path), str(db_file))
+            # กันพลาด: เก็บสำเนาข้อมูลปัจจุบันไว้ก่อนทับ
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            snapshot_dir = Path(_get_db_file()).parent if _get_db_file() != ":memory:" else get_app_dir()
+            backup_database(str(snapshot_dir / f"notes_before_restore_{stamp}.db"))
 
-        # Verify database integrity (run migrations)
-        init_db()
+            with DB_WRITE_LOCK:
+                dst = _get_db_connection()
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+        finally:
+            src.close()
+        init_db()  # migrate คอลัมน์ให้ไฟล์ backup จากรุ่นเก่า
         return True
     except Exception as e:
-        print(f"[Restore Error] {e}")
+        log.error("restore failed: %s", e)
         return False
+
+
+def auto_backup(keep: int = 7) -> Optional[str]:
+    """สำรองอัตโนมัติ APP_DIR/backups/notes_YYYYMMDD.db วันละครั้ง แล้วลบไฟล์เก่าเกิน keep
+
+    คืน path ที่สร้างใหม่ หรือ None ถ้าวันนี้สำรองไปแล้ว/ล้มเหลว
+    """
+    folder = get_app_dir() / "backups"
+    target = folder / f"notes_{datetime.now():%Y%m%d}.db"
+    if target.exists():
+        return None
+    if not backup_database(str(target)):
+        target.unlink(missing_ok=True)  # ไม่ทิ้งไฟล์ครึ่งๆ กลางๆ ที่จะทำให้วันนี้ไม่สำรองอีก
+        return None
+
+    # ชื่อมีวันที่เรียงตัวอักษร = เรียงตามเวลา
+    old = sorted(p for p in folder.iterdir() if _BACKUP_NAME.match(p.name))
+    for p in old[:max(0, len(old) - max(1, keep))]:
+        try:
+            p.unlink()
+        except OSError as e:
+            log.warning("cannot prune %s: %s", p, e)
+    return str(target)
 
 
 if __name__ == "__main__":
     init_db()
-    db_file = _get_db_file()
-    print(f"[OK] Database initialized at {db_file}")
+    print(f"[OK] Database initialized at {_get_db_file()}")

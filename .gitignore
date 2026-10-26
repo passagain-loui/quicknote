@@ -44,3 +44,6 @@ Thumbs.db
 ~/.quicknote/
 *.spec
 QuickNote.spec
+*.log
+installer_output/
+ui_review/
