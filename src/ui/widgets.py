@@ -52,6 +52,46 @@ def _accepts_arg(fn: Callable) -> bool:
     return False
 
 
+def place_beside(win: tk.Toplevel, root: tk.Misc, w: int, h: int, gap: int = 8) -> None:
+    """วาง dialog ข้างหน้าต่างหลัก (ขวา → ซ้าย → กลางจอ) ภายใน work area
+
+    ไม่วางทับกลางหน้าต่างหลัก: ผู้ใช้ต้องเห็นการ์ดที่กำลังตั้งค่าอยู่ไปพร้อมกัน
+    """
+    left, top, right, bottom = win11.get_work_area(root)
+    w, h = min(w, right - left), min(h, bottom - top)
+    gap = px(win, gap)
+    try:
+        visible = bool(root.winfo_viewable())
+    except tk.TclError:
+        visible = False
+    if visible:
+        rx, ry, rw = root.winfo_rootx(), root.winfo_rooty(), root.winfo_width()
+        if rx + rw + gap + w <= right:
+            x = rx + rw + gap
+        elif rx - gap - w >= left:
+            x = rx - gap - w
+        else:
+            x = left + (right - left - w) // 2
+        y = ry - px(win, 32)  # ชดเชย titlebar ให้ขอบบนตรงกับหน้าต่างหลัก
+    else:
+        x, y = left + (right - left - w) // 2, top + (bottom - top - h) // 2
+    x = max(left, min(x, right - w))
+    y = max(top, min(y, bottom - h))
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
+def match_topmost(win: tk.Toplevel, root: tk.Misc) -> None:
+    """หน้าต่างหลักเป็น always-on-top → dialog ต้อง topmost ด้วย
+
+    บน Windows transient ไม่ยก dialog ข้ามหน้าต่างที่ topmost ได้ dialog จึงไปโผล่ข้างหลัง
+    """
+    try:
+        if bool(int(root.attributes("-topmost"))):
+            win.attributes("-topmost", True)
+    except (tk.TclError, ValueError):
+        pass
+
+
 def is_pointer_inside(widget: tk.Misc) -> bool:
     """เมาส์อยู่ใน widget (หรือลูกหลานของมัน) ไหม — ใช้แทน <Leave> ของ frame ที่ยิงตอนเมาส์ย้ายไปลูก (hover กระพริบ)"""
     try:

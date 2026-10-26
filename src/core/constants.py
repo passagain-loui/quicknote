@@ -1,7 +1,7 @@
 """App-wide constants"""
 
 APP_NAME = "QuickNote"
-APP_VERSION = "3.0.1"  # v3.0.1: ป้าย "บันทึกแล้ว" แสดงแม้ปิด animation ของ Windows
+APP_VERSION = "3.0.2"  # v3.0.2: dialog เปิดข้างหน้าต่างหลักและอยู่ด้านหน้าเสมอ
 APP_AUTHOR = "Passagain P."
 APP_DESCRIPTION = "Notes Always on Top — Python + tkinter + SQLite3"
 

@@ -24,7 +24,7 @@ from ..platform.autostart import disable_autostart, enable_autostart, is_autosta
 from . import win11
 from .strings import get_language, set_language, t
 from .theme import Theme
-from .widgets import SettingsCard, px
+from .widgets import SettingsCard, match_topmost, place_beside, px
 
 log = logging.getLogger(__name__)
 
@@ -392,6 +392,7 @@ class SettingsWindow:
         # (ซ่อนลงถาด) หน้าต่าง transient จะหายตามไปด้วย จึงต้องไม่ผูกตอนนั้น
         if self._root_viewable():
             win.transient(root)
+            match_topmost(win, root)  # transient อย่างเดียวไม่พอให้ขึ้นเหนือหน้าต่างหลักที่ topmost
         win.minsize(px(win, 420), px(win, 360))
         win.protocol("WM_DELETE_WINDOW", self._close)
         win.bind("<Escape>", lambda _e: self._close(), add="+")
@@ -456,25 +457,7 @@ class SettingsWindow:
 
     def _place(self) -> None:
         """วางข้างหน้าต่างหลัก (ขวา → ซ้าย → กลางจอ) และไม่เกิน work area"""
-        win = self.win
-        left, top, right, bottom = win11.get_work_area(self.root)
-        w = min(px(win, 520), right - left)
-        h = min(px(win, 640), bottom - top)
-        gap = px(win, 8)
-        if self._root_viewable():
-            rx, ry, rw = self.root.winfo_rootx(), self.root.winfo_rooty(), self.root.winfo_width()
-            if rx + rw + gap + w <= right:
-                x = rx + rw + gap
-            elif rx - gap - w >= left:
-                x = rx - gap - w
-            else:
-                x = left + (right - left - w) // 2
-            y = ry - px(win, 32)
-        else:
-            x, y = left + (right - left - w) // 2, top + (bottom - top - h) // 2
-        x = max(left, min(x, right - w))
-        y = max(top, min(y, bottom - h))
-        win.geometry(f"{w}x{h}+{x}+{y}")
+        place_beside(self.win, self.root, px(self.win, 520), px(self.win, 640))
 
     # ------------------------------------------------------------ scrolling
     def _on_wheel(self, e: tk.Event) -> str | None:

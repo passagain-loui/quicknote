@@ -20,11 +20,10 @@ from tkcalendar import DateEntry
 
 from ..core import reminders
 from ..core.models import REPEATS, Note
-from . import win11
 from .icons import glyph
 from .strings import get_language, t
 from .toast import ICON_FILE, wrap_clamp
-from .widgets import px
+from .widgets import match_topmost, place_beside, px
 
 log = logging.getLogger(__name__)
 
@@ -283,16 +282,10 @@ class ReminderDialog:
             viewable = False
         if viewable:
             top.transient(root)  # เฉพาะตอน root เห็นอยู่ — ไม่งั้น dialog จะหายตาม root (C6)
-            cx = root.winfo_rootx() + root.winfo_width() // 2
-            cy = root.winfo_rooty() + root.winfo_height() // 2
+            match_topmost(top, root)
         else:
             top.attributes("-topmost", True)  # root ซ่อนอยู่ ไม่มีอะไรให้ซ้อนทับ แต่กันโดนแอปอื่นบัง
-            left, tp, right, bottom = win11.get_work_area(root)
-            cx, cy = (left + right) // 2, (tp + bottom) // 2
-        left, tp, right, bottom = win11.get_work_area(root)
-        x = max(left, min(cx - w // 2, right - w))
-        y = max(tp, min(cy - h // 2, bottom - h))
-        top.geometry(f"{w}x{h}+{x}+{y}")
+        place_beside(top, root, w, h)  # ข้างหน้าต่างหลัก ไม่ทับการ์ด (root ซ่อน → กลางจอ)
         top.deiconify()
         try:
             top.wait_visibility()

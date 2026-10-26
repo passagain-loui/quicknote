@@ -1,5 +1,12 @@
 # QuickNote Release History
 
+## v3.0.2 (2026-10-26) — Patch: reminder dialog behind main window (405 tests OK)
+
+- Bug (ผู้ใช้รายงาน): กดตั้งการแจ้งเตือนแล้วหน้าต่างไปโผล่ด้านหลังหน้าต่างหลัก
+- Root cause: หน้าต่างหลักเป็น `-topmost` (always on top) — `transient(root)` บน Windows ไม่พอให้ dialog ขึ้นเหนือ owner ที่ topmost; และ dialog ถูกวางกลางหน้าต่างหลักพอดี
+- Fix: `match_topmost()` ให้ dialog topmost ตาม root, `place_beside()` วางข้างหน้าต่างหลัก (ขวา → ซ้าย → กลางจอ) — ใช้ทั้ง `ReminderDialog` และ `SettingsWindow`
+- เทส: `test_above_topmost_root` (ตรวจ z-order ด้วย `GetTopWindow/GetWindow`), `test_opens_beside_root_not_over_it` — ยืนยันว่า fail กับโค้ดเก่า
+
 ## v3.0.1 (2026-10-26) — Patch: saved caption when animations are off (403 tests OK)
 
 - Bug: ป้าย "บันทึกแล้ว" ไม่เคยแสดงเมื่อผู้ใช้ปิด Animation effects ของ Windows (`_animate` ข้ามไปเฟรมสุดท้ายแล้วลบข้อความทันที) — เจอจาก CI เพราะ runner ปิด animation

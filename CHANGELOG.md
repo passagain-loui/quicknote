@@ -1,5 +1,12 @@
 # QuickNote Changelog
 
+## v3.0.2 (2026-10-26) — Patch: dialogs open beside the main window
+
+### แก้บั๊ก
+- **หน้าต่างตั้งการแจ้งเตือนโผล่ไปด้านหลัง:** เมื่อเปิด "อยู่บนสุดเสมอ" หน้าต่างหลักเป็น topmost และ `transient` บน Windows ไม่ยก dialog ข้ามหน้าต่าง topmost ได้ ตอนนี้ dialog เป็น topmost ตามหน้าต่างหลัก — หน้า Settings แก้แบบเดียวกัน
+- **dialog ทับหน้าต่างหลัก:** เดิมวางกลางหน้าต่างหลักจนบังการ์ด ตอนนี้เปิดข้าง ๆ (ขวา → ซ้าย → กลางจอ) ภายใน work area
+- helper ร่วม `place_beside()` / `match_topmost()` ใน `src/ui/widgets.py` + เทสลำดับ z-order จริงของ Windows และตำแหน่งไม่ทับกัน (405 tests)
+
 ## v3.0.1 (2026-10-26) — Patch: saved caption + CI
 
 ### แก้บั๊ก

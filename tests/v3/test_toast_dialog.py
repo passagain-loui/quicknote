@@ -3,6 +3,7 @@
 root ถูก map ไว้แต่ alpha=0; test ที่ต้องการ root ซ่อน/ย่อ จะ withdraw/iconify แล้วคืนสภาพใน tearDown
 """
 
+import ctypes
 import os
 import sys
 import time
@@ -749,6 +750,40 @@ class DialogModalTest(UiCase):
         self.assertTrue(d.top.attributes("-topmost"))
         d.cancel()
         self.assertIsNone(root.grab_current())
+
+    def test_opens_beside_root_not_over_it(self) -> None:
+        """v3.0.2: dialog ต้องเปิดข้างหน้าต่างหลัก ผู้ใช้จะได้เห็นการ์ดที่กำลังตั้งเตือน"""
+        left, _t, right, _b = win11.get_work_area(root)
+        root.deiconify()
+        root.geometry(f"380x500+{left + 40}+120")  # ฝั่งขวามีที่ว่างพอ
+        pump(0.1)
+        d, _ = self.dialog()
+        pump(0.1)
+        root_right = root.winfo_rootx() + root.winfo_width()
+        self.assertGreaterEqual(d.top.winfo_rootx(), root_right, "ต้องไม่ทับหน้าต่างหลัก")
+        d.cancel()
+
+    def test_above_topmost_root(self) -> None:
+        """v3.0.2: หน้าต่างหลัก always-on-top → dialog เคยไปโผล่ข้างหลัง"""
+        root.deiconify()
+        root.attributes("-topmost", True)
+        try:
+            pump(0.1)
+            d, _ = self.dialog()
+            pump(0.1)
+            self.assertTrue(int(d.top.attributes("-topmost")))
+            u = ctypes.windll.user32
+            hd = u.GetParent(d.top.winfo_id()) or d.top.winfo_id()
+            hr = u.GetParent(root.winfo_id()) or root.winfo_id()
+            h, order = u.GetTopWindow(0), []
+            while h and len(order) < 2:  # หาว่าใครอยู่บนกว่าใน z-order จริงของ Windows
+                if h in (hd, hr):
+                    order.append(h)
+                h = u.GetWindow(h, 2)  # GW_HWNDNEXT
+            self.assertEqual(order[0], hd, "dialog ต้องอยู่เหนือหน้าต่างหลัก")
+            d.cancel()
+        finally:
+            root.attributes("-topmost", False)
 
     def test_centered_over_root_and_inside_work_area(self) -> None:
         d, _ = self.dialog()
