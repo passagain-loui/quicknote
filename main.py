@@ -1,465 +1,505 @@
 #!/usr/bin/env python3
-"""QuickNote — entry point สำหรับทดสอบและรันแอป"""
+"""QuickNote v3 — entry point (สัญญา: docs/v3/ARCHITECTURE.md ข้อ 7)
 
-import sys
+จุดสำคัญ:
+  - ทุกทางออก (✕ ตอนไม่มี tray, tray Quit, Esc, exception) ไปจบที่ App.quit_app / App.shutdown เท่านั้น (C3)
+  - single instance ใช้ named mutex เป็นตัวล็อก ส่วน socket มีไว้ส่งสัญญาณ "SHOW" อย่างเดียว (L9)
+  - thread อื่น (pystray / hotkey / socket) ห้ามแตะ widget — ทุก callback ผ่าน root.after(0, ...)
+  - ห้ามลบไฟล์ WAL/SHM หรือโฟลเดอร์ชั่วคราวของใคร (C10)
+"""
+
+import argparse
 import ctypes
-import threading
-import socket
 import logging
-import queue
 import os
 import shutil
+import socket
+import sqlite3
+import sys
 import tempfile
-import time
+import threading
+import tkinter as tk
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from tkinter import messagebox
+from typing import Callable, Optional
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="[%(levelname)s] %(name)s — %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-
-# DPI awareness — บรรทัดแรก ก่อนสร้าง Tk() (v1.8.9: Upgraded to Per-Monitor V2)
+# DPI awareness — ต้องมาก่อนสร้าง Tk ใด ๆ (Per-Monitor V2 แล้วไล่ถอยลง)
 try:
-    # v1.8.9: Per-Monitor DPI Awareness V2 for crisp UI on all monitor scales
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
 except Exception:
     try:
-        # Fallback to v1 if v2 not available
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         try:
-            # Last resort: basic DPI awareness
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
 
-# v2.5.5: Force hard-import for PyInstaller AST scanning — ensures tkcalendar + dependencies bundled
-# Without this, PyInstaller's static analysis misses deep dependencies even with --hidden-import
+# tkcalendar → babel.numbers: PyInstaller มองไม่เห็นด้วยการวิเคราะห์ static ถ้าไม่ import ตรงนี้
 try:
-    import tkcalendar
-    import babel.numbers
+    import babel.numbers  # noqa: F401
+    import tkcalendar  # noqa: F401
 except ImportError:
     pass
 
-from src.core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
-from src.core.database import init_db, get_all_notes, create_note
-from src.core.settings import Settings
-from src.ui.board import Board
-from src.ui.settings_window import SettingsWindow
-from src.platform.tray import start_tray_thread
-from src.platform.hotkey import start_hotkey_listener, create_default_hotkeys
-from src.services.tray_service import initialize_tray_service
+from src.core import database as db  # noqa: E402
+from src.core.constants import APP_ID, APP_NAME, APP_VERSION  # noqa: E402
+from src.core.reminders import format_reminder  # noqa: E402
+from src.core.settings import Settings  # noqa: E402
+from src.platform.hotkey import start_hotkey_listener  # noqa: E402
+from src.ui import strings, win11  # noqa: E402
+from src.ui.board import Board  # noqa: E402
+from src.ui.strings import t  # noqa: E402
+from src.ui.theme import Theme  # noqa: E402
+from src.ui.toast import ToastManager  # noqa: E402
+
+log = logging.getLogger("quicknote.main")
+
+MUTEX_NAME = "Local\\QuickNote.SingleInstance"
+SIGNAL_PORT = 29837
+_ERROR_ALREADY_EXISTS = 183
+SELFTEST_SECONDS = 2.0
 
 
-class SingleInstanceLock:
-    """ป้องกันการเปิดโปรแกรมซ้อนกัน — ถ้ามีอยู่แล้วให้ส่งสัญญาณขึ้นมา"""
+# ================================================================ logging
+def setup_logging(app_dir: Path) -> None:
+    """log file หมุนเวียน 1 MB × 3 + stdout เฉพาะเมื่อมี console (.exe แบบ --noconsole ไม่มี stdout — L10)"""
+    root = logging.getLogger()
+    if getattr(root, "_quicknote_configured", False):
+        return
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+    handlers: list[logging.Handler] = []
+    try:
+        app_dir.mkdir(parents=True, exist_ok=True)
+        handlers.append(RotatingFileHandler(app_dir / "quicknote.log", maxBytes=1_000_000, backupCount=3,
+                                            encoding="utf-8"))
+    except OSError:
+        pass  # โฟลเดอร์เขียนไม่ได้ — ยังรันต่อได้ แค่ไม่มีไฟล์ log
+    if sys.stdout is not None:
+        handlers.append(logging.StreamHandler(sys.stdout))
+    for h in handlers:
+        h.setFormatter(fmt)
+        root.addHandler(h)
+    root._quicknote_configured = True  # type: ignore[attr-defined]
 
-    LOCK_PORT = 29837  # Port ที่ใช้ lock
 
-    def __init__(self):
-        self.socket = None
+def _install_exception_hooks() -> None:
+    """exception ที่หลุดจาก thread/ไม่ได้จับ ต้องลงไฟล์ log — ไม่งั้น .exe แบบ noconsole ล้มเงียบ ๆ"""
+    def hook(exc_type, exc, tb) -> None:
+        log.error("unhandled exception", exc_info=(exc_type, exc, tb))
+
+    def thread_hook(args: threading.ExceptHookArgs) -> None:
+        log.error("unhandled exception in thread %s", getattr(args.thread, "name", "?"),
+                  exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+    sys.excepthook = hook
+    threading.excepthook = thread_hook
+
+
+# ================================================================ single instance (L9)
+class SingleInstance:
+    """named mutex = ตัวตัดสินว่าใครเป็น instance แรก; socket localhost ใช้ส่ง "SHOW" เท่านั้น
+
+    แยกสองอย่างเพราะ port ถูกโปรแกรมอื่นจองได้ — ถ้าใช้ port เป็นล็อก QuickNote จะเปิดไม่ขึ้นเงียบ ๆ
+    """
+
+    def __init__(self, mutex_name: str = MUTEX_NAME, port: int = SIGNAL_PORT) -> None:
+        self.mutex_name = mutex_name
+        self.port = port
+        self._mutex = None
+        self._k32 = None
+        self._server: Optional[socket.socket] = None
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
 
     def acquire(self) -> bool:
-        """พยายามล็อก — ถ้าสำเร็จคืน True (นี่คือ instance แรก)"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.bind(("127.0.0.1", self.LOCK_PORT))
-            sock.listen(1)
-            self.socket = sock
+        """True = เราเป็น instance แรก (หรือสร้าง mutex ไม่ได้ → ยอมรันต่อดีกว่าไม่เปิด)"""
+        if sys.platform != "win32":
             return True
-        except OSError:
-            # Port ถูกครอง → มีโปรแกรมรันอยู่แล้ว
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
+        k32.CreateMutexW.restype = ctypes.c_void_p
+        k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = k32.CreateMutexW(None, False, self.mutex_name)
+        err = ctypes.get_last_error()
+        if not handle:
+            log.warning("CreateMutexW failed (error %s) — running without single-instance guard", err)
+            return True
+        if err == _ERROR_ALREADY_EXISTS:
+            k32.CloseHandle(handle)
+            return False
+        self._mutex = handle
+        self._k32 = k32
+        return True
+
+    def signal_existing(self) -> bool:
+        """บอก instance แรกให้แสดงหน้าต่าง; timeout 1 วิ กันค้างถ้าอีกฝั่งไม่ตอบ"""
+        try:
+            with socket.create_connection(("127.0.0.1", self.port), timeout=1.0) as s:
+                s.sendall(b"SHOW")
+            return True
+        except OSError as e:
+            log.warning("cannot signal the running instance: %s", e)
             return False
 
-    def release(self):
-        """ปล่อย lock"""
-        if self.socket:
-            try:
-                self.socket.close()
-            except Exception:
-                pass
+    def start_listener(self, on_show: Callable[[], None]) -> bool:
+        """เปิดรับ "SHOW" บน daemon thread — bind ไม่ได้แค่ log (สัญญาณใช้ไม่ได้ แต่แอปยังรัน)
 
-
-def send_signal_to_existing_instance() -> bool:
-    """ส่งสัญญาณให้ instance แรกที่รันอยู่ — ดึงหน้าต่างขึ้นมา"""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(("127.0.0.1", SingleInstanceLock.LOCK_PORT))
-        sock.send(b"SHOW")
-        sock.close()
+        on_show ถูกเรียกจาก thread นี้ → ผู้เรียกต้องห่อ root.after เอง
+        """
+        try:
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.bind(("127.0.0.1", self.port))
+            srv.listen(4)
+            srv.settimeout(0.5)  # วนเช็ก _stop ได้ ไม่ต้องปิด socket ข้าม thread
+        except OSError as e:
+            srv.close()
+            log.warning("signal port %s unavailable (%s) - a second launch cannot raise this window", self.port, e)
+            return False
+        self.port = srv.getsockname()[1]
+        self._server = srv
+        self._thread = threading.Thread(target=self._serve, args=(on_show,), daemon=True, name="qn-single-instance")
+        self._thread.start()
         return True
-    except Exception:
-        return False
 
-
-def start_lock_signal_listener(lock: "SingleInstanceLock", dispatcher) -> threading.Thread | None:
-    """v2.9.46: รับสัญญาณ SHOW จาก instance ใหม่ → เรียก dispatcher (bring-to-front)
-
-    v2.9.45-and-before bug: first instance listened() but never accept()ed,
-    so the second instance's signal went nowhere and the window stayed hidden.
-    """
-    if not lock.socket:
-        return None
-
-    def _worker():
-        while True:
+    def _serve(self, on_show: Callable[[], None]) -> None:
+        srv = self._server
+        while not self._stop.is_set() and srv is not None:
             try:
-                conn, _addr = lock.socket.accept()
-                try:
-                    conn.settimeout(2.0)
-                    data = conn.recv(64)
-                finally:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-                if data.strip() == b"SHOW":
-                    try:
-                        dispatcher()
-                    except Exception as e:
-                        print(f"[!] Signal dispatch failed: {e}")
+                conn, _ = srv.accept()
+            except socket.timeout:
+                continue
             except OSError:
-                break  # socket closed → app shutting down
-
-    t = threading.Thread(target=_worker, daemon=True, name="QN-SignalListener")
-    t.start()
-    return t
-
-
-def graceful_shutdown(hotkey_listener=None, tray=None) -> None:
-    """v2.9.46: stop pynput listener + pystray icon explicitly (idempotent, all guarded).
-
-    Runs on EVERY exit path (WM_DELETE_WINDOW close, tray Quit, mainloop exception)
-    so no daemon listener survives into the next launch.
-    """
-    # Stop global hotkey listener (pynput keyboard hook)
-    try:
-        if hotkey_listener is not None:
-            hotkey_listener.stop()
-            print("[OK] Hotkey listener stopped")
-    except Exception as e:
-        print(f"[!] Hotkey stop: {e}")
-
-    # Stop legacy tray icon thread
-    try:
-        if tray is not None:
-            tray.stop()
-            print("[OK] Tray icon stopped")
-    except Exception as e:
-        print(f"[!] Tray stop: {e}")
-
-    # Stop system tray service (notification icon, v2.9.5)
-    try:
-        from src.services.tray_service import get_tray_service
-        svc = get_tray_service()
-        if svc is not None:
-            svc.stop_icon()
-            print("[OK] System tray service stopped")
-    except Exception as e:
-        print(f"[!] Tray service stop: {e}")
-
-
-def cleanup_temp_artifacts() -> None:
-    """v2.9.46: best-effort purge of stale temp/cache leftovers on exit.
-
-    - qn_test_* dirs: residue from E2E suites (older than 7 days)
-    - notes.db-wal / -shm sidecars: stale checkpoint files (older than 1 day;
-      SQLite checkpoints+removes them on clean close, old ones are junk)
-    Never raises — cleanup must not break shutdown.
-    """
-    now = time.time()
-
-    # 1) Old test-isolation temp databases
-    try:
-        tmp = tempfile.gettempdir()
-        for entry in Path(tmp).glob("qn_test_*"):
+                break
             try:
-                if entry.is_dir() and (now - entry.stat().st_mtime) > 7 * 86400:
-                    shutil.rmtree(str(entry), ignore_errors=True)
+                conn.settimeout(1.0)
+                if conn.recv(16).strip() == b"SHOW":
+                    on_show()
+            except Exception:
+                log.exception("single-instance signal failed")
+            finally:
+                conn.close()
+
+    def release(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        if self._server is not None:
+            try:
+                self._server.close()
+            except OSError:
+                pass
+            self._server = None
+        if self._mutex:
+            try:
+                self._k32.CloseHandle(self._mutex)
             except Exception:
                 pass
-    except Exception:
-        pass
+            self._mutex = None
 
-    # 2) Stale WAL/SHM sidecar files next to the production database
+
+# ================================================================ upgrade safety
+def backup_pre_v3_db() -> Optional[str]:
+    """DB ก่อน v3 (ตาราง notes ยังไม่มีคอลัมน์ color) → สำเนาเก็บไว้ครั้งเดียวก่อน migrate
+
+    migrate ของ v3 พับการ์ดทุกใบและเพิ่มคอลัมน์ ย้อนกลับไม่ได้ จึงเก็บต้นฉบับไว้ให้ผู้ใช้ลดรุ่นได้
+    """
+    db_file = db._get_db_file()
+    if db_file == ":memory:" or not Path(db_file).is_file():
+        return None
+    target = db.get_app_dir() / "backups" / "notes_pre_v3.db"
+    if target.exists():
+        return None
     try:
-        db_home = Path.home() / ".quicknote"
-        for pattern in ("notes.db-wal", "notes.db-shm"):
-            for sidecar in db_home.glob(pattern):
-                try:
-                    if sidecar.is_file() and (now - sidecar.stat().st_mtime) > 86400:
-                        sidecar.unlink(missing_ok=True)
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-
-def main():
-    """Initialize database, load settings, show Board UI, tray, hotkey, and run mainloop"""
-    print("[>] QuickNote starting...")
-
-    # Single instance lock
-    lock = SingleInstanceLock()
-    if not lock.acquire():
-        # มีโปรแกรมรันอยู่แล้ว → ส่งสัญญาณแล้วออก
-        print("[!] QuickNote already running — sending signal...")
-        send_signal_to_existing_instance()
-        return 0
-
-    try:
-        # Initialize database
-        init_db()
-        print("[OK] Database initialized")
-
-        notes = get_all_notes()
-        print(f"[OK] Found {len(notes)} existing notes")
-
-        # v2.9.5: Initialize System Tray Service (unblockable notifications)
-        # Having a tray icon makes Windows recognize this as an active desktop app
-        print("[>] Starting system tray service (v2.9.5)...")
-        tray_service_ready = initialize_tray_service()
-        if tray_service_ready:
-            print("[OK] System tray service initialized")
-        else:
-            print("[!] System tray service initialization skipped (optional)")
-
-        # Load settings
-        settings = Settings()
-        settings.load()
-        print("[OK] Settings loaded")
-
-        geometry = settings.get("geometry", "")  # Empty string → Board จะ center
-        theme = settings.get("theme", "light")
-        alpha = settings.get("alpha", 1.0)
-
-        # Ensure alpha is safe
-        if alpha is None or alpha <= 0:
-            alpha = 1.0
-        alpha = max(0.3, min(1.0, float(alpha)))
-
-        # v2.9.14: Create command queue for thread-safe communication
-        # Background threads (notification, tray) send commands to this queue
-        # Main thread processes queue every 100ms via root.after()
-        # ONLY Main Thread touches Database and GUI
-        command_queue = queue.Queue()
-
-        # Create and show Board UI (will set on_open_settings callback below)
-        print("[>] Launching UI...")
-        board = Board(geometry=geometry, theme_mode=theme, settings_obj=settings, command_queue=command_queue)
-
-        # Apply alpha
-        board.root.update_idletasks()
-        board.root.attributes("-alpha", alpha)
-
-        # Settings Window instance (global to prevent duplicate windows)
-        settings_window = None
-
-        # Open Settings callback (PyInstaller safe — import at top level)
-        def open_settings_window():
-            """Open or focus Settings window (used by both tray and UI button)"""
-            nonlocal settings_window
-
-            # If window already exists and is valid, just focus it
-            if settings_window is not None:
-                try:
-                    # Check if window still exists
-                    if settings_window.root.winfo_exists():
-                        print("[>] Settings window already open, focusing...")
-                        settings_window.root.lift()
-                        settings_window.root.focus_force()
-                        return
-                except Exception:
-                    pass
-
-            # Create new Settings window
-            try:
-                print("[>] Opening Settings window...")
-                # Define callback that saves settings AND refreshes UI
-                def on_settings_saved():
-                    settings.save()
-                    board._on_settings_saved()
-
-                settings_window = SettingsWindow(
-                    board.root,
-                    settings.settings,
-                    board.theme,
-                    on_save_callback=on_settings_saved
-                )
-                print("[OK] Settings window opened")
-            except Exception as e:
-                print(f"[✗] Failed to open Settings: {e}")
-                import traceback
-                traceback.print_exc()
-
-        # Set callback for Board (PyInstaller safe)
-        board.on_open_settings = lambda: board.root.after(0, open_settings_window)
-
-        # === Tray Icon ===
-        def on_tray_show():
-            """Tray menu: Show"""
-            board.root.after(0, lambda: (
-                board.root.deiconify(),
-                board.root.lift(),
-                board.root.focus_force(),
-            ))
-
-        def on_tray_settings():
-            """Tray menu: Settings"""
-            # Ensure main window is visible first
-            print("[>] Ensuring main window is visible...")
-            board.root.after(0, lambda: (
-                board.root.deiconify(),
-                board.root.lift(),
-                board.root.focus_force(),
-            ))
-            # Then open settings after a short delay
-            board.root.after(200, open_settings_window)
-
-        def on_tray_quit():
-            """Tray menu: Quit"""
-            board.root.after(0, lambda: board.root.quit())
-
-        print("[>] Starting tray icon...")
-        tray = start_tray_thread(on_tray_show, on_tray_settings, on_tray_quit)
-
-        # === Global Hotkey ===
-        def on_hotkey(name: str):
-            """Global hotkey callback"""
-            if name == "new_note":
-                # Ctrl+Alt+N → Show window + create new note
-                board.root.after(0, lambda: (
-                    board.root.deiconify(),
-                    board.root.lift(),
-                    board.root.focus_force(),
-                    board._on_new(),
-                ))
-            elif name == "toggle_show":
-                # Ctrl+Alt+S → Toggle show/hide
-                def toggle():
-                    if board.root.state() == "normal":
-                        board.root.withdraw()
-                    else:
-                        board.root.deiconify()
-                        board.root.lift()
-                        board.root.focus_force()
-
-                board.root.after(0, toggle)
-
-        hotkey_config = settings.get("hotkeys", create_default_hotkeys())
-        print("[>] Starting hotkey listener...")
-        hotkey_listener = start_hotkey_listener(hotkey_config, on_hotkey)
-
-        # === v2.9.46: Single-Instance Signal Listener ===
-        # Second launch sends "SHOW" over the lock socket → bring this window to front
-        def _bring_to_front():
-            try:
-                board.root.deiconify()
-                board.root.attributes("-topmost", True)
-                board.root.lift()
-                board.root.focus_force()
-                board.root.after(800, lambda: board.root.attributes("-topmost", False))
-            except Exception:
-                pass
-
-        start_lock_signal_listener(lock, lambda: board.root.after(0, _bring_to_front))
-
-        # === Close Handler ===
-        def on_closing():
-            """Save settings and clean up"""
-            # Save geometry before closing
-            settings.set("geometry", board.root.geometry())
-            settings.save()
-
-            # v2.9.46: unified graceful shutdown (pynput + pystray + service)
-            graceful_shutdown(hotkey_listener, tray)
-
-            # Release lock
-            lock.release()
-
-            board.root.quit()
-
-        board.root.protocol("WM_DELETE_WINDOW", on_closing)
-
-        print("[OK] QuickNote ready\n")
+        conn = sqlite3.connect(Path(db_file).resolve().as_uri() + "?mode=ro", uri=True)
         try:
-            board.mainloop()
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
         finally:
-            # v2.9.46: EVERY exit path (tray Quit, WM close, exception) cleans up —
-            # no daemon listener survives into the next process launch
-            graceful_shutdown(hotkey_listener, tray)
-            cleanup_temp_artifacts()
-            lock.release()
+            conn.close()
+    except sqlite3.Error as e:
+        log.warning("cannot inspect database before upgrade: %s", e)
+        return None
+    if not columns or "color" in columns:
+        return None  # DB ว่าง/ไม่มีตาราง หรือเป็นของ v3 อยู่แล้ว
+    if db.backup_database(str(target)):
+        log.info("pre-v3 database saved to %s", target)
+        return str(target)
+    log.error("could not save the pre-v3 database copy")
+    return None
+
+
+# ================================================================ application
+class App:
+    """ประกอบ Board + tray + hotkey + เส้นทางปิดแอปจุดเดียว
+
+    แยกเป็น class เพื่อให้เทสสร้างด้วย Tk จริงและฉีด tray/hotkey ปลอมได้ (ปลอมเฉพาะ pystray กับตัวลงทะเบียนคีย์ลัด)
+    """
+
+    def __init__(self, root: tk.Tk, settings: Settings, theme: Theme, toasts: ToastManager, board: Board,
+                 hotkey_factory: Callable = start_hotkey_listener,
+                 single: Optional[SingleInstance] = None) -> None:
+        self.root, self.settings, self.theme, self.toasts, self.board = root, settings, theme, toasts, board
+        self.tray = None
+        self.hotkeys = None
+        self.single = single
+        self._hotkey_factory = hotkey_factory
+        self._hotkey_reverting = False
+        self._working_hotkeys: Optional[dict] = None   # ชุดคีย์ลัดล่าสุดที่ลงทะเบียนสำเร็จ (ไว้คืนค่าเมื่อชุดใหม่ใช้ไม่ได้)
+        self._quitting = False
+        self._persisted = False
+        self._last_tip = ""
+
+        board.on_quit = self.quit_app
+        board.can_hide = self.tray_running
+        root.protocol("WM_DELETE_WINDOW", self.on_close_request)  # override ค่า default ของ Board
+        settings.subscribe(self.on_setting)
+        board.scheduler.on_tick(self._on_tick)
+
+    # ---------------------------------------------------------------- thread bridge
+    def ui(self, fn: Callable[[], None]) -> None:
+        """เรียกจาก thread อื่นได้ — วาง fn ลง main loop"""
+        try:
+            self.root.after(0, fn)
+        except (tk.TclError, RuntimeError):
+            # root ถูกทำลายแล้ว หรือ mainloop ยังไม่เริ่ม/จบไปแล้ว (ช่วงเปิด-ปิดแอป) — ไม่มี UI ให้ทำอะไรอยู่ดี
+            log.debug("ui callback dropped (no running mainloop)")
+
+    # ---------------------------------------------------------------- tray
+    def tray_running(self) -> bool:
+        return self.tray is not None and bool(getattr(self.tray, "is_running", False))
+
+    def setup_tray(self, start: Optional[Callable] = None) -> None:
+        """tray ขึ้นไม่ได้ต้องไม่ฆ่าแอป — close_to_tray จะถอยไปเป็น "ปิด = ออก" เอง"""
+        try:
+            if start is None:
+                from src.platform.tray import start_tray_thread as start
+            self.tray = start(
+                on_toggle=lambda: self.ui(self.board.toggle_visibility),
+                on_new_note=lambda: self.ui(self.new_note),
+                on_settings=lambda: self.ui(self.open_settings),
+                on_quit=lambda: self.ui(self.quit_app),
+                tooltip=self.tray_tooltip)
+        except Exception:
+            log.exception("system tray unavailable — window close will quit the app")
+            self.tray = None
+
+    def tray_tooltip(self) -> str:
+        try:
+            nxt = db.get_next_reminder()
+            if nxt:
+                when, _ = format_reminder(nxt["reminder_datetime"], datetime.now(), strings.get_language())
+                return t("tray.tooltip_next", time=when)
+        except Exception:
+            log.debug("tray tooltip fallback", exc_info=True)
+        return t("tray.tooltip")
+
+    def _on_tick(self) -> None:
+        """ทุกรอบของ scheduler: อัปเดต tooltip ของ tray เฉพาะเมื่อข้อความเปลี่ยน (ไม่ยิง Shell_NotifyIcon ถี่ ๆ)"""
+        if self.tray is None:
+            return
+        tip = self.tray_tooltip()
+        if tip != self._last_tip:
+            self._last_tip = tip
+            self.tray.update_tooltip()
+
+    # ---------------------------------------------------------------- actions
+    def new_note(self) -> None:
+        self.board.show()
+        self.board.focus_quick_add()
+
+    def open_settings(self) -> None:
+        """H1: singleton เดียวอยู่ที่ Board — tray แค่ดึงหน้าต่างขึ้นแล้วเรียกตัวเดียวกับปุ่ม ⚙"""
+        self.board.show()
+        self.board.open_settings()
+
+    def show_main(self) -> None:
+        self.board.show()
+
+    # ---------------------------------------------------------------- hotkeys
+    def start_hotkeys(self) -> bool:
+        self.stop_hotkeys()
+        config = dict(self.settings.get("hotkeys", {}))
+        listener = self._hotkey_factory(config, self._on_hotkey)
+        self.hotkeys = listener
+        if listener is not None:
+            self._working_hotkeys = config
+        return listener is not None
+
+    def stop_hotkeys(self) -> None:
+        listener, self.hotkeys = self.hotkeys, None
+        if listener is not None:
+            try:
+                listener.stop()
+            except Exception:
+                log.debug("hotkey stop failed", exc_info=True)
+
+    def _on_hotkey(self, name: str) -> None:
+        """รันบน thread ของ hotkey listener"""
+        action = {"new_note": self.new_note, "toggle_show": self.board.toggle_visibility}.get(name)
+        if action is not None:
+            self.ui(action)
+
+    # ---------------------------------------------------------------- settings listeners
+    def on_setting(self, key: str, value: object) -> None:
+        """Board/Theme จัดการคีย์ของตัวเองแล้ว — ที่นี่เหลือแค่ hotkey กับภาษาของ tray"""
+        if key == "hotkeys":
+            self._apply_hotkeys()
+        elif key == "language" and self.tray is not None:
+            self.tray.update_menu_language()
+            self._last_tip = ""  # ภาษาใหม่ → ข้อความ tooltip เปลี่ยนแม้เวลาเตือนเท่าเดิม
+            self.tray.update_tooltip()
+
+    def _apply_hotkeys(self) -> None:
+        """ผู้ใช้เปลี่ยนคีย์ลัด → หยุดตัวฟังเก่าแล้วเปิดใหม่; ลงทะเบียนไม่ได้ = แจ้งแล้วคืนชุดเดิมที่ใช้ได้"""
+        previous = self._working_hotkeys
+        if self.start_hotkeys():
+            return
+        messagebox.showwarning(t("app.name"), t("msg.hotkey_failed"), parent=self.root)
+        if previous and not self._hotkey_reverting:
+            # คืนค่า ไม่งั้นผู้ใช้เหลือแอปที่ไม่มีคีย์ลัดจนกว่าจะเปิดใหม่ (หน้า Settings sync ช่องบันทึกเองเมื่อค่าเปลี่ยน)
+            self._hotkey_reverting = True
+            try:
+                self.settings.set("hotkeys", previous)
+            finally:
+                self._hotkey_reverting = False
+
+    # ---------------------------------------------------------------- close / quit (C3)
+    def on_close_request(self) -> None:
+        """✕ ของ Windows: ซ่อนลงถาดเมื่อเปิด close_to_tray และ tray ทำงานจริง ไม่งั้นออกจากแอป"""
+        if self.settings.get("close_to_tray", True) and self.tray_running():
+            self.board.hide()
+            if not self.settings.get("tray_hint_shown", False):
+                self.toasts.show_info(t("toast.tray_hint"))
+                self.settings.set("tray_hint_shown", True)
+        else:
+            self.quit_app()
+
+    def _persist(self) -> None:
+        """เก็บข้อมูลค้างทั้งหมดลงดิสก์ — ทุกขั้นกันพังแยกกัน เพื่อขั้นหนึ่งล้มแล้วขั้นอื่นยังทำ"""
+        if self._persisted:
+            return
+        self._persisted = True
+        steps = (
+            ("flush cards", self.board.flush_all_cards),
+            # แถบ Undo ที่ค้าง = โน้ตที่ soft-delete แล้ว → purge ตอนนี้เลย ผลเหมือนกันทุกครั้งที่ปิด
+            ("flush undo bar", self.board.undo_bar.flush),
+            ("save geometry", lambda: self.settings.set("geometry", self.board.get_persistable_geometry(), save=False)),
+            ("save settings", self.settings.save),
+            ("close toasts", self.toasts.close_all),
+        )
+        for name, step in steps:
+            try:
+                step()
+            except Exception:
+                log.exception("quit step failed: %s", name)
+
+    def quit_app(self) -> None:
+        """ทางออกเดียวของแอป — เรียกซ้ำได้ (tray Quit + ✕ พร้อมกัน) แต่ทำงานครั้งเดียว"""
+        if self._quitting:
+            return
+        self._quitting = True
+        try:
+            self._persist()
+        finally:
+            self.root.quit()
+
+    def shutdown(self) -> None:
+        """หลัง mainloop จบ (ทุกกรณี รวม exception): หยุดทุก thread/listener แล้วทำลาย root"""
+        self._persist()  # exception หลุดจาก mainloop ก็ยังได้เซฟ
+        steps = (
+            ("scheduler", self.board.scheduler.stop),
+            ("hotkeys", self.stop_hotkeys),
+            ("tray", lambda: self.tray.stop() if self.tray is not None else None),
+            ("single instance", lambda: self.single.release() if self.single is not None else None),
+        )
+        for name, step in steps:
+            try:
+                step()
+            except Exception:
+                log.exception("shutdown step failed: %s", name)
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+
+# ================================================================ startup
+def _fatal(message: str) -> None:
+    """แจ้งผู้ใช้โดยไม่พึ่ง Tk (อาจยังสร้างไม่สำเร็จ) — .exe แบบ noconsole ไม่มีที่แสดง traceback"""
+    try:
+        ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x10)
+    except Exception:
+        print(message, file=sys.stderr)
+
+
+def run_app(selftest: bool) -> int:
+    single = SingleInstance("Local\\QuickNote.SelfTest" if selftest else MUTEX_NAME, 0 if selftest else SIGNAL_PORT)
+    if not single.acquire():
+        signaled = single.signal_existing()
+        log.info("QuickNote is already running — %s", "asked it to show its window" if signaled else "could not signal it")
         return 0
 
-    except Exception as e:
-        print(f"[✗] Error during startup: {e}")
-        import traceback
-        traceback.print_exc()
+    win11.set_app_user_model_id(APP_ID)  # คงที่ ไม่ผูกเวอร์ชัน (L12)
+    backup_pre_v3_db()
+    db.init_db()
+    settings = Settings()
+    settings.load()
+    if settings.get("auto_backup", True) and db.auto_backup():
+        settings.set("last_auto_backup", datetime.now().isoformat(timespec="seconds"))
+    strings.set_language(str(settings.get("language", "th")))
 
-        # Show error dialog to user
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-            error_root = tk.Tk()
-            error_root.withdraw()  # Hide the root window
-            error_msg = f"QuickNote ไม่สามารถเปิดได้\n\nError: {str(e)}\n\nกรุณาตรวจสอบ Console หรือ Log file"
-            messagebox.showerror("QuickNote Startup Error", error_msg)
-            error_root.destroy()
-        except Exception as msg_err:
-            print(f"[!] Failed to show error dialog: {msg_err}")
+    root = tk.Tk()
+    root.report_callback_exception = lambda exc, val, tb: log.error("Tk callback exception", exc_info=(exc, val, tb))
+    theme = Theme(root, settings)
+    toasts = ToastManager(root, theme, settings)
+    board = Board(root, settings, theme, toasts)
+    app = App(root, settings, theme, toasts, board, single=single)
+    try:
+        app.setup_tray()
+        if not app.start_hotkeys():
+            toasts.show_info(t("msg.hotkey_failed"))
+        single.start_listener(lambda: app.ui(app.show_main))
+        if selftest:
+            root.attributes("-alpha", 0.0)  # หน้าต่าง map จริงแต่มองไม่เห็น — ไม่กวนคนรันเทส
+            root.after(int(SELFTEST_SECONDS * 1000), app.quit_app)
+        log.info("QuickNote %s started", APP_VERSION)
+        root.mainloop()
+        return 0 if (not selftest or board.note_cards) else 1
+    finally:
+        app.shutdown()
+        log.info("QuickNote stopped")
 
-        lock.release()
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(prog=APP_NAME)
+    parser.add_argument("--selftest", action="store_true",
+                        help="เปิดแอปบนข้อมูลชั่วคราว ประมวลผล event ~2 วินาทีแล้วออกด้วย code 0 (ใช้ใน build/CI)")
+    args = parser.parse_args(argv)
+
+    temp_home = None
+    if args.selftest:
+        temp_home = tempfile.mkdtemp(prefix="qn_selftest_")
+        os.environ["QUICKNOTE_HOME"] = temp_home  # ห้ามแตะข้อมูลจริงของผู้ใช้
+        os.environ.pop("DB_PATH", None)
+    setup_logging(db.get_app_dir())
+    _install_exception_hooks()
+    try:
+        if args.selftest:
+            db.init_db()
+            db.create_note("selftest")  # ให้มีการ์ดอย่างน้อยหนึ่งใบเพื่อพิสูจน์ว่า Board โหลด DB ได้
+        return run_app(args.selftest)
+    except Exception:
+        log.exception("fatal error")
+        _fatal(f"{APP_NAME} {APP_VERSION}: {sys.exc_info()[1]}\n\nLog: {db.get_app_dir() / 'quicknote.log'}")
         return 1
+    finally:
+        if temp_home is not None:
+            logging.shutdown()
+            shutil.rmtree(temp_home, ignore_errors=True)
 
 
 if __name__ == "__main__":
-    if "--selftest" in sys.argv:
-        # Run full initialization with timeout
-        print("[TEST] Starting full initialization test...")
-
-        def run_with_timeout():
-            try:
-                # Create minimal Tk to avoid full UI initialization
-                import tkinter as tk
-                root = tk.Tk()
-                root.overrideredirect(True)
-                root.geometry("1x1")
-
-                # Test database and settings
-                print("[TEST] Initializing database...")
-                init_db()
-                notes = get_all_notes()
-                print(f"[TEST] Database OK: {len(notes)} notes")
-
-                print("[TEST] Loading settings...")
-                settings = Settings()
-                settings.load()
-                print("[TEST] Settings OK")
-
-                print("[TEST] Testing tray icon initialization...")
-                def dummy_callback():
-                    pass
-                from src.platform.tray import TrayIcon
-                tray = TrayIcon(dummy_callback, dummy_callback, dummy_callback)
-                if tray.icon:
-                    print("[TEST] Tray icon initialized OK")
-                else:
-                    print("[WARN] Tray icon is None after initialization")
-
-                # Close after test
-                root.after(500, root.destroy)
-                root.mainloop()
-                print("[OK] Full test passed")
-                sys.exit(0)
-            except Exception as e:
-                print(f"[ERROR] Test failed: {e}")
-                import traceback
-                traceback.print_exc()
-                sys.exit(1)
-
-        run_with_timeout()
-
     sys.exit(main())

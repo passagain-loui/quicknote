@@ -1,5 +1,105 @@
 # QuickNote Changelog
 
+## v3.0.0 (2026-10-26) — Windows 11 Redesign + Bug-Report Fixes
+
+### Windows 11 redesign (docs/v3/DESIGN_SPEC_WIN11.md)
+- **หน้าต่างแบบ native:** ใช้ titlebar ของ Windows (− □ ✕, Snap, Alt+Tab, taskbar) แทน `overrideredirect`; titlebar ตามธีมผ่าน DWM (`src/ui/win11.py`)
+- **ธีม:** light / dark / system (ตามระบบ) ผ่าน `sv-ttk`; สีโน้ต 7 สีแบบ Sticky Notes (`none|yellow|green|pink|purple|blue|gray`)
+- **การ์ด:** มุมโค้ง, hover actions (แสดงเมื่อชี้/โฟกัส), chip แจ้งเตือน (เสร็จแล้ว / เลื่อน N นาที), ทีละใบกางได้ครั้งละใบ
+- **ไอคอน:** Fluent icons (Segoe Fluent Icons → fallback Segoe MDL2 Assets) ผ่าน `src/ui/icons.py`
+- **เพิ่มโน้ต:** quick-add ด้านบน (สร้างแบบพับ; Shift+Enter = สร้างแล้วกาง)
+- **Undo bar:** ลบโน้ตแบบ soft delete + ปุ่มเลิกทำ 5 วินาที
+- **ภาษา:** ไทย + อังกฤษ (ค่าเริ่มต้นไทย) ทุกข้อความผ่าน `t()` ใน `src/ui/strings.py`
+- **การเตือนความจำ:** ReminderDialog พร้อมเวลาลัด (15 นาทีข้างหน้า / 1 ชม. / เย็นนี้ / พรุ่งนี้ 09:00) และทำซ้ำได้ (ทุกวัน / วันจันทร์-ศุกร์ / ทุกสัปดาห์)
+- **Toast แจ้งเตือน (in-app):** ไม่ดึงหน้าต่างหลักขึ้นมาเอง (ถ้าซ่อนอยู่); เลื่อนได้ 5/15/60 นาที หรือพรุ่งนี้ 09:00; ไม่ใช้ Windows toast
+- **หน้าต่างตั้งค่าแบบ Windows 11:** ทุกการเปลี่ยนค่ามีผลและบันทึกทันที ไม่มีปุ่ม Save/Close
+- **ไอคอน tray เดียว** ใช้ `assets/icon.ico` จริง; คลิกซ้ายเปิด/ซ่อน; เมนู: เปิด/ซ่อน, โน้ตใหม่, ตั้งค่า, ออก
+- **คีย์ลัด:** ดู DESIGN_SPEC §9 (README มีตารางครบ)
+- **โหมดกะทัดรัด** (แทน roll-up) ตั้งได้ใน Settings
+
+### Changed (สถาปัตยกรรม)
+- คีย์ลัดทั้งระบบย้ายจาก `pynput` ไปใช้ Win32 `RegisterHotKey` ผ่าน ctypes เพราะ pynput ไม่ทำงานกับคีย์บอร์ดภาษาไทย
+- เรียงการ์ดตามลำดับ: ปักหมุด → alarm ที่กำลังดัง → priority (high > medium > low > none) → `created_at` ใหม่สุดก่อน (ตัดกลไก band-aid `repack_card_to_top` ออก)
+- ลบ Google Tasks ออกทั้งหมด รวม client id/secret ปลอม (H10)
+- ลบ roll-up ออก แทนด้วยโหมดกะทัดรัด (H3)
+- ลบ `pywinctl` ออก (L5)
+
+### Fixed — Critical (BUG_REPORT_v2.9.46)
+- **C1** Priority ถูกบันทึกลง DB แล้ว (refresh/ปิดเปิดแอปไม่หาย)
+- **C2** Scheduler มี chain เดียวเสมอ (หลาย action ไม่ทวีคูณ CPU/IO)
+- **C3** Settings (opacity, snooze, geometry) ถูกบันทึกลงดิสก์ทุกการเปลี่ยน; ปิดแอปผ่านจุดเดียว `quit_app()`
+- **C4** คืนตำแหน่ง/ขนาดหน้าต่างที่บันทึกไว้
+- **C5** การ์ดเรียงตามลำดับจาก DB จริง (reuse การ์ดแล้วยังเรียงถูก)
+- **C6** Reminder toast ขึ้นได้แม้หน้าต่างหลักซ่อนอยู่ใน tray
+- **C7** เนื้อหาไม่หายเมื่อพิมพ์แล้วพับภายใน 500ms (flush ก่อนพับ)
+- **C8** Title ที่พิมพ์ค้างไว้ถูก flush เมื่อซ่อน/ปิดแอป
+- **C9** Backup/Restore ใช้ SQLite backup API (ปลอดภัยกับ WAL)
+- **C10** ไม่ลบ `notes.db-wal` / `-shm` ของ DB จริงอีกแล้ว
+
+### Fixed — High
+- **H1** เมนู tray → Settings ใช้ได้ (singleton หน้าต่างเดียวทั้งแอป)
+- **H2** ปุ่ม pin หน้าต่าง (📌) ใช้ได้จริงและมีผลกับ always-on-top ตาม setting
+- **H3** Roll-up พัง → ตัดออก แทนด้วยโหมดกะทัดรัด
+- **H4** สถานะพับ/กาง (`collapsed`) ถูกเก็บและอ่านกลับจริง
+- **H5** การ์ดที่ reuse อัปเดต widget ตามข้อมูลใหม่ (`refresh_from`) ไม่ทับช่องที่กำลังพิมพ์
+- **H6** บันทึกเนื้อหาแยกจาก reminder/status; `update_fields` เขียนเฉพาะ key ที่ส่งมา
+- **H7** ปุ่ม ✕ ของ reminder toast = Dismiss (ไม่ค้างสถานะ alarm ถาวร)
+- **H8** Alarm ที่เลยเวลาเกิน 60 นาทีแสดงใน toast "พลาดการแจ้งเตือน" ไม่ถูกทิ้งเงียบ ๆ
+- **H9** Search ไม่ถูกล้างตอน refresh และไม่ทำลายลำดับ
+- **H10** Google Tasks ถูกลบออก (ไม่มี UI ที่บอกว่า Connected ทั้งที่ยังไม่เชื่อมต่อจริง)
+- **H11** ลบโน้ตต้องมี undo (soft delete + UndoBar 5 วินาที)
+
+### Fixed — Medium
+- **M1** เปิดแอปตอนไม่มีโน้ตเห็นข้อความ empty state ครั้งเดียว (ไม่ซ้ำ 2 อัน)
+- **M2** ลบ/complete โน้ตสุดท้ายแล้วแสดง empty state ทันที
+- **M3** ตัดกลไก `last_dismissed_at` ที่ทำให้โน้ตที่เคย dismiss ลอยเหนือตลอดไป
+- **M4** การเรียงไม่พึ่ง `reminder_datetime` ที่เป็น NULL อีกแล้ว (NULL ไม่ขึ้นก่อนโน้ตที่มี reminder)
+- **M5** กลับเป็น active แล้วล้าง `completed_at`
+- **M6** Reminder dialog prefill วัน/เวลาเดิมตอนแก้ไข (ไม่เขียนทับเป็นพรุ่งนี้ 09:00 โดยไม่ตั้งใจ)
+- **M7** input ไม่ถูกต้องแสดง validation inline ไม่ปิดเงียบ
+- **M8** Dialog ปลด grab ทุกทางออก; error ของ DB ไม่ทำให้หน้าต่างหลักค้าง
+- **M9** Scheduler เป็นอิสระจาก parent widget (ไม่มี pause ที่ตั้งผิดที่)
+- **M10** ตัวเลือกเลื่อนเวลาเป็นค่าตายตัว 5/10/15/30/60 นาที (ไม่มีค่าหลุดจากการพิมพ์)
+- **M11** ค่า alpha ต่ำสุดใช้ `MIN_ALPHA` ค่าเดียวทั้ง UI และตอนโหลด
+- **M12** ไม่สร้าง Tk root ซ้ำใน error dialog (ไม่มี interpreter รั่ว)
+- **M13** ไม่เรียก `unbind_all` ที่ลบ binding ทั้งแอป
+- **M14** Tray icon เหลือ 1 อัน (ลบ tray service ซ้ำ)
+- **M15** คลิกซ้ายที่ tray icon คืนหน้าต่าง (default menu item)
+- **M16** ปุ่ม − ย่อหน้าต่างแบบ native มีปุ่มบน taskbar กู้คืนได้เสมอ
+- **M17** Theme refresh เส้นทางเดียวครบทุก widget (search, footer, การ์ด, ปุ่ม)
+- **M18** สีแถบการ์ดคงที่ เก็บใน DB (`color`) ไม่ใช้ `hash()` ที่สุ่มทุกการเปิดแอป
+- **M19** Title ว่างถูกบันทึกและ UI ตรงกับ DB
+- **M20** ตำแหน่ง toast คำนวณจาก work area ของจอที่หน้าต่างอยู่ (ไม่ใช้สูตร DPI เดิม)
+- **M21** Toast แยกตาม note_id (โน้ตเดียวกันไม่ซ้อน 2 อัน; หลาย toast ไม่ทับตำแหน่งเดิม)
+- **M22** Ctrl+Alt+S ดึงหน้าต่างขึ้นมาถ้าซ่อนอยู่หรือถูกบัง ไม่ซ่อนแทน
+
+### Fixed — Low / Code health
+- **L1** การกด "เปิด" จาก alarm ไม่ทำให้ alarm ดังซ้ำ
+- **L2** ลบ notification queue / toast เดิมที่เป็น dead code
+- **L3** ลบ fallback chain ที่ไม่มีวันทำงาน; ใช้ in-app toast อย่างเดียว
+- **L4** ลบ shell balloon ที่ `RegisterClass` ซ้ำ (ใช้ได้แค่ครั้งแรก)
+- **L5** ลบ `pywinctl` (ไม่อยู่ใน requirements และอาจจับหน้าต่างผิด)
+- **L6** ลบเมธอด/โมดูลที่ไม่ถูกเรียก (`services/`, `unblockable_dialog`, `titlebar`, `custom_toast`, `notification`)
+- **L7** `settings.json` เขียนแบบ atomic (tmp → fsync → .bak → replace); ไม่ shallow-copy DEFAULTS
+- **L8** Connection DB ปิดใน `finally` ทุกจุด; write ทั้งหมดอยู่ใต้ `DB_WRITE_LOCK`
+- **L9** Single instance: named mutex + socket "SHOW" (timeout 1 วินาที); ไม่ออกเงียบ ๆ เมื่อพอร์ตถูกใช้
+- **L10** Log ไปไฟล์ `~/.quicknote/quicknote.log` (หมุนเวียน) ไม่ออก stdout ตลอด
+- **L11** ตั้ง DPI awareness ครั้งเดียวตอนเริ่มโปรแกรม (ก่อนสร้าง Tk)
+- **L12** ลบ bare `except:`; AUMID ใช้ค่าคงที่ `APP_ID` ไม่ผูกเวอร์ชัน
+- **L13** Autostart เชื่อมกับ Settings (อ่านสถานะจริงทุกครั้งที่เปิดหน้าต่าง Settings)
+- **L14** Repo hygiene: ลบไฟล์ซ้ำที่ root (`board.py`, `database.py`, `hotkey.py`) และไฟล์ log/installer ที่ track ไว้ออกจาก index
+
+### Data & upgrade notes
+- Schema เพิ่มคอลัมน์ `color`, `reminder_repeat`, `deleted_at` อัตโนมัติ (migrate ตอนเปิดแอปครั้งแรก)
+- ก่อน migrate ระบบสำรอง DB เดิมไว้ที่ `~/.quicknote/backups/notes_pre_v3.db`
+- การ์ดทุกใบจะ**พับ** ครั้งเดียวตอนเปิด v3 ครั้งแรก (หลังจากนั้นสถานะพับ/กางจำตามที่ผู้ใช้ตั้ง)
+- Auto-backup รายวันเก็บ 7 ชุดล่าสุดใน `~/.quicknote/backups/`
+
+### Developer notes
+- เทสเก่าย้ายไป `tests/legacy/` (ไม่รัน) ชุดใหม่อยู่ `tests/v3/` — 402 tests ผ่านทั้งหมด
+- ขั้นตอน Tri-Agent / LocalCore ถูกยกเลิก; `CLAUDE.md` เขียนใหม่ให้ตรงกับ v3
+- Build: `python build_windows.py` สร้างทั้ง `dist/QuickNote_v3.0.0.exe` และ `installer_output/QuickNote_v3.0.0_Setup.exe`
+
 ## v2.9.46 (2026-08-26) — Final Resilience & Production Polish
 
 ### Added

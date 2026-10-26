@@ -1,692 +1,991 @@
-"""NoteCard widget — macOS Pastel style card ด้วย rounded corners + color bar"""
+"""NoteCard — การ์ดโน้ต v3 (DESIGN_SPEC 4.x, สัญญา ARCHITECTURE ข้อ 5)
 
+โครงภายในคงที่เสมอ: header → content → chip row (ทุกครั้งที่เปลี่ยนโหมด pack_forget แล้ว pack ใหม่ตามลำดับ
+แก้ V4) การ์ดไม่เขียน DB เอง: ทุกการเปลี่ยนแปลงออกทาง CardCallbacks ให้ Board เป็นเจ้าของข้อมูล
+เนื้อหา/หัวข้อบันทึกผ่าน on_save เท่านั้น (debounce 500ms + flush ตอนพับ/ทำลาย/ปิดแอป — C7/C8)
+"""
+
+from __future__ import annotations
+
+import logging
 import tkinter as tk
-from .theme import Theme, PASTEL_PALETTE
+import tkinter.font as tkfont
+import unicodedata
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Callable
+
 from ..core.models import Note
+from ..core.reminders import format_reminder
+from .icons import ICONS
+from .strings import get_language, t
+from .theme import Theme, blend
+from .widgets import IconButton, RoundedFrame, Tooltip, _animate, is_pointer_inside, px
+
+log = logging.getLogger("quicknote.card")
+
+SAVE_DEBOUNCE_MS = 500
+SAVED_CAPTION_MS = 1500
+
+# ขนาดทั้งหมดเป็น "px ที่ 96 DPI" แล้วคูณด้วย px() ตอนใช้
+PAD_X = 9          # + inset ของ RoundedFrame (3) ≈ 12px จากขอบการ์ดตามสเปก
+PAD_Y = 3
+CARD_GAP_Y = 4     # pady ของการ์ดแต่ละใบใน list (รวม 8px ระหว่างใบ)
+CHECK_SIZE = 26
+BTN_SIZE = 26
+INDENT = CHECK_SIZE + 8   # เนื้อหา/chip ชิดแนวเดียวกับหัวข้อ
+
+_GLYPH_RING = ICONS["circle"]
+_GLYPH_DONE = ICONS["completed"]
+_GLYPH_HOVER = ""   # ring + check (มีทั้ง Fluent และ MDL2) ใช้เป็น "check จาง" ตอน hover
+
+PRIORITY_TOKEN = {"high": "critical", "medium": "caution", "low": "accent"}
+_LEADING_VOWELS = "เแโใไ"
+
+# ปุ่มลัดระดับแอปที่ Entry/Text ชน (Ctrl+T สลับตัวอักษร, Ctrl+F/N/P ขยับ cursor ฯลฯ) → ส่งต่อเป็น virtual event
+GLOBAL_SHORTCUTS = {
+    "<Control-n>": "<<QN-NewNote>>",
+    "<Control-f>": "<<QN-Search>>",
+    "<Control-t>": "<<QN-Topmost>>",
+    "<Control-Key-1>": "<<QN-TabActive>>",
+    "<Control-Key-2>": "<<QN-TabCompleted>>",
+}
 
 
-class NoteCard(tk.Frame):
-    """การ์ดโน้ตแบบ macOS Pastel — color bar + status badge + modern buttons"""
+def forward_shortcuts(widget: tk.Misc) -> None:
+    """กัน class binding ของ Entry/Text (emacs-style) แย่งปุ่มลัดของแอป แล้วส่งให้ Board จัดการ"""
+    for seq, virtual in GLOBAL_SHORTCUTS.items():
+        widget.bind(seq, lambda e, v=virtual: (e.widget.event_generate(v), "break")[1])
 
-    def __init__(self, master, note: Note, theme: Theme, is_completed_tab: bool = False, **kwargs):
-        super().__init__(master, **kwargs)
+
+def ellipsize(text: str, font: tkfont.Font, max_px: int) -> str:
+    """ตัดข้อความให้พอดีความกว้างด้วย font.measure แล้วต่อ … (ไม่ตัดกลางกลุ่มอักษรไทย)"""
+    if max_px <= 0:
+        return ""
+    if font.measure(text) <= max_px:
+        return text
+    lo, hi = 0, len(text)
+    while lo < hi:  # หา n มากสุดที่ text[:n]+"…" ยังพอดี
+        mid = (lo + hi + 1) // 2
+        if font.measure(text[:mid] + "…") <= max_px:
+            lo = mid
+        else:
+            hi = mid - 1
+    n = lo
+    # ตัวถัดไปเป็นสระบน/วรรณยุกต์ (Mn) หรือตัวสุดท้ายเป็นสระหน้า → ถอยกลับ ไม่งั้นเครื่องหมายลอยโดดเดี่ยว
+    while n > 0 and (unicodedata.category(text[n]) == "Mn" or text[n - 1] in _LEADING_VOWELS):
+        n -= 1
+    return text[:n].rstrip() + "…"
+
+
+def _done_font(theme: Theme, base_style: str) -> tkfont.Font:
+    """font ขีดฆ่าสำหรับงานที่เสร็จ — แคชบน theme และ sync กับ font ฐานทุกครั้งที่ขอ (ขนาดตัวอักษรเปลี่ยนได้)"""
+    cache = theme.__dict__.setdefault("_qn_done_fonts", {})
+    font = cache.get(base_style)
+    if font is None:
+        font = cache[base_style] = tkfont.Font(root=theme.root)
+    spec = dict(theme.font(base_style).actual())
+    spec["overstrike"] = True
+    font.configure(**spec)
+    return font
+
+
+def _first_line(text: str) -> str:
+    for line in text.splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def _fixed(widget: tk.Misc) -> tk.Misc:
+    """ติดป้ายว่า widget นี้มีสีของตัวเอง (chip/input) — _paint ของการ์ดต้องไม่ทาสีการ์ดทับ"""
+    widget._qn_fixed = True  # type: ignore[attr-defined]
+    return widget
+
+
+@dataclass
+class CardCallbacks:
+    on_toggle_complete: Callable[[str], None]
+    on_save: Callable[[str, dict], None]          # (note_id, {"title":..., "content":..., "collapsed":...}) เฉพาะที่เปลี่ยน
+    on_request_expand: Callable[[str], None]      # board พับใบอื่นก่อน แล้วเรียก card.expand()
+    on_reminder: Callable[[str], None]            # เปิด ReminderDialog
+    on_clear_reminder: Callable[[str], None]
+    on_pin: Callable[[str, bool], None]
+    on_priority: Callable[[str, str], None]
+    on_color: Callable[[str, str], None]
+    on_delete: Callable[[str], None]
+    on_alarm_done: Callable[[str], None]          # chip "เสร็จแล้ว" ตอน alarm ดัง
+    on_alarm_snooze: Callable[[str], None]        # chip "เลื่อน N นาที"
+
+
+class _CircleButton(tk.Label):
+    """วงกลม complete: ring → (hover) check จาง → completed สี accent"""
+
+    def __init__(self, parent: tk.Misc, theme: Theme, command: Callable[[], None]) -> None:
+        self._theme = theme
+        self._command = command
+        self._done = False
+        self._hover = False
+        self._base = theme.c("card")
+        self._pixel = tk.PhotoImage(master=parent, width=1, height=1)  # ทำให้ width/height นับเป็น px
+        side = px(parent, CHECK_SIZE) - 4
+        super().__init__(parent, text=_GLYPH_RING, font=theme.font("icon14"), image=self._pixel,
+                         compound="center", width=side, height=side, bd=0, padx=0, pady=0,
+                         takefocus=True, highlightthickness=2, highlightcolor=theme.c("accent"),
+                         cursor="hand2")
+        self.bind("<Enter>", self._on_enter, add="+")
+        self.bind("<Leave>", self._on_leave, add="+")
+        self.bind("<ButtonRelease-1>", self._on_release, add="+")
+        self.bind("<space>", self._on_key)
+        self.bind("<Return>", self._on_key)
+        self.paint()
+
+    def set_done(self, done: bool) -> None:
+        self._done = done
+        self.paint()
+
+    def set_base(self, bg: str) -> None:
+        self._base = bg
+        self.paint()
+
+    def paint(self) -> None:
+        th = self._theme
+        if self._done:
+            glyph, fg = _GLYPH_DONE, th.c("accent")
+        elif self._hover:
+            glyph, fg = _GLYPH_HOVER, blend(th.c("text_secondary"), self._base, 0.35)
+        else:
+            glyph, fg = _GLYPH_RING, th.c("text_secondary")
+        try:
+            self.configure(text=glyph, fg=fg, bg=self._base, highlightbackground=self._base,
+                           highlightcolor=th.c("accent"), font=th.font("icon14"))
+        except tk.TclError:
+            pass
+
+    def _on_enter(self, _e) -> None:
+        self._hover = True
+        self.paint()
+
+    def _on_leave(self, _e) -> None:
+        self._hover = False
+        self.paint()
+
+    def _on_release(self, e) -> None:
+        if 0 <= e.x < self.winfo_width() and 0 <= e.y < self.winfo_height():
+            self._command()
+
+    def _on_key(self, _e) -> str:
+        self._command()
+        return "break"
+
+
+class NoteCard(RoundedFrame):
+    def __init__(self, parent: tk.Misc, note: Note, theme: Theme, callbacks: CardCallbacks,
+                 compact: bool = False) -> None:
+        super().__init__(parent, theme, radius=8, bg=theme.note_bg(note.color), border="stroke", border_width=1)
+        self.th = theme
         self.note = note
-        self.theme = theme
-        self.is_completed_tab = is_completed_tab  # ✓ v1.3.8: Track which tab we're in
+        self.callbacks = callbacks
+        self._compact = compact
+        self._expanded = False
+        self._hover = False
+        self._focused = False
+        self._menu_open = False
+        self._removing = False
+        self._saved = {"title": note.title, "content": note.content}
+        self._save_job: str | None = None
+        self._fit_w = 0
+        self._chip_sig: tuple | None = None
+        self._title_entry: tk.Entry | None = None
+        self._title_wrap: tk.Frame | None = None
+        self._title_ph: tk.Label | None = None
+        self._title_trace: str | None = None
+        self._text: tk.Text | None = None
+        self._text_ph: tk.Label | None = None
+        self._meta_full = ""
+        self._meta_visible = False
+        self._meta_overdue = False
+        self._title_font = theme.font("body_strong")
+        self._title_var = tk.StringVar(master=self)
+        self._prio_var = tk.StringVar(master=self)
+        self._color_var = tk.StringVar(master=self)
+        self._menu = tk.Menu(self, tearoff=0)
+        self._submenus: list[tk.Menu] = []
 
-        # v2.9.43: Content debounce timer
-        self._content_save_timer = None
+        self.configure(takefocus=True, highlightthickness=0)
+        self._build()
+        self._bind_card()
+        self.refresh_from(note)
 
-        # สีพาสเทลแบบสุ่ม (หรือตั้งเอง)
-        color_list = list(PASTEL_PALETTE.values())
-        self.color_idx = hash(note.id) % len(color_list)
-        self.card_color = color_list[self.color_idx]
+    # ================================================================ build
+    def _build(self) -> None:
+        th, body = self.th, self.body
+        # --- header: [วงกลม][หัวข้อ/meta][pin] + ปุ่ม hover ลอยทับด้านขวา
+        self._top = tk.Frame(body, bd=0, highlightthickness=0)
+        self._top.pack(fill="x", padx=px(self, PAD_X), pady=px(self, PAD_Y))
+        self._top.grid_columnconfigure(1, weight=1)
+        self._top.grid_rowconfigure(0, minsize=px(self, BTN_SIZE))
 
-        # v2.9.26: Red border shows if alarm is TRIGGERED AND datetime still exists
-        # v2.9.26: Complete dismiss clears both reminder_datetime and sets reminder_triggered=1
-        # Before alarm: reminder_triggered = 0, reminder_datetime = set → No border
-        # Alarm fires: reminder_triggered = 1, reminder_datetime = set → RED BORDER SHOWS
-        # User dismisses: reminder_triggered = 1, reminder_datetime = NULL → No border (datetime cleared)
-        # User snoozes: reminder_triggered = 0, reminder_datetime = future → No border (time not arrived)
-        reminder_triggered = getattr(note, 'reminder_triggered', False)
-        reminder_datetime = note.reminder_datetime
+        self._check = _CircleButton(self._top, th, self._toggle_complete)
+        self._check.grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, px(self, 6)))
+        Tooltip(self._check, lambda: t("card.restore_tip" if self.note.status == "completed" else "card.complete_tip"),
+                theme=th)
 
-        # v2.9.26: Red border shows if reminder_triggered AND datetime still exists
-        is_reminder_active = bool(reminder_triggered and reminder_datetime)
+        self._col = tk.Frame(self._top, bd=0, highlightthickness=0)
+        self._col.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        self._col.grid_columnconfigure(0, weight=1)
+        self._col.grid_rowconfigure(0, minsize=px(self, BTN_SIZE))
+        self._title = tk.Label(self._col, anchor="w", justify="left", bd=0, padx=0, pady=0)
+        self._title.grid(row=0, column=0, sticky="we")
+        self._meta = tk.Frame(self._col, bd=0, highlightthickness=0)
+        self._meta.grid(row=1, column=0, sticky="we")
+        self._m_icon = tk.Label(self._meta, bd=0, padx=0, pady=0)
+        self._m_time = tk.Label(self._meta, bd=0, padx=0, pady=0)
+        self._m_dot = tk.Label(self._meta, bd=0, padx=0, pady=0)
+        self._m_prio = tk.Label(self._meta, bd=0, padx=0, pady=0)
+        self._m_text = tk.Label(self._meta, bd=0, padx=0, pady=0, anchor="w")
+        self._m_sep = [tk.Label(self._meta, bd=0, padx=0, pady=0, text=" · ") for _ in range(2)]
 
-        # Card frame (white background สำหรับ light mode)
-        # ✓ v1.3.5: Add visible border for Light Theme contrast
-        # ✓ v1.4.2: Modern card styling — softer borders + modern spacing
-        # v2.9.23: Dynamic highlight — RED (#FF3B30) if alarm time ARRIVED and not dismissed
-        highlight_color = "#FF3B30" if is_reminder_active else theme.c("note_border_soft")
-        highlight_thickness = 3 if is_reminder_active else 2
+        self._pin = tk.Label(self._top, text=ICONS["pin"], bd=0, padx=0, pady=0)
+        self._pin.grid(row=0, column=2, sticky="ne", padx=(px(self, 4), 0))
 
-        self.config(
-            bg=theme.c("note_bg"),
-            highlightthickness=highlight_thickness,  # v2.9.21: Thicker red border when alarm active
-            highlightbackground=highlight_color,  # v2.9.21: Red (#FF3B30) if reminder active, normal otherwise
-            relief="flat",
-            padx=12,  # ✓ v1.4.2: Increased padding for spacious, modern appearance
-            pady=10,  # ✓ v1.4.2: Increased padding for better breathing room
-        )
+        self._actions = tk.Frame(self._top, bd=0, highlightthickness=0)
+        self._clock = IconButton(self._actions, th, ICONS["clock"], lambda: self.callbacks.on_reminder(self.note.id),
+                                 tooltip=lambda: t("card.reminder_tip"), size=BTN_SIZE, fg_token="text_secondary")
+        self._more = IconButton(self._actions, th, ICONS["more"], self._popup_from_button,
+                                tooltip=lambda: t("card.more_tip"), size=BTN_SIZE, fg_token="text_secondary")
+        self._clock.pack(side="left")
+        self._more.pack(side="left")
 
-        # Left color bar (thin pastel stripe)
-        color_bar = tk.Frame(self, bg=self.card_color, width=4)
-        color_bar.pack(side="left", fill="y", padx=0, pady=0)
-        color_bar.pack_propagate(False)
+        # --- content (กางเท่านั้น) และ chip row
+        self._content_wrap = tk.Frame(body, bd=0, highlightthickness=0)
+        self._chips = tk.Frame(body, bd=0, highlightthickness=0)
+        self._chip_row = tk.Frame(self._chips, bd=0, highlightthickness=0)
+        self._chip_row.pack(side="left")
+        self._saved_lbl = tk.Label(self._chips, bd=0, padx=0, pady=0)
+        self._saved_lbl.pack(side="right", anchor="s")
 
-        # Main content frame — แยกจาก Header และ Content
-        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
-        main_frame = tk.Frame(self, bg=theme.c("note_bg"), highlightthickness=0)
-        main_frame.pack(side="left", fill="both", expand=True)
+        for w in (self._top, self._col, self._title, self._meta, self._m_icon, self._m_time, self._m_dot,
+                  self._m_prio, self._m_text, self._m_sep[0], self._m_sep[1], self._pin, self.body, self):
+            self._wire(w, click=True)
+        for w in (self._check, self._actions, self._clock, self._more, self._content_wrap, self._chips,
+                  self._chip_row, self._saved_lbl):
+            self._wire(w)
+        self._col.bind("<Configure>", self._on_col_configure)
 
-        # === Header (ปุ่มควบคุม) ===
-        # v1.8.9: Reorganized packing order to prevent button overflow
-        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
-        header = tk.Frame(main_frame, bg=theme.c("note_bg"), highlightthickness=0)
-        # ✓ v1.4.2: Increased header padding for modern spacing
-        header.pack(fill="x", padx=12, pady=10)
+    def _bind_card(self) -> None:
+        self.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Return>", lambda e: self._key_expand())
+        self.bind("<space>", lambda e: self._key_complete())
+        self.bind("<Control-Return>", lambda e: self._key_complete())
+        self.bind("<Delete>", lambda e: self.callbacks.on_delete(self.note.id))
+        self.bind("<Control-p>", lambda e: self._toggle_pin())
+        self.bind("<Control-r>", lambda e: self.callbacks.on_reminder(self.note.id))
+        self.bind("<Destroy>", self._on_destroy, add="+")
 
-        # v2.5.0: Simplified header — no right-side elements, title gets full space
+    def _wire(self, w: tk.Misc, click: bool = False) -> None:
+        w.bind("<Enter>", self._on_enter, add="+")
+        w.bind("<Leave>", self._on_leave, add="+")
+        w.bind("<Button-3>", self._on_context, add="+")
+        if click:
+            w.bind("<Button-1>", self._on_click, add="+")
 
-        # v1.8.9: NOW pack left-side elements (fold, priority, pin, title)
-        # after right-side (status, control) have reserved their space
-
-        # Fold button (collapse/expand)
-        fold_text = "▾" if not note.collapsed else "▸"
-        self.btn_fold = tk.Button(
-            header,
-            text=fold_text,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg"),
-            activebackground=theme.c("note_bg"),
-            font=("Segoe UI", 9),
-            command=self._on_toggle_fold,
-            padx=2,
-            pady=2,
-        )
-        self.btn_fold.pack(side="left", padx=2)
-
-        # v2.5.0: Priority flag button — always use 🚩, change color by priority
-        priority_icon_map = {
-            "high": ("🚩", "#FF3B30"),      # Red
-            "medium": ("🚩", "#FF9500"),    # Orange
-            "low": ("🚩", "#007AFF"),       # Blue
-            "none": ("🚩", "#B0B0B0"),      # Gray
-        }
-        flag_icon, flag_color = priority_icon_map.get(note.priority, ("🚩", "#B0B0B0"))
-
-        self.btn_priority = tk.Button(
-            header,
-            text=flag_icon,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=flag_color,
-            activebackground=theme.c("note_bg"),
-            activeforeground=flag_color,
-            font=("Segoe UI", 10),
-            command=self._on_priority_clicked,
-            padx=2,
-            pady=2,
-        )
-        self.btn_priority.pack(side="left", padx=2)
-        self.priority_icon_map = priority_icon_map
-
-        # Pin button (v1.5.0)
-        pin_icon = "📌" if note.is_pinned else "📍"
-        self.btn_pin = tk.Button(
-            header,
-            text=pin_icon,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg="#FF6B6B" if note.is_pinned else theme.c("fg_muted"),
-            activebackground=theme.c("note_bg"),
-            activeforeground="#FF6B6B",
-            font=("Segoe UI", 10),
-            command=self._on_toggle_pin,
-            padx=2,
-            pady=2,
-        )
-        self.btn_pin.pack(side="left", padx=2)
-
-        # v1.8.9: Title entry — now only expands into remaining space (not pushing buttons off)
-        self.title_var = tk.StringVar(value=note.title)
-        self.title_entry = tk.Entry(
-            header,
-            textvariable=self.title_var,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg"),
-            font=("Segoe UI", 9, "bold"),
-            bd=0,
-            relief="flat",
-        )
-        self.title_entry.pack(side="left", padx=4, fill="x", expand=True)
-        self.title_entry.bind("<FocusOut>", self._on_title_change)
-
-        # === Content area (stored for toggle) ===
-        self.content_frame = None
-        self.content_text = None
-        self._main_frame_ref = main_frame  # เก็บ reference เพื่อให้ content_frame pack ลงใน main_frame
-        # v1.4.0: Always display content if not collapsed (ensures payload persistence across tabs)
-        if not note.collapsed:
-            self._show_content()
-
-        # === Footer Frame (v2.5.0: Actions + Status moved to bottom) ===
-        footer = tk.Frame(main_frame, bg=theme.c("note_bg"), highlightthickness=0)
-        footer.pack(fill="x", padx=12, pady=(0, 8))
-
-        # Left side: Action button + Reminder button + Delete button
-        left_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
-        left_frame.pack(side="left", fill="x", expand=False)
-
-        # v2.9.39: Action button (Complete ✓ / Restore ↩) — minimalist outline style
-        if note.status == "completed":
-            action_text = "↩"  # Restore icon
-            action_color = "#34C759"  # Green
+    # ================================================================ public API
+    def refresh_from(self, note: Note) -> None:
+        """sync ทุก widget จากข้อมูลล่าสุด (H5) — ช่องที่กำลังพิมพ์/มีค่าค้างไม่ถูกทับ"""
+        self.note = note
+        pending = self._save_job is not None
+        # สถานะพับ/กางเป็นของ DB (H4): ไม่ตรงกับหน้าจอ → ปรับให้ตรงโดยไม่เขียนกลับ
+        if note.collapsed and self._expanded:
+            self.collapse(persist=False)
+        elif not note.collapsed and not self._expanded:
+            self.expand(focus=False, persist=False)
+        if self._expanded and self._title_entry is not None and self._text is not None:
+            if not pending:
+                if self.focus_displayof() is not self._title_entry and self._title_var.get() != note.title:
+                    self._title_var.set(note.title)
+                if self.focus_displayof() is not self._text and self._text.get("1.0", "end-1c") != note.content:
+                    self._set_text(note.content)
+                self._saved = {"title": note.title, "content": note.content}
         else:
-            action_text = "✓"  # Complete icon (minimalist outline, not heavy ✔)
-            action_color = "#666666"  # Muted gray by default
+            self._saved = {"title": note.title, "content": note.content}
+        self._render()
 
-        self.btn_action = tk.Button(
-            left_frame,
-            text=action_text,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=action_color,
-            activebackground=theme.c("note_bg"),
-            activeforeground="#34C759" if note.status == "completed" else "#28A745",  # Green on hover for complete
-            font=("Segoe UI", 10),  # Regular weight for minimalist look
-            command=self._on_toggle_status,
-            padx=2,
-            pady=2,
-        )
-        self.btn_action.pack(side="left", padx=2)
-
-        # Reminder button (v1.3.0) — ⏰ for setting reminder datetime
-        # v2.9.9: Check reminder_triggered FIRST to ensure icon shows correct state
-        # v2.9.10: Use getattr() instead of .get() (Note is object, not dict)
-        # If triggered=1, show inactive (⏱) gray regardless of reminder_datetime
-        # If triggered=0 AND reminder_datetime set, show active (⏰) red
-        reminder_triggered = getattr(note, 'reminder_triggered', False)
-        is_reminder_active = bool(note.reminder_datetime) and not reminder_triggered
-        reminder_icon = "⏰" if is_reminder_active else "⏱"
-        self.btn_reminder = tk.Button(
-            left_frame,
-            text=reminder_icon,
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.priority_color("high") if is_reminder_active else theme.c("fg_muted"),
-            activebackground=theme.c("note_bg"),
-            activeforeground=theme.c("fg"),
-            font=("Segoe UI", 10),
-            command=self._on_set_reminder,
-            padx=2,
-            pady=2,
-        )
-        # v2.5.0: Show reminder button on all tabs (moved to footer)
-        self.btn_reminder.pack(side="left", padx=2)
-
-        # Delete button (v1.3.8) — changed from ✕ to 🗑 (trash icon)
-        self.btn_delete = tk.Button(
-            left_frame,
-            text="🗑",
-            width=2,
-            height=1,
-            bd=0,
-            bg=theme.c("note_bg"),
-            fg=theme.c("fg_muted"),
-            activebackground=theme.c("note_bg"),
-            activeforeground="#EF4444",  # Red on hover
-            font=("Segoe UI", 10),
-            command=self._on_delete,
-            padx=2,
-            pady=2,
-        )
-        self.btn_delete.pack(side="left", padx=2)
-
-        # Spacer (expands to push right-side elements to edge)
-        spacer = tk.Frame(footer, bg=theme.c("note_bg"))
-        spacer.pack(side="left", fill="x", expand=True)
-
-        # Right side: Status badge + Priority badge
-        right_frame = tk.Frame(footer, bg=theme.c("note_bg"), highlightthickness=0)
-        right_frame.pack(side="right", fill="x", expand=False, padx=2)
-
-        # Status badge (Done / Active) — v2.5.3: Convert to Label for pixel-perfect alignment
-        if note.status == "completed":
-            badge_text = "Done"
-            badge_bg = "#D1FAE5"  # Light green
-            badge_fg = "#10B981"  # Green
-        else:
-            badge_text = "Active"
-            badge_bg = "#DBEAFE"  # Light blue
-            badge_fg = "#0EA5E9"  # Blue
-
-        # v2.5.3: Unified Label (not Button) for exact pixel-perfect alignment with priority badge
-        self.status_badge = tk.Label(
-            right_frame,
-            text=badge_text,
-            bg=badge_bg,
-            fg=badge_fg,
-            font=("Segoe UI", 8, "bold"),  # v2.5.3: Identical to priority badge
-            padx=8,  # v2.5.3: Identical padding
-            pady=2,  # v2.5.3: Identical padding
-            bd=0,
-            relief="flat",
-        )
-        self.status_badge.pack(side="left", padx=2)
-        # v2.5.3: Bind click event for status toggling
-        self.status_badge.bind("<Button-1>", lambda e: self._on_toggle_status())
-
-        # Priority badge (v1.3.1) — Pill-shaped badge with priority level
-        # Only show if priority != "none"
-        self.priority_badge = None
-        if note.priority and note.priority != "none":
-            self._create_priority_badge(right_frame, theme)
-
-        # v2.5.1: Apply status styling AFTER status_badge is created
-        self._update_strikethrough()
-
-        # Callbacks
-        self.on_update = lambda: None  # Title/content changes only
-        self.on_status_update = lambda: None  # Status changes only (v1.3.9: prevent title corruption)
-        self.on_pin_change = lambda: None  # Pin state changed (v1.5.0: trigger board re-sort)
-        self.on_delete_note = lambda: None
-
-    def _show_content(self):
-        """แสดง content area — pack ลงใน main_frame ด้านล่าง header"""
-        if self.content_frame is not None:
-            # v1.4.0: Sync content from note object if already shown
-            if self.content_text:
-                self.content_text.config(state="normal")
-                self.content_text.delete("1.0", "end")
-                self.content_text.insert("1.0", self.note.content)
+    def flush_pending(self) -> None:
+        """C7/C8: ยกเลิก timer แล้วบันทึกค่าค้างจาก widget ทันที — เรียกก่อน hide/destroy/quit"""
+        self._cancel_save()
+        if not self._expanded:
             return
+        changes = self._collect(revert_empty=True)
+        if changes:
+            self._emit(changes)
 
-        self.content_frame = tk.Frame(self._main_frame_ref, bg=self.theme.c("note_bg"), highlightthickness=0)  # v1.6.1
-        # ✓ v1.4.2: Increased content padding for modern spacing
-        self.content_frame.pack(fill="both", expand=True, padx=12, pady=(0, 10))
-
-        self.content_text = tk.Text(
-            self.content_frame,
-            height=4,
-            width=50,
-            bg=self.theme.c("note_bg"),  # v1.6.1: Use note_bg instead of main bg to match card
-            fg=self.theme.c("fg"),
-            font=("Segoe UI", 9),
-            wrap="word",
-            relief="flat",
-            bd=0,
-            highlightthickness=0,  # v1.6.1: Remove default border
-        )
-        # v1.4.0: Guarantee content is always displayed (never empty payload)
-        content_to_show = self.note.content if self.note.content else ""
-        self.content_text.insert("1.0", content_to_show)
-        self.content_text.pack(fill="both", expand=True)
-        # v2.9.43: Bind both FocusOut (immediate save when user leaves) + KeyRelease (debounced save while typing)
-        self.content_text.bind("<FocusOut>", self._on_content_change)
-        self.content_text.bind("<KeyRelease>", self._on_content_debounced)
-
-    def _hide_content(self):
-        """ซ่อน content area"""
-        if self.content_frame is not None:
-            self.content_frame.destroy()
-            self.content_frame = None
-            self.content_text = None
-
-    def _update_strikethrough(self):
-        """ปรับ status badge ไม่ใช้ strikethrough (v1.3.2) — ข้อความต้องอ่านได้ชัดเจน"""
-        if self.note.status == "completed":
-            # Keep font normal, no strikethrough for readability (v1.3.2)
-            self.title_entry.config(font=("Segoe UI", 9, "bold"))
-            # Update status badge
-            self.status_badge.config(text="Done", bg="#D1FAE5", fg="#10B981")
-        else:
-            # Keep font normal
-            self.title_entry.config(font=("Segoe UI", 9, "bold"))
-            # Update status badge
-            self.status_badge.config(text="Active", bg="#DBEAFE", fg="#0EA5E9")
-
-    def _update_action_button(self):
-        """v2.9.39: Update action button (Complete ✓ / Restore ↩) based on current note status with minimalist styling"""
-        if not hasattr(self, 'btn_action'):
+    def expand(self, focus: bool = True, persist: bool = True) -> None:
+        if self._expanded:
             return
-
-        if self.note.status == "completed":
-            self.btn_action.config(text="↩", fg="#34C759")  # Restore (green)
+        self._expanded = True
+        self._build_editor()
+        if persist:
+            self._emit({"collapsed": False})
         else:
-            self.btn_action.config(text="✓", fg="#666666")  # Complete (minimalist gray)
+            self.note.collapsed = False
+        self._render()
+        if focus and self._text is not None:
+            self._text.focus_set()
+            self._text.mark_set("insert", "end-1c")
 
-    def set_alarm_highlight(self, highlight: bool):
-        """v2.9.38: Change card border to bright red (#FF3B30) on alarm, reset on highlight=False
-
-        Used to visually highlight triggered reminders with prominent red border.
-        Call this when alarm triggers to make task stand out.
-        Call with highlight=False to reset to normal border when user dismisses/snoozes.
-        """
-        if highlight:
-            # Show bright red border when alarm is triggered
-            self.config(highlightthickness=3, highlightbackground="#FF3B30")
-        else:
-            # Reset to normal soft border
-            normal_color = self.theme.c("note_border_soft")
-            self.config(highlightthickness=2, highlightbackground=normal_color)
-
-    def update_reminder_state(self, active: bool):
-        """v2.9.39: Update reminder clock icon state (⏰ active / ⏱ inactive)
-
-        Call with active=False when user dismisses reminder to show ⏱ gray icon.
-        Call with active=True when setting a new reminder to show ⏰ red icon.
-        """
-        if not hasattr(self, 'btn_reminder'):
+    def collapse(self, persist: bool = True) -> None:
+        if not self._expanded:
             return
-
-        if active:
-            # Active reminder — show ⏰ in red/warning color
-            self.btn_reminder.config(text="⏰", fg=self.theme.priority_color("high"))
+        self._cancel_save()
+        changes = self._collect(revert_empty=True)
+        self._expanded = False
+        if persist:
+            changes["collapsed"] = True
         else:
-            # Inactive/dismissed reminder — show ⏱ in muted gray
-            self.btn_reminder.config(text="⏱", fg=self.theme.c("fg_muted"))
+            self.note.collapsed = True
+        if changes:
+            self._emit(changes)
+        self._destroy_editor()
+        self._render()
 
-    def _on_toggle_fold(self):
-        """ปุ่มพับ/กาง"""
-        self.note.toggle_collapse()
+    def set_compact(self, compact: bool) -> None:
+        if compact != self._compact:
+            self._compact = compact
+            self._render()
 
-        if self.note.collapsed:
-            self._hide_content()
-            self.btn_fold.config(text="▸")
+    def apply_theme(self) -> None:
+        self._chip_sig = None  # chip ใช้สีตายตัวตอนสร้าง → สร้างใหม่ตามธีม
+        self._render()
+        if self._text is not None:
+            self._style_inputs()
+
+    def focus_card(self) -> None:
+        self.focus_set()
+
+    def focus_content(self) -> None:
+        """โฟกัสช่องเนื้อหา (ใช้หลัง Shift+Enter สร้างโน้ตแล้วกาง)"""
+        if self._text is not None:
+            self._text.focus_set()
+            self._text.mark_set("insert", "end-1c")
+
+    @property
+    def expanded(self) -> bool:
+        return self._expanded
+
+    @property
+    def ringing(self) -> bool:
+        return bool(self.note.reminder_triggered and self.note.reminder_datetime)
+
+    def animate_out(self, then: Callable[[], None] | None = None) -> None:
+        """complete/restore: หดความสูง + ช่องว่างจนหาย ~250ms (spec 4.1) แล้วค่อยให้ board โหลดรายการใหม่"""
+        self._removing = True
+        h0 = max(1, self.winfo_height())
+        gap = px(self, CARD_GAP_Y)
+
+        def step(p: float) -> None:
+            self.configure(height=max(1, int(h0 * (1 - p))))
+            self.pack_configure(pady=(int(gap * (1 - p)), int(gap * (1 - p))))
+
+        _animate(self, "out", 250, step, then)
+
+    # ================================================================ render
+    def _render(self) -> None:
+        """วาดทุกอย่างจาก self.note ใหม่ทั้งหมด (ถูกเรียกหลังข้อมูล/โหมด/ธีมเปลี่ยน)"""
+        n, th = self.note, self.th
+        done = n.status == "completed"
+        self._check.set_done(done)
+        self._title_font = _done_font(th, "body_strong") if done else th.font("body_strong")
+        self._title.configure(font=self._title_font)
+        if n.is_pinned:
+            self._pin.grid()
         else:
-            self._show_content()
-            self.btn_fold.config(text="▾")
+            self._pin.grid_remove()
+        self._update_meta()
+        self._relayout()
+        self._paint()
+        self._fit_w = 0
+        self._fit_texts()
+        self._update_chips()
+        self._place_actions()
 
-        self.on_update(self.note)
-
-    def _on_toggle_status(self):
-        """ปุ่ม status (✓) — toggle note status ONLY (v1.3.9: no title/content modification)"""
-        # v1.4.1: Force flush of unsaved UI changes BEFORE status change
-        # If user typed but didn't click out, FocusOut event never fired, so changes are still in Widget only
-        title_changed = False
-        content_changed = False
-
-        # Sync title from Entry widget (might not have triggered FocusOut yet)
-        if self.title_entry:
-            latest_title = self.title_entry.get().strip()
-            if latest_title and latest_title != self.note.title:
-                self.note.title = latest_title
-                title_changed = True
-
-        # Sync content from Text widget (might not have triggered FocusOut yet)
-        if self.content_text:
-            latest_content = self.content_text.get("1.0", "end-1c")
-            if latest_content != self.note.content:
-                self.note.content = latest_content
-                content_changed = True
-
-        # Save any pending changes to DB BEFORE status change
-        if title_changed or content_changed:
-            self.on_update(self.note)
-
-        # Now change status
-        if self.note.status == "active":
-            self.note.mark_done()
+    def _relayout(self) -> None:
+        """header → content → chips เสมอ (V4) — ถอดทั้งหมดแล้ว pack ใหม่ตามลำดับ"""
+        compact = self._compact and not self._expanded
+        self._top.pack_configure(pady=px(self, 2 if compact else PAD_Y))
+        self._top.grid_rowconfigure(0, minsize=px(self, BTN_SIZE if not compact else BTN_SIZE - 2))
+        self._col.grid_rowconfigure(0, minsize=px(self, BTN_SIZE if not compact else BTN_SIZE - 2))
+        indent = px(self, INDENT)
+        self._content_wrap.pack_forget()
+        self._chips.pack_forget()
+        if self._expanded:
+            self._title.grid_remove()
+            self._meta.grid_remove()
+            # กันช่องหัวข้อชนปุ่มที่ลอยทับ: เว้นความกว้างของ [นาฬิกา][⋯] + pin (ถ้ามี)
+            reserve = BTN_SIZE * 2 + 8 + (22 if self.note.is_pinned else 0)
+            self._title_wrap.grid(row=0, column=0, sticky="we", padx=(0, px(self, reserve)))
+            self._content_wrap.pack(fill="x", padx=(indent, px(self, PAD_X)), pady=(0, px(self, 4)))
         else:
-            self.note.mark_active()
-
-        self._update_strikethrough()
-        # v1.3.9: Call status-only update to prevent title corruption — v2.3.1: Pass note explicitly
-        if hasattr(self, 'on_status_update') and callable(self.on_status_update):
-            self.on_status_update(self.note)
-        else:
-            self.on_update(self.note)
-
-    def _on_toggle_pin(self):
-        """ปุ่ม pin (📌/📍) — toggle note pinning (v1.5.0, v2.9.40: immediate repack to top)"""
-        self.note.is_pinned = not self.note.is_pinned
-
-        # Update button appearance
-        pin_icon = "📌" if self.note.is_pinned else "📍"
-        pin_color = "#FF6B6B" if self.note.is_pinned else self.theme.c("fg_muted")
-        self.btn_pin.config(text=pin_icon, fg=pin_color, activeforeground=pin_color)
-
-        # Save to database
-        from ..core.database import update_note
-        update_note(self.note.id, is_pinned=self.note.is_pinned)
-
-        # v2.9.40: Trigger board refresh to re-sort notes (pass note_id for immediate repack)
-        if hasattr(self, 'on_pin_change') and callable(self.on_pin_change):
-            self.on_pin_change(self.note.id)
-
-    def _on_title_change(self, event):
-        """เมื่อเปลี่ยน title จากช่อง Entry"""
-        new_title = self.title_var.get().strip()
-        if new_title:
-            self.note.title = new_title
-            self.on_update(self.note)
-
-    def _on_content_change(self, event):
-        """v2.9.43: Immediate save when content loses focus (FocusOut event)"""
-        new_content = self.content_text.get("1.0", "end-1c")
-        self.note.content = new_content
-        self.on_update(self.note)
-        # Cancel any pending debounced save since we just saved
-        if self._content_save_timer is not None:
-            try:
-                self.after_cancel(self._content_save_timer)
-            except tk.TclError:
-                pass
-            self._content_save_timer = None
-
-    def _on_content_debounced(self, event):
-        """v2.9.43: Debounced save while typing (prevent DB thrashing)
-
-        Saves content 500ms after last keystroke. If user keeps typing, timer resets.
-        This ensures changes aren't lost if user closes app without focus-out.
-        """
-        # Cancel previous timer if still pending
-        if self._content_save_timer is not None:
-            try:
-                self.after_cancel(self._content_save_timer)
-            except tk.TclError:
-                pass
-
-        # Schedule save 500ms from now
-        def save_content():
-            self._content_save_timer = None
-            try:
-                # v2.9.45 Audit Fix: destroyed widget is still truthy — must use winfo_exists()
-                if self.content_text.winfo_exists():
-                    new_content = self.content_text.get("1.0", "end-1c")
-                    if new_content != self.note.content:  # Only save if changed
-                        self.note.content = new_content
-                        self.on_update(self.note)
-            except tk.TclError:
-                pass  # Widget/board destroyed while timer pending — safe to skip
-
-        # Use root.after if available, else fallback to direct schedule
-        try:
-            # Try to get root window reference
-            root = self.winfo_toplevel()
-            self._content_save_timer = root.after(500, save_content)
-        except tk.TclError:
-            # Fallback: schedule via after() on self
-            self._content_save_timer = self.after(500, save_content)
-
-    def _on_delete(self):
-        """ปุ่ม delete"""
-        self.on_delete_note()
-
-    def _on_priority_clicked(self):
-        """เปิด priority menu เมื่อคลิกปุ่ม flag (v1.3.3) — improved visual labels"""
-        menu = tk.Menu(self, tearoff=False)
-
-        priorities = [
-            ("🔴 P1 — High Priority", "high"),
-            ("🟠 P2 — Medium Priority", "medium"),
-            ("🔵 P3 — Low Priority", "low"),
-            ("⚪ --- — No Priority", "none"),
-        ]
-
-        for label, priority_val in priorities:
-            menu.add_command(
-                label=label,
-                command=lambda p=priority_val: self._set_priority(p)
-            )
-
-        # Position menu at button location
-        try:
-            x = self.btn_priority.winfo_rootx()
-            y = self.btn_priority.winfo_rooty() + self.btn_priority.winfo_height()
-            menu.post(x, y)
-        except tk.TclError:
-            pass
-
-    def _open_priority_menu(self, event):
-        """เปิด priority menu เมื่อคลิกที่ priority indicator (v1.3.0) — deprecated in v1.3.2"""
-        self._on_priority_clicked()
-
-    def _create_priority_badge(self, parent_frame, theme):
-        """Create Pill-shaped priority badge (v1.3.1)"""
-        # Priority color palette (light background + dark text)
-        badge_config = {
-            "high": {
-                "bg": "#FFE5E5",  # Light red (#FF3B30 at 15% alpha)
-                "fg": "#C41C00",  # Dark red text
-                "text": "High"
-            },
-            "medium": {
-                "bg": "#FFF4E5",  # Light orange (#FF9500 at 15% alpha)
-                "fg": "#CC6600",  # Dark orange text
-                "text": "Medium"
-            },
-            "low": {
-                "bg": "#E5F2FF",  # Light blue (#007AFF at 15% alpha)
-                "fg": "#003399",  # Dark blue text
-                "text": "Low"
-            }
-        }
-
-        config = badge_config.get(self.note.priority, {})
-        if not config:
-            return
-
-        # Destroy old badge if exists
-        if self.priority_badge:
-            self.priority_badge.destroy()
-
-        # v2.5.2: Unified badge styling with status badge
-        self.priority_badge = tk.Label(
-            parent_frame,
-            text=config["text"],
-            bg=config["bg"],
-            fg=config["fg"],
-            font=("Segoe UI", 8, "bold"),  # v2.5.2: Consistent with status badge (was 7)
-            padx=8,  # v2.5.2: Unified padding (was 6)
-            pady=2,  # v2.5.2: Unified padding (was 1)
-            relief="flat",
-            bd=0,
-            # Removed fixed width for better flex styling
-        )
-        self.priority_badge.pack(side="left", padx=2)
-        self.priority_badge.bind("<Button-1>", lambda e: self._open_priority_menu(e))
-
-    def _set_priority(self, priority: str):
-        """อัปเดต priority + update flag button color (v1.3.4) — emoji flag with color"""
-        self.note.priority = priority
-
-        # Update flag button (v1.3.4) — back to emoji flag (🚩) with color coding
-        try:
-            flag_icon, flag_color = self.priority_icon_map.get(priority, ("🏳", "#CCCCCC"))
-            self.btn_priority.config(text=flag_icon, fg=flag_color, activeforeground=flag_color)
-            # Force immediate redraw of button
-            self.btn_priority.update_idletasks()
-        except Exception:
-            pass
-
-        # Find status_frame to recreate badge
-        # Navigate up to find the header/status frame
-        try:
-            # Get the parent frame of status badge
-            status_frame = self.status_badge.master
-
-            # Recreate badge
-            if priority and priority != "none":
-                self._create_priority_badge(status_frame, self.theme)
+            if self._title_wrap is not None:
+                self._title_wrap.grid_remove()
+            self._title.grid()
+            if self._meta_visible and not compact:
+                self._meta.grid()
             else:
-                # Destroy badge if priority is "none"
-                if self.priority_badge:
-                    self.priority_badge.destroy()
-                    self.priority_badge = None
-        except Exception:
-            pass
+                self._meta.grid_remove()
+        if self._chips_needed():
+            self._chips.pack(fill="x", padx=(indent, px(self, PAD_X)), pady=(0, px(self, PAD_Y)))
 
-        self.on_update(self.note)
-
-    def _on_set_reminder(self):
-        """เปิด DateTime picker dialog สำหรับตั้ง reminder — v1.7.2: Movable dialog with modern styling
-        v1.9.0: Ensure callback triggers immediate UI update with explicit refresh
-        v2.5.3: Add comprehensive error handling with messagebox feedback"""
-        try:
-            from .reminder_dialog import ReminderDialog
-            from tkinter import messagebox
-
-            reminder_dialog = ReminderDialog(self, self.note, self.theme)
-
-            def on_save_callback():
-                """v1.9.0: Force immediate UI update when reminder is set"""
-                # Update button appearance
-                self.btn_reminder.config(fg=self.theme.priority_color("high"), text="⏰")
-                # Force immediate visual refresh (prevents UI lag)
-                self.btn_reminder.update_idletasks()
-                # Save to database — v2.3.1: Pass note object explicitly
-                self.on_update(self.note)
-
-            def on_clear_callback():
-                """v1.9.0: Force immediate UI update when reminder is cleared"""
-                # Reset button appearance
-                self.btn_reminder.config(fg=self.theme.c("fg_muted"), text="⏱")
-                # Force immediate visual refresh (prevents UI lag)
-                self.btn_reminder.update_idletasks()
-                # Save to database — v2.3.1: Pass note object explicitly
-                self.on_update(self.note)
-
-            reminder_dialog.on_save = on_save_callback
-            reminder_dialog.on_clear = on_clear_callback
-        except Exception as e:
-            # v2.5.3: Show error immediately instead of silent failure
-            from tkinter import messagebox
-            messagebox.showerror("Reminder Error", f"Failed to open reminder dialog:\n{str(e)}")
-            print(f"[Reminder Error] {e}")
-            import traceback
-            traceback.print_exc()
-
-    def apply_theme(self, theme: Theme):
-        """เปลี่ยนธีมตอนโปรแกรมทำงาน"""
-        self.theme = theme
-        self.config(bg=theme.c("note_bg"))
-
-        # ✓ v1.3.3: Fixed button alignment — activebackground matches background to prevent shift
-        # v2.5.3: Fixed reference to status_badge (was btn_status)
-        for btn in [self.btn_fold, self.btn_delete, self.btn_reminder, self.btn_priority]:
-            btn.config(bg=theme.c("note_bg"), activebackground=theme.c("note_bg"))
-
-        # Update priority button color based on current priority
-        try:
-            flag_icon, flag_color = self.priority_icon_map.get(self.note.priority, ("🏳", "#CCCCCC"))
-            self.btn_priority.config(fg=flag_color, activeforeground=flag_color)
-        except Exception:
-            pass
-
-        # Update other buttons
-        self.btn_fold.config(fg=theme.c("fg"))
-        # v2.5.3: status_badge is a Label, not a button, so no need to update it here
-        self.btn_delete.config(fg=theme.c("fg_muted"))
-
-        # Update reminder button color based on state
-        if self.note.reminder_datetime:
-            self.btn_reminder.config(fg=theme.priority_color("high"))
+    def _paint(self) -> None:
+        th, n = self.th, self.note
+        if self._expanded or self._removing:
+            bg = th.note_bg(n.color)
         else:
-            self.btn_reminder.config(fg=theme.c("fg_muted"))
+            bg = th.note_hover(n.color) if self._hover else th.note_bg(n.color)
+        if self.ringing:
+            border, width = "critical", 2
+        elif self._focused:
+            border, width = "accent", 2
+        else:
+            border, width = "stroke", 1
+        self.set_colors(bg=bg, border=border, width=width)
+        self.set_parent_bg(th.c("bg"))
+        self._check.set_base(bg)
+        for w in self._walk(self.body):
+            if isinstance(w, IconButton):
+                w.set_base_bg(bg)
+            elif isinstance(w, (tk.Frame, tk.Label)) and w is not self._check:
+                w.configure(bg=bg)
+        done = n.status == "completed"
+        self._title.configure(fg=th.c("text_secondary" if done else "text"))
+        self._pin.configure(font=th.font("icon10"), fg=th.c("text_secondary"))
+        self._saved_lbl.configure(font=th.font("caption"), fg=th.c("text_secondary"))
+        for lbl in (self._m_time, self._m_text, self._m_prio, *self._m_sep):
+            lbl.configure(font=th.font("caption"), fg=th.c("text_secondary"))
+        self._m_icon.configure(font=th.font("icon10"))
+        self._m_dot.configure(font=th.font("caption"))
+        self._paint_meta_colors()
+        self._place_actions()
 
-        # Recreate priority badge to ensure theme colors apply
-        if self.priority_badge and self.note.priority and self.note.priority != "none":
+    def _walk(self, w: tk.Misc):
+        for child in w.winfo_children():
+            if getattr(child, "_qn_fixed", False):
+                continue
+            yield child
+            yield from self._walk(child)
+
+    # ---------------------------------------------------------------- meta line
+    def _update_meta(self) -> None:
+        n = self.note
+        lang = get_language()
+        for w in (self._m_icon, self._m_time, self._m_dot, self._m_prio, self._m_text, *self._m_sep):
+            w.pack_forget()
+        groups: list[list[tk.Label]] = []
+        self._meta_overdue = False
+        if n.status == "completed":
+            when = self._format_completed(n.completed_at, lang)
+            self._m_text.configure(text=t("card.completed_meta", when=when) if when else "")
+            self._meta_full = self._m_text.cget("text")
+            if self._meta_full:
+                groups.append([self._m_text])
+        else:
+            if n.reminder_datetime:
+                text, overdue = format_reminder(n.reminder_datetime, datetime.now(), lang)
+                if self.ringing:
+                    # ตอนกำลังดัง "เลยกำหนด" ฟังดูเหมือนพลาดไปแล้ว ทั้งที่เพิ่งถึงเวลา
+                    text = t("card.ringing_at", hm=n.reminder_datetime[-5:])
+                self._meta_overdue = overdue
+                self._m_icon.configure(text=ICONS["repeat" if n.reminder_repeat != "none" else "clock"])
+                self._m_time.configure(text=" " + text)
+                groups.append([self._m_icon, self._m_time])
+            if n.priority != "none":
+                self._m_dot.configure(text="●")
+                self._m_prio.configure(text=" " + t(f"priority.{n.priority}"))
+                groups.append([self._m_dot, self._m_prio])
+            self._meta_full = _first_line(n.content)
+            self._m_text.configure(text=self._meta_full)
+            if self._meta_full:
+                groups.append([self._m_text])
+        self._meta_visible = bool(groups)
+        sep = 0
+        for i, group in enumerate(groups):
+            if i:
+                self._m_sep[sep].pack(side="left")
+                sep += 1
+            for w in group:
+                w.pack(side="left")
+
+    def _paint_meta_colors(self) -> None:
+        th, n = self.th, self.note
+        crit = n.status == "active" and (self.ringing or self._meta_overdue)
+        self._m_icon.configure(fg=th.c("critical" if crit else "text_secondary"))
+        self._m_time.configure(fg=th.c("critical" if crit else "text_secondary"),
+                               font=th.font("body_strong" if self.ringing else "caption"))
+        self._m_dot.configure(fg=th.c(PRIORITY_TOKEN.get(n.priority, "text_secondary")))
+
+    @staticmethod
+    def _format_completed(stamp: str | None, lang: str) -> str:
+        """'เสร็จเมื่อ' ใช้ format_reminder กับเวลาอดีตไม่ได้ (จะได้ "เลยกำหนด") → ประกอบวันเองจากวันที่"""
+        if not stamp:
+            return ""
+        try:
+            dt = datetime.fromisoformat(stamp)
+        except ValueError:
+            return ""
+        today = datetime.now().date()
+        hm = dt.strftime("%H:%M")
+        if dt.date() == today:
+            return t("card.when_today", hm=hm)
+        if dt.date() == today - timedelta(days=1):
+            return t("card.when_yesterday", hm=hm)
+        return format_reminder(dt.strftime("%Y-%m-%d %H:%M"), datetime(1970, 1, 1), lang)[0]
+
+    # ---------------------------------------------------------------- text fitting
+    def _on_col_configure(self, e) -> None:
+        if e.width != self._fit_w and e.width > 1:
+            self._fit_w = e.width
+            self._fit_texts()
+
+    def _fit_texts(self) -> None:
+        w = self._col.winfo_width()
+        if w <= 1:
+            return
+        self._fit_w = w
+        title = self.note.title or t("common.untitled")
+        self._title.configure(text=ellipsize(title, self._title_font, w - 2))
+        if self._meta_full and self._m_text.winfo_manager():
+            used = sum(c.winfo_reqwidth() for c in self._meta.winfo_children()
+                       if c is not self._m_text and c.winfo_manager())
+            font = self.th.font("caption")
+            self._m_text.configure(text=ellipsize(self._meta_full, font, w - used - px(self, 4)))
+
+    # ---------------------------------------------------------------- hover buttons
+    def _show_actions(self) -> bool:
+        return self._hover or self._focused or self._expanded or self._menu_open
+
+    def _place_actions(self) -> None:
+        if not self._show_actions() or self._removing:
+            self._actions.place_forget()
+            return
+        shift = px(self, 22) if self.note.is_pinned else 0
+        self._actions.place(relx=1.0, x=-shift, y=0, anchor="ne")
+        self._actions.lift()
+
+    def _on_enter(self, _e=None) -> None:
+        if not self._hover:
+            self._hover = True
+            self._paint()
+
+    def _on_leave(self, _e=None) -> None:
+        # <Leave> ยิงตอนเมาส์ย้ายเข้าลูกด้วย → เช็กตำแหน่งจริง ไม่งั้นปุ่มกระพริบ
+        if self._hover and not self._menu_open and not is_pointer_inside(self):
+            self._hover = False
+            self._paint()
+
+    def _on_focus_in(self, _e) -> None:
+        self._sync_focus()
+
+    def _on_focus_out(self, _e) -> None:
+        self.after_idle(self._sync_focus)
+
+    def _sync_focus(self) -> None:
+        """focus ring เฉพาะตอนตัวการ์ดเองถือ focus (Tk ส่ง FocusIn มาให้ตัวแม่ตอนลูกได้ focus ด้วย)"""
+        try:
+            focused = self.focus_get() is self
+        except (tk.TclError, KeyError):
+            focused = False
+        if focused != self._focused:
+            self._focused = focused
+            self._paint()
+
+    # ================================================================ interaction
+    def _on_click(self, _e=None) -> None:
+        if self._removing:
+            return
+        if not self._expanded:
+            self.focus_set()
+            self.callbacks.on_request_expand(self.note.id)
+
+    def _key_expand(self) -> str:
+        if not self._expanded:
+            self.callbacks.on_request_expand(self.note.id)
+        return "break"
+
+    def _key_complete(self) -> str:
+        self._toggle_complete()
+        return "break"
+
+    def _toggle_complete(self) -> None:
+        if self._removing:
+            return
+        # ตอบสนองทันที (วงกลมเปลี่ยนเป็นสถานะใหม่) ก่อน board จะเขียน DB และหดการ์ด
+        self._check.set_done(self.note.status == "active")
+        self.callbacks.on_toggle_complete(self.note.id)
+
+    def _toggle_pin(self) -> None:
+        self.callbacks.on_pin(self.note.id, not self.note.is_pinned)
+
+    # ---------------------------------------------------------------- context menu
+    def _popup_from_button(self) -> None:
+        self._popup(self._more.winfo_rootx(), self._more.winfo_rooty() + self._more.winfo_height())
+
+    def _on_context(self, e) -> str:
+        self._popup(e.x_root, e.y_root)
+        return "break"
+
+    def _popup(self, x: int, y: int) -> None:
+        self._build_menu()
+        self._menu_open = True
+        self._place_actions()
+        try:
+            self._menu.tk_popup(x, y)
+        finally:
+            self._menu.grab_release()
+            self._menu_open = False
+            if self.winfo_exists():
+                self._hover = is_pointer_inside(self)
+                self._paint()
+
+    def _build_menu(self) -> None:
+        n, cb, m = self.note, self.callbacks, self._menu
+        m.delete(0, "end")
+        for sub in self._submenus:
+            sub.destroy()
+        self._submenus = []
+        done = n.status == "completed"
+        m.add_command(label=t("card.menu.restore" if done else "card.menu.complete"),
+                      accelerator="Ctrl+Enter", command=self._toggle_complete)
+        m.add_command(label=t("card.menu.unpin" if n.is_pinned else "card.menu.pin"),
+                      accelerator="Ctrl+P", command=self._toggle_pin)
+        m.add_command(label=t("card.menu.reminder"), accelerator="Ctrl+R",
+                      command=lambda: cb.on_reminder(n.id))
+        m.add_cascade(label=t("card.menu.priority"), menu=self._radio_menu(
+            self._prio_var, n.priority, ("high", "medium", "low", "none"), "priority",
+            lambda v: cb.on_priority(n.id, v)))
+        m.add_cascade(label=t("card.menu.color"), menu=self._radio_menu(
+            self._color_var, n.color, ("none", "yellow", "green", "pink", "purple", "blue", "gray"), "color",
+            lambda v: cb.on_color(n.id, v)))
+        m.add_separator()
+        m.add_command(label=t("card.menu.delete"), accelerator="Delete", command=lambda: cb.on_delete(n.id))
+
+    def _radio_menu(self, var: tk.StringVar, current: str, values: tuple, key: str,
+                    command: Callable[[str], None]) -> tk.Menu:
+        sub = tk.Menu(self._menu, tearoff=0)
+        var.set(current)
+        for v in values:
+            sub.add_radiobutton(label=t(f"{key}.{v}"), variable=var, value=v, command=lambda v=v: command(v))
+        self._submenus.append(sub)
+        return sub
+
+    # ================================================================ chips
+    def _chips_needed(self) -> bool:
+        return self._expanded or (self.ringing and self.note.status == "active")
+
+    def _snooze_minutes(self) -> int:
+        try:
+            return int(self.th.settings.get("snooze_default_minutes", 5))
+        except Exception:
+            return 5
+
+    def _update_chips(self) -> None:
+        n = self.note
+        sig = (self._expanded, self.ringing, n.reminder_datetime, n.reminder_repeat, n.priority, n.status,
+               self._snooze_minutes(), get_language(), self.th.mode, self._meta_overdue)
+        if sig == self._chip_sig:
+            return
+        self._chip_sig = sig
+        for child in self._chip_row.winfo_children():
+            child.destroy()
+        cb = self.callbacks
+        if self.ringing and n.status == "active":
+            self._chip(t("card.alarm_done"), lambda: cb.on_alarm_done(n.id), filled=True)
+            self._chip(t("card.alarm_snooze", n=self._snooze_minutes()), lambda: cb.on_alarm_snooze(n.id))
+        if self._expanded and n.status == "active":
+            if n.reminder_datetime:
+                text, overdue = format_reminder(n.reminder_datetime, datetime.now(), get_language())
+                self._chip(text, lambda: cb.on_reminder(n.id),
+                           icon=ICONS["repeat" if n.reminder_repeat != "none" else "clock"],
+                           fg="critical" if overdue else "text",
+                           on_clear=lambda: cb.on_clear_reminder(n.id))
+            else:
+                self._chip(t("card.chip.add_reminder"), lambda: cb.on_reminder(n.id), icon=ICONS["clock"],
+                           fg="text_secondary")
+            if n.priority != "none":
+                self._chip(t(f"priority.{n.priority}"), self._popup_priority, dot=PRIORITY_TOKEN[n.priority],
+                           caret=True)
+            else:
+                self._chip(t("card.menu.priority"), self._popup_priority, icon=ICONS["flag"],
+                           fg="text_secondary", caret=True)
+        self._saved_lbl.lift()
+        self._relayout()
+
+    def _popup_priority(self) -> None:
+        n, cb = self.note, self.callbacks
+        menu = tk.Menu(self, tearoff=0)
+        var = tk.StringVar(master=self, value=n.priority)
+        for v in ("high", "medium", "low", "none"):
+            menu.add_radiobutton(label=t(f"priority.{v}"), variable=var, value=v,
+                                 command=lambda v=v: cb.on_priority(n.id, v))
+        self._menu_open = True
+        try:
+            menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
+        finally:
+            menu.grab_release()
+            self._menu_open = False
+            self.after(300, menu.destroy)  # รอให้ command ของรายการที่เลือกทำงานก่อนค่อยทำลาย
+
+    def _chip(self, text: str, on_click: Callable[[], None], icon: str | None = None, fg: str = "text",
+              on_clear: Callable[[], None] | None = None, filled: bool = False, dot: str | None = None,
+              caret: bool = False) -> tk.Frame:
+        th = self.th
+        base = th.c("accent") if filled else th.c("surface")
+        edge = th.c("accent") if filled else th.c("stroke_strong")
+        text_fg = th.c("on_accent") if filled else th.c(fg)
+        frame = _fixed(tk.Frame(self._chip_row, bg=base, bd=0, highlightthickness=1, highlightbackground=edge,
+                                cursor="hand2"))
+        frame.pack(side="left", padx=(0, px(self, 6)))
+        parts: list[tk.Label] = []
+
+        def label(txt: str, font: str, color: str, **kw) -> tk.Label:
+            lb = tk.Label(frame, text=txt, font=th.font(font), bg=base, fg=color, bd=0, padx=0, pady=0, **kw)
+            lb.pack(side="left")
+            parts.append(lb)
+            return lb
+
+        pad = px(self, 6)
+        if icon:
+            label(icon, "icon10", th.c(fg if not filled else "on_accent")).pack_configure(padx=(pad, px(self, 4)))
+        elif dot:
+            label("●", "caption", th.c(dot)).pack_configure(padx=(pad, px(self, 3)))
+        main = label(text, "caption", text_fg)
+        main.pack_configure(padx=(pad if not (icon or dot) else 0, pad), pady=px(self, 3))
+        if caret:
+            label(ICONS["chevron_down"], "icon10", th.c("text_secondary")).pack_configure(padx=(0, pad))
+        clear = None
+        if on_clear is not None:
+            clear = label(ICONS["cancel"], "icon10", th.c("text_secondary"))
+            clear.pack_configure(padx=(0, pad))
+            clear.configure(cursor="hand2")
+            clear.bind("<Button-1>", lambda e: (on_clear(), "break")[1])
+            Tooltip(clear, lambda: t("card.chip.reminder_clear_tip"), theme=th)
+
+        hover = th.c("accent") if filled else th.c("subtle_hover")
+        hover = blend(hover, "#000000", 0.12) if filled else hover
+
+        def tint(color: str) -> None:
             try:
-                status_frame = self.status_badge.master
-                self._create_priority_badge(status_frame, theme)
-            except Exception:
+                frame.configure(bg=color)
+                for p in parts:
+                    p.configure(bg=color)
+            except tk.TclError:
                 pass
 
-        self.title_entry.config(bg=theme.c("note_bg"), fg=theme.c("fg"))
+        for w in (frame, *parts):
+            w.bind("<Enter>", lambda e: tint(hover), add="+")
+            w.bind("<Leave>", lambda e: tint(base) if not is_pointer_inside(frame) else None, add="+")
+            if w is not clear:
+                w.bind("<Button-1>", lambda e: (on_click(), "break")[1], add="+")
+            self._wire(w)
+        return frame
 
-        if self.content_text:
-            self.content_text.config(bg=theme.c("bg"), fg=theme.c("fg"))
+    # ================================================================ editor (expanded)
+    def _build_editor(self) -> None:
+        th = self.th
+        self._title_var.set(self.note.title)
+        # ห่อ Entry ด้วย frame เพื่อให้ได้ padding ใน + ขอบ 1px (tk.Entry ไม่มี padx)
+        self._title_wrap = _fixed(tk.Frame(self._col, bd=0, highlightthickness=1))
+        self._title_entry = tk.Entry(self._title_wrap, textvariable=self._title_var, font=th.font("body_strong"),
+                                     bd=0, relief="flat", highlightthickness=0)
+        self._title_entry.pack(fill="x", padx=px(self, 6), pady=px(self, 3))
+        self._title_ph = self._make_placeholder(self._title_entry, t("card.title_placeholder"), 0, 0)
+        self._text = tk.Text(self._content_wrap, height=3, wrap="word", undo=True, bd=0, relief="flat",
+                             padx=px(self, 6), pady=px(self, 4), highlightthickness=1, font=th.font("body"))
+        self._text.pack(fill="x")
+        self._text_ph = self._make_placeholder(self._text, t("card.content_placeholder"), px(self, 8), px(self, 5))
+        self._set_text(self.note.content)
+        self._style_inputs()
+
+        self._title_trace = self._title_var.trace_add("write", self._on_title_var)
+        self._text.bind("<<Modified>>", self._on_text_modified)
+        self._text.bind("<Configure>", lambda e: self._fit_text_height())
+        for w in (self._title_entry, self._text):
+            forward_shortcuts(w)
+            w.bind("<FocusIn>", self._on_input_focus, add="+")
+            w.bind("<FocusOut>", self._on_input_blur, add="+")
+            self._wire(w)
+        self._wire(self._title_wrap)
+        self._saved = {"title": self.note.title, "content": self.note.content}
+
+    def _destroy_editor(self) -> None:
+        if self._title_trace is not None:
+            self._title_var.trace_remove("write", self._title_trace)
+            self._title_trace = None
+        for w in (self._title_wrap, self._text):
+            if w is not None:
+                w.destroy()
+        self._title_wrap = self._text = self._title_entry = self._title_ph = self._text_ph = None
+
+    def _style_inputs(self) -> None:
+        th = self.th
+        if self._title_entry is not None:
+            self._title_entry.configure(bg=th.c("surface"), fg=th.c("text"), insertbackground=th.c("text"),
+                                        selectbackground=th.c("accent"), selectforeground=th.c("on_accent"),
+                                        font=th.font("body_strong"))
+        if self._title_wrap is not None:
+            self._title_wrap.configure(bg=th.c("surface"), highlightbackground=th.c("stroke_strong"),
+                                       highlightcolor=th.c("accent"))
+        if self._text is not None:
+            self._text.configure(bg=th.c("surface"), fg=th.c("text"), insertbackground=th.c("text"),
+                                 selectbackground=th.c("accent"), selectforeground=th.c("on_accent"),
+                                 highlightbackground=th.c("stroke_strong"), highlightcolor=th.c("accent"),
+                                 font=th.font("body"))
+        for ph in (self._title_ph, self._text_ph):
+            if ph is not None:
+                ph.configure(bg=th.c("surface"), fg=th.c("text_disabled"), font=th.font("body"))
+
+    def _make_placeholder(self, widget: tk.Misc, text: str, x: int, y: int) -> tk.Label:
+        lb = _fixed(tk.Label(widget, text=text, anchor="w", bd=0, padx=0, pady=0, cursor="xterm"))
+        lb.bind("<Button-1>", lambda e: widget.focus_set())
+        lb._qn_xy = (x, y)  # type: ignore[attr-defined]
+        return lb
+
+    def _update_placeholders(self) -> None:
+        if self._text is None:
+            return
+        pairs = ((self._title_ph, self._title_var.get()), (self._text_ph, self._text.get("1.0", "end-1c")))
+        for ph, value in pairs:
+            if ph is None:
+                continue
+            if value:
+                ph.place_forget()
+            else:
+                x, y = ph._qn_xy
+                ph.place(x=x, y=y)
+
+    def _set_text(self, content: str) -> None:
+        assert self._text is not None
+        self._text.delete("1.0", "end")
+        self._text.insert("1.0", content)
+        self._text.edit_reset()
+        self._text.edit_modified(False)
+        self._fit_text_height()
+        self._update_placeholders()
+
+    def _fit_text_height(self) -> None:
+        """สูงตามเนื้อหา 3–12 บรรทัด (นับบรรทัดที่ตัดคำแล้ว)"""
+        if self._text is None:
+            return
+        try:
+            res = self._text.count("1.0", "end-1c", "displaylines")
+            n = int(res[0]) if res else 1
+        except (tk.TclError, ValueError, TypeError):
+            n = 3
+        n = max(3, min(12, n))
+        if int(self._text.cget("height")) != n:
+            self._text.configure(height=n)
+
+    # ---------------------------------------------------------------- save pipeline (C7/C8)
+    def _on_title_var(self, *_a) -> None:
+        self._update_placeholders()
+        self._schedule_save()
+
+    def _on_text_modified(self, _e=None) -> None:
+        if self._text is None or not self._text.edit_modified():
+            return
+        self._text.edit_modified(False)
+        self._fit_text_height()
+        self._update_placeholders()
+        self._schedule_save()
+
+    def _on_input_focus(self, e) -> None:
+        self._update_placeholders()
+
+    def _on_input_blur(self, _e) -> None:
+        # ออกจากช่อง = บันทึกทันที (รวมคืนค่าหัวข้อเดิมถ้าลบจนว่าง — M19)
+        self.after_idle(self._blur_flush)
+
+    def _blur_flush(self) -> None:
+        try:
+            if self.winfo_exists() and self._expanded:
+                self.flush_pending()
+                self._update_placeholders()
+        except tk.TclError:
+            pass
+
+    def _schedule_save(self) -> None:
+        self._cancel_save()
+        self._save_job = self.after(SAVE_DEBOUNCE_MS, self._on_save_timer)
+
+    def _cancel_save(self) -> None:
+        if self._save_job is not None:
+            try:
+                self.after_cancel(self._save_job)
+            except (tk.TclError, ValueError):
+                pass
+            self._save_job = None
+
+    def _on_save_timer(self) -> None:
+        self._save_job = None
+        try:
+            if not self.winfo_exists() or not self._expanded:
+                return
+            changes = self._collect(revert_empty=False)  # ระหว่างพิมพ์หัวข้อว่างชั่วคราวได้ ไม่ต้องคืนค่าเดิม
+        except (tk.TclError, AttributeError):
+            return
+        if changes:
+            self._emit(changes)
+
+    def _collect(self, revert_empty: bool) -> dict:
+        """อ่านค่าจาก widget เทียบกับค่าที่บันทึกล่าสุด → dict เฉพาะที่เปลี่ยน"""
+        changes: dict = {}
+        try:
+            if self._title_entry is not None:
+                title = self._title_var.get().strip()
+                if not title:
+                    if revert_empty:
+                        self._title_var.set(self._saved["title"])
+                elif title != self._saved["title"]:
+                    changes["title"] = title
+            if self._text is not None:
+                content = self._text.get("1.0", "end-1c")
+                if content != self._saved["content"]:
+                    changes["content"] = content
+        except tk.TclError:
+            return {}
+        return changes
+
+    def _emit(self, changes: dict) -> None:
+        for key in ("title", "content", "collapsed"):
+            if key in changes:
+                setattr(self.note, key, changes[key])
+                if key in self._saved:
+                    self._saved[key] = changes[key]
+        try:
+            self.callbacks.on_save(self.note.id, dict(changes))
+        except Exception:
+            log.exception("on_save failed for %s", self.note.id)
+            return
+        if ("title" in changes or "content" in changes) and self._expanded:
+            self._show_saved()
+            if "title" in changes:
+                self._fit_w = 0
+                self._fit_texts()
+
+    def _show_saved(self) -> None:
+        """caption "บันทึกแล้ว" จางหายใน 1.5 วินาที"""
+        self._saved_lbl.configure(text=t("card.saved"))
+        start, bg = self.th.c("text_secondary"), self._saved_lbl.cget("bg")
+
+        def step(p: float) -> None:
+            self._saved_lbl.configure(fg=blend(start, bg, p))
+
+        def done() -> None:
+            self._saved_lbl.configure(text="")
+
+        _animate(self._saved_lbl, "saved", SAVED_CAPTION_MS, step, done)
+
+    # ================================================================ misc
+    def _on_destroy(self, e) -> None:
+        if e.widget is self:
+            self._cancel_save()

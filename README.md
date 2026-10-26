@@ -1,193 +1,140 @@
-# QuickNote v2.9.5 — Notes Always on Top + Unblockable System Tray Notifications
+# QuickNote v3
 
-โปรแกรมจดโน้ตเบา ๆ ที่ค้างอยู่บนหน้าจอตลอดเวลา — สไตล์ macOS Pastel สำหรับ Windows + System Tray Integration + Unblockable Notifications
+โปรแกรมจดโน้ตบน Windows 11 — โน้ตเป็นการ์ดสีแบบ Sticky Notes ค้างอยู่บนหน้าจอ พร้อมระบบเตือนความจำ
 
-**Status:** ✅ v2.9.5 PRODUCTION-STABLE — System Tray Integration + Unblockable Notifications (Portable .exe Ready)
-
-![QuickNote Screenshot](docs/screenshot.png)
+เวอร์ชันปัจจุบัน: **3.0.0** (ดูรายการเปลี่ยนแปลงใน `CHANGELOG.md`)
 
 ---
 
-## ✨ ฟีเจอร์ (v2.9.5)
+## ✨ แอปนี้ทำอะไรได้
 
-- **ค้างบนหน้าจอ (Always-on-Top)** — เห็นโน้ตตลอดเวลาโดยไม่ต้องสลับหน้าต่าง
-- **System Tray Integration** — System Tray Icon ที่ช่วย unlock notification permissions
-- **Unblockable Notifications** — Notifications 100% visible แม้จาก portable .exe (v2.9.5)
-- **Tray Balloon Notifications** — Native Windows tray notifications ที่ไม่ต้อง AUMID registry (v2.9.5)
-- **Native Windows Notifications** — ใช้ native OS notifications (win10toast_click) แทน custom overlay
-- **Notification Click Callbacks** — คลิกที่ notification เพื่อเปิด app และหา note ทันที
-- **Foreground Activation** — Win32 API + Tkinter dual-strategy เพื่อค้นน app มาด้านหน้า
-- **Reminder Alerts** — ตั้งเวลาแจ้งเตือนสำหรับแต่ละโน้ต (แบบ non-blocking, ไม่ติดขัด UI)
-- **Priority Flags** — ทำเครื่องหมายเร่งด่วน (🚩 High / 🚩 Medium / 🚩 Low / 🏳 None) ด้วยสีเด่นชัด
-- **Quick Filter Toggle** — สลับ Active/Completed notes โดยตรงจาก titlebar
-- **Status Badge** — Done (สีเขียว) / Active (สีฟ้า) ดูสวยเรียบร้อย
-- **Modern UI** — macOS Pastel Design System แถบหัวลากได้ ปุ่มควบคุมชัดเจน
-- **System Tray** — ซ่อนลง tray แล้วเรียกกลับได้ง่าย ๆ
-- **Global Hotkey** — `Ctrl+Alt+N` สร้างโน้ตใหม่ / `Ctrl+Alt+S` toggle show/hide
-- **Dark Mode** — ธีมสีเข้ม ปรับได้แบบ Real-time
-- **Snooze 5m** — เลื่อน reminder ไป 5 นาที โดยการคลิกปุ่มบน toast (v2.9.0)
-- **Real-Time Search** — ค้นหา note โดยพิมพ์ (title หรือ content)
-- **Database Backup/Restore** — อัพแบ็กอัพและกู้คืนข้อมูลได้ทันที
-- **Version & Credit** — Footer แสดง v2.9.4 + Developer (About tab)
-- **Local Database** — เก็บข้อมูลใน `~/.quicknote/` เท่านั้น ไม่มี cloud sync
+- **โน้ตเป็นการ์ดสี** — 7 สี (เหลือง เขียว ชมพู ม่วง ฟ้า เทา ไม่มีสี) ดูง่ายว่าโน้ตไหนเป็นเรื่องอะไร
+- **หน้าต่างแบบ Windows** — มี titlebar, ปุ่ม − □ ✕, Snap, Alt+Tab และปุ่มบน taskbar เหมือนแอปทั่วไป
+- **ปักหมุด** — ปักโน้ตให้อยู่บนสุด และปักหน้าต่างทั้งหน้าต่างให้อยู่บนสุดได้
+- **ความสำคัญ (Priority)** — high / medium / low ใช้เรียงการ์ดและแยกด้วยสี
+- **เตือนความจำ** — ตั้งวันเวลาได้เอง หรือเลือกเวลาลัด (15 นาทีข้างหน้า, 1 ชม., เย็นนี้, พรุ่งนี้ 09:00) และตั้งให้ทำซ้ำทุกวัน / วันจันทร์–ศุกร์ / ทุกสัปดาห์ได้
+- **Toast แจ้งเตือน** — ขึ้นมุมขวาล่างเมื่อถึงเวลา กดเสร็จแล้ว, เลื่อน (5/15/60 นาที หรือพรุ่งนี้ 09:00), เปิดโน้ต หรือปิดได้ ถ้าหน้าต่างหลักซ่อนอยู่ toast จะยังขึ้นให้เห็น แต่ไม่ดึงหน้าต่างหลักขึ้นมาเอง
+- **เพิ่มโน้ตเร็ว** — พิมพ์ในช่องด้านบนแล้วกด Enter โน้ตใหม่จะถูกสร้างแบบพับ (Shift+Enter = สร้างแล้วกางทันที)
+- **ค้นหา** — ช่องค้นหาด้านบนกรองโน้ตตามชื่อและเนื้อหาระหว่างพิมพ์
+- **เช็คลิสต์ในโน้ต** — กางการ์ดแล้วพิมพ์รายการย่อยได้
+- **ลบแล้วกู้คืนได้** — ลบโน้ตแล้วมีปุ่ม "เลิกทำ" ขึ้นมา 5 วินาที
+- **ภาษา** — ไทย หรือ English (เปลี่ยนได้ใน Settings)
+- **ธีม** — สว่าง / มืด / ตามระบบ
 
 ---
 
-## 📥 ติดตั้ง & รัน
+## 📥 การติดตั้ง
 
-### ✅ ตัวเลือก 1: Windows Installer (แนะนำ)
+### แบบที่ 1: ตัวติดตั้ง (แนะนำ)
+1. เปิดไฟล์ `QuickNote_v3.0.0_Setup.exe`
+2. ทำตามขั้นตอน (เลือกว่าจะสร้างไอคอนบน Desktop หรือไม่ได้)
+3. เปิด QuickNote จาก Start Menu
 
-1. ดาวน์โหลด `QuickNote-Setup-v1.0.2.exe` จากโฟลเดอร์ `installer_output/`
-2. ดับเบิลคลิกแล้วทำตามขั้นตอน
-3. เลือกตัวเลือก (Desktop Icon / Auto-launch on Startup)
-4. คลิก "Install"
-5. เปิด QuickNote จาก Start Menu หรือ Desktop
+ถอนการติดตั้ง: Settings ของ Windows → Apps → QuickNote → Uninstall
 
-**Uninstall:** Control Panel → Programs → Uninstall a Program → QuickNote → Remove
+### แบบที่ 2: Portable (ไม่ต้องติดตั้ง)
+1. ดาวน์โหลด `QuickNote_v3.0.0.exe`
+2. ดับเบิลคลิกเพื่อเปิด
+3. ข้อมูลยังเก็บที่ `~/.quicknote/` เหมือนเดิม (ไม่ได้เก็บข้างไฟล์ .exe)
 
-### ตัวเลือก 2: Portable .exe (ไม่ต้องติดตั้ง)
+> ทดสอบบน Windows 11 เท่านั้น
 
-1. ดาวน์โหลด `QuickNote_v1.3.8.exe` จากโฟลเดอร์ `dist/`
-2. ดับเบิลคลิก (ไม่ต้องติดตั้ง)
-3. ข้อมูลเก็บไว้ที่ `~/.quicknote/` (หาย เมื่อลบ .exe)
+---
 
-### ตัวเลือก 3: รัน Python โดยตรง (สำหรับ Dev)
+## ⌨️ คีย์ลัด
+
+| คีย์ | การทำงาน |
+|---|---|
+| Ctrl+Alt+N (ทั้งระบบ) | แสดงหน้าต่าง และเลื่อนไปช่องเพิ่มโน้ต |
+| Ctrl+Alt+S (ทั้งระบบ) | แสดง/ซ่อนหน้าต่าง (ถ้าโชว์อยู่แต่ถูกบัง จะดึงขึ้นมาแทน) |
+| Ctrl+N | ไปที่ช่องเพิ่มโน้ต |
+| Ctrl+F | ไปที่ช่องค้นหา |
+| Ctrl+1 / Ctrl+2 | สลับแท็บ ที่ทำอยู่ / เสร็จแล้ว |
+| Ctrl+T | ปักหน้าต่างให้อยู่บนสุดเสมอ |
+| ↑ / ↓ | เลื่อนโฟกัสระหว่างการ์ด |
+| Enter | กาง/แก้ไขการ์ด |
+| Space หรือ Ctrl+Enter | ทำเสร็จ / ยกเลิกเสร็จ |
+| Ctrl+P / Ctrl+R | ปักหมุดโน้ต / ตั้งเตือน |
+| Delete | ลบโน้ต (กู้คืนได้ 5 วินาที) |
+| Esc | ปิดเมนู → พับการ์ด → ล้างคำค้น → ซ่อนหน้าต่าง (ตามลำดับ) |
+
+คีย์ Ctrl+Alt+N และ Ctrl+Alt+S ทำงานแม้โฟกัสอยู่ในแอปอื่น
+
+---
+
+## 🗂️ ข้อมูลอยู่ที่ไหน
+
+ทุกอย่างเก็บในเครื่องของคุณ ไม่มีการส่งขึ้น cloud
+
+```
+~/.quicknote/                 (ปกติคือ C:\Users\<ชื่อคุณ>\.quicknote\)
+├── notes.db                  ฐานข้อมูลโน้ตทั้งหมด (SQLite)
+├── settings.json             ค่าตั้งค่า (ตำแหน่งหน้าต่าง ธีม ภาษา ฯลฯ)
+├── quicknote.log             บันทึกการทำงาน (ใช้ตอนแจ้งปัญหา)
+└── backups/
+    ├── notes_YYYYMMDD.db     สำรองอัตโนมัติวันละครั้ง เก็บ 7 ชุดล่าสุด
+    └── notes_pre_v3.db       สำรองก่อนอัปเกรดจาก v2 (ครั้งเดียว)
+```
+
+---
+
+## 💾 สำรอง / กู้คืน / ส่งออก
+
+เปิดได้จากหน้าต่าง **Settings** (ปุ่มตั้งค่า หรือคลิกขวาไอคอน tray → ตั้งค่า)
+
+- **สำรองข้อมูล** — เลือกที่บันทึกไฟล์ `.db` เอง ใช้ได้กับย้ายเครื่อง
+- **กู้คืนข้อมูล** — เลือกไฟล์ `.db` ที่สำรองไว้ ระบบจะสำรองของเดิมไว้ให้ก่อนเขียนทับ
+- **ส่งออกเป็น Markdown** — ได้ไฟล์ `.md` อ่านได้ทุกโปรแกรม โน้ตที่กำลังทำขึ้นก่อน ตามด้วยที่เสร็จแล้ว พร้อมเช็คลิสต์และเวลาเตือน
+- **เปิดโฟลเดอร์ข้อมูล** — เปิด `~/.quicknote/` ใน File Explorer
+
+---
+
+## 🖥️ System tray และการปิดหน้าต่าง
+
+- ค่าเริ่มต้น: กด **✕** ที่หน้าต่าง → แอปไม่ปิด แต่ซ่อนลงถาด (system tray) และยังเตือนความจำอยู่เหมือนเดิม
+- **คลิกซ้ายที่ไอคอนในถาด** → แสดง/ซ่อนหน้าต่าง
+- **คลิกขวาที่ไอคอนในถาด** → เมนู: แสดง/ซ่อน, โน้ตใหม่, ตั้งค่า, ออก
+- ต้องการปิดโปรแกรมจริง ๆ ให้เลือก **ออก** จากเมนูในถาด
+
+---
+
+## ❓ คำถามที่พบบ่อย
+
+**Windows SmartScreen ขึ้น "Windows protected your PC" / "unknown publisher" ตอนเปิดครั้งแรก**
+ไฟล์นี้ยังไม่ได้ลงนามดิจิทัล (ไม่มี code signing certificate) SmartScreen จึงแจ้งเตือนว่าผู้เผยแพร่ไม่รู้จัก ให้กด **More info** แล้ว **Run anyway** ได้ ถ้าคุณดาวน์โหลดจากแหล่งที่ไว้ใจได้เท่านั้น
+
+**เปิดแอปแล้วไม่เห็นหน้าต่าง**
+ลองกด Ctrl+Alt+S หรือคลิกไอคอนในถาด ถ้ายังไม่เห็น ให้ปิดแอปจากถาดแล้วเปิดใหม่
+
+**Ctrl+Alt+N / Ctrl+Alt+S ไม่ทำงาน**
+คีย์ลัดนี้อาจชนกับโปรแกรมอื่นที่ใช้คีย์เดียวกัน ให้ปิดโปรแกรมนั้นหรือเปลี่ยนคีย์ลัดใน `settings.json` (ค่า `hotkeys`) แล้วเปิดแอปใหม่
+
+**การแจ้งเตือนไม่ขึ้น**
+ตรวจใน Settings ว่าเปิดเสียงแจ้งเตือนอยู่ และตรวจว่าเวลาที่ตั้งไว้ยังไม่ผ่านไป (โน้ตที่เตือนแล้วจะไม่เตือนซ้ำ จนกว่าจะตั้งเวลาใหม่) ถ้าหน้าต่างหลักซ่อนอยู่ toast ยังขึ้นตามปกติ
+
+**อัปเกรดจาก v2 แล้วการ์ดถูกพับหมด**
+เป็นการทำงานตามที่ตั้งใจไว้ครั้งเดียว (v3 พับการ์ดทุกใบตอนเปิดครั้งแรก) กางการ์ดที่ต้องการดูได้ตามปกติ
+
+**ข้อมูลหายหรือเสียหาย**
+กู้คืนจาก `~/.quicknote/backups/` ได้ทันที (หรือไฟล์ `notes_pre_v3.db` ถ้าเป็นการอัปเกรดจาก v2) แล้วแจ้งพร้อมแนบ `quicknote.log`
+
+---
+
+## 🛠️ สำหรับนักพัฒนา
 
 ```bash
-# ติดตั้ง dependency
 pip install -r requirements.txt
-
-# รัน
-python main.py
+python main.py                              # รันจากซอร์ส
+python main.py --selftest                   # ทดสอบเปิดแอปบนข้อมูลชั่วคราว (ต้องได้ exit 0)
+python -m unittest discover -s tests/v3 -t .   # ชุดเทสหลัก (402 tests)
+python build_windows.py                     # สร้าง dist/QuickNote_v3.0.0.exe และ installer
+python build_windows.py --exe-only          # สร้างเฉพาะ .exe
 ```
 
----
-
-## ⌨️ Keyboard Shortcuts
-
-### Global Hotkeys (ทำงานจากแอปอื่น)
-
-| ลัด | การกระทำ |
-|-----|---------|
-| `Ctrl+Alt+N` | สร้างโน้ตใหม่ + เด้งหน้าต่างขึ้นมา |
-| `Ctrl+Alt+S` | Toggle show/hide หน้าต่าง |
-
-### Titlebar Buttons
-
-| ปุ่ม | ชื่อ | การกระทำ |
-|-----|-----|---------|
-| 🔴 | Close | ปิดโปรแกรม |
-| 🟡 | Minimize | ซ่อนลง tray (หรือ restore ถ้า roll-up) |
-| 🟢 | New Note | สร้างโน้ตใหม่ |
-
-### Double-Click Titlebar
-
-- **Double-click** ชื่อหรือแถบหัว → Roll-up (พับเหลือแถบหัวเดียว)
-- Double-click อีกครั้ง → Restore (กางออก)
+โครงสร้าง: `src/core/` (ไม่ใช้ tkinter) · `src/ui/` (หน้าตา) · `src/platform/` (tray, hotkey, autostart)
+สัญญาการออกแบบอยู่ที่ `docs/v3/ARCHITECTURE.md` และแบบหน้าตาอยู่ที่ `docs/v3/DESIGN_SPEC_WIN11.md`
+รายการบั๊กที่แก้แล้วอยู่ที่ `docs/v3/BUG_REPORT_v2.9.46.md`
 
 ---
 
-## 🎨 Appearance
-
-### Theme
-
-- **Light Mode** — พื้นขาว ข้อความดำ (เริ่มต้น)
-- **Dark Mode** — พื้นดำ ข้อความขาว
-
-ปรับ: (ยังไม่เสร็จในตัวโปรแกรม — แก้ใน settings.json ได้)
-
-### Opacity (Transparency)
-
-ปรับความโปร่งใส: `~/.quicknote/settings.json` → `"alpha": 0.3–1.0`
-
----
-
-## 💾 ที่เก็บข้อมูล
-
-```
-~/.quicknote/
-├── notes.db         # ฐานข้อมูล SQLite3 (โน้ตทั้งหมด)
-└── settings.json    # ค่าตั้ง (geometry, theme, alpha, hotkeys)
-```
-
-**ปลอดภัย:** ข้อมูลเก็บในคอมพิวเตอร์ของคุณเท่านั้น ไม่ sync ไปที่ cloud
-
----
-
-## 🛠️ Build .exe (PyInstaller)
-
-```bash
-# Build
-python build_windows.py
-
-# Build (พร้อม debug console — ดู error)
-python build_windows.py --debug
-
-# ผลลัพธ์: dist/QuickNote.exe
-```
-
----
-
-## 📝 ตัวอย่างการใช้งาน
-
-1. **เปิดโปรแกรม** → หน้าต่างค้างมุมจอ
-2. **กด Ctrl+Alt+N** จากแอปอื่น → QuickNote ขึ้นมา + ช่องโน้ตใหม่พร้อม
-3. **พิมพ์เรื่อง** → แสดงอยู่ทันที
-4. **กดปุ่ม ✓** → โน้ตเสร็จแล้ว (ขีดฆ่า)
-5. **ปุ่ม ▸** → พับโน้ต (ซ่อนรายละเอียด)
-6. **ปุ่ม 🟡** → ซ่อนลง tray (ยังทำงานในด้านหลัง)
-
----
-
-## 🐛 Troubleshooting
-
-**หน้าต่างไม่ขึ้นมา**
-→ ตรวจ `settings.json` ว่า geometry ถูกต้อง หรือลบไฟล์นั้นให้ reset
-
-**Hotkey ไม่ทำงาน**
-→ อาจชนกับแอปอื่น ลองเปลี่ยน key combo ใน `settings.json`
-
-**โน้ตหายไป**
-→ ตรวจ `~/.quicknote/notes.db` ยังมีไหม (ไม่มี = ลบโดยไม่ตั้งใจ)
-
----
-
-## 📚 Development
-
-### โครงสร้างโปรเจกต์
-
-```
-src/
-├── core/          # ตรรกะล้วน (database, models, settings)
-├── ui/            # tkinter UI (board, note_card, theme, etc.)
-└── platform/      # Windows-specific (tray, hotkey, autostart)
-```
-
-### Python Version
-
-- **Python 3.14.7** (ตรวจสอบแล้ว)
-- **Tk 9.0**
-
-### Dependencies
-
-- `pystray` — System tray icon
-- `pynput` — Global hotkey listener
-- `Pillow` — Image generation
-- `pywin32` — Windows API
-- `PyInstaller` — Build .exe
-
----
-
-## 📄 License
-
-Personal Project (ไม่ได้เขียนให้สาธารณะ)
-
----
-
-## ✍️ Authors
-
-Developed by QuickNote Team — 2026
-
----
-
-**Enjoy your notes! 📝**
+*ผู้พัฒนา: Passagain P.*

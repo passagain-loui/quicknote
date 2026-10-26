@@ -1,23 +1,24 @@
-; Inno Setup Script for QuickNote v2.9.46
+; Inno Setup Script for QuickNote v3.0.0
 ; This script creates a Windows installer for QuickNote
 ; Updated: 2026-08-26
 
 [Setup]
 AppName=QuickNote
-AppVersion=2.9.46
+AppVersion=3.0.0
 AppPublisher=Passagain P.
 DefaultDirName={autopf}\QuickNote
 DefaultGroupName=QuickNote
 AllowNoIcons=yes
 OutputDir=installer_output
-OutputBaseFilename=QuickNote_v2.9.46_Setup
+OutputBaseFilename=QuickNote_v3.0.0_Setup
 Compression=lzma
 SolidCompression=yes
+SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\QuickNote.exe
-VersionInfoVersion=2.9.46.0
+VersionInfoVersion=3.0.0.0
 VersionInfoCompany=Passagain P.
 VersionInfoProductName=QuickNote
-VersionInfoProductVersion=2.9.46.0
+VersionInfoProductVersion=3.0.0.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -26,14 +27,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\QuickNote_v2.9.46.exe"; DestDir: "{app}"; DestName: "QuickNote.exe"; Flags: ignoreversion
+Source: "dist\QuickNote_v3.0.0.exe"; DestDir: "{app}"; DestName: "QuickNote.exe"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "CLAUDE.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\QuickNote"; Filename: "{app}\QuickNote.exe"; WorkingDir: "{app}"
+Name: "{group}\QuickNote"; Filename: "{app}\QuickNote.exe"; WorkingDir: "{app}"; AppUserModelID: "PassagainP.QuickNote"
 Name: "{group}\{cm:UninstallProgram,QuickNote}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\QuickNote"; Filename: "{app}\QuickNote.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\QuickNote"; Filename: "{app}\QuickNote.exe"; WorkingDir: "{app}"; AppUserModelID: "PassagainP.QuickNote"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\QuickNote.exe"; Description: "{cm:LaunchProgram,QuickNote}"; Flags: nowait postinstall skipifsilent

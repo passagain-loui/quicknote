@@ -6,6 +6,7 @@
     python build_windows.py --exe-only # เฉพาะ .exe ไม่สร้าง installer
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,7 @@ if sys.stdout.encoding != 'utf-8':
 from src.core.constants import APP_NAME, APP_VERSION
 
 ENTRY = "main.py"
-ICON = "assets/quicknote.ico"
+ICON = "assets/icon.ico"
 INSTALLER_SCRIPT = "installer.iss"
 
 ROOT = Path(__file__).resolve().parent
@@ -69,37 +70,25 @@ def build_exe(debug: bool = False) -> int:
         "--noconfirm",
         "--clean",
         "--name", exe_name,
+        # โมดูลที่ถูก import ตอนใช้งาน (lazy) — กันตกหล่นจากการวิเคราะห์ static
         "--hidden-import=src.ui.settings_window",
-        "--hidden-import=src.ui.board",
-        "--hidden-import=src.ui.titlebar",
-        "--hidden-import=src.ui.note_card",
-        "--hidden-import=src.ui.theme",
-        "--hidden-import=src.ui.custom_toast",
         "--hidden-import=src.ui.reminder_dialog",
-        "--hidden-import=src.core.database",
-        "--hidden-import=src.core.models",
-        "--hidden-import=src.core.settings",
-        "--hidden-import=src.services.notification",
-        "--hidden-import=src.services.notification_queue",
-        "--hidden-import=src.services.tray_service",
-        "--hidden-import=src.services.google_tasks",
         "--hidden-import=src.platform.tray",
         "--hidden-import=src.platform.hotkey",
-        # v2.9.4: Add win10toast_click for click-aware notifications
-        "--hidden-import=win10toast_click",
-        # v2.9.40: CRITICAL - Add ALL platform dependencies (pystray, pynput, PIL)
+        "--hidden-import=src.platform.autostart",
+        "--hidden-import=win32com.client",
+        # sv_ttk เก็บไฟล์ธีม Tcl (sun-valley.tcl + รูปภาพ) เป็น data — ไม่ collect = เปิด .exe แล้วธีมพัง
+        "--collect-data=sv_ttk",
+        # ไอคอนแอป: board/tray หาจาก sys._MEIPASS/assets/icon.ico (--add-data ใช้ ';' คั่นบน Windows)
+        f"--add-data=assets/icon.ico{os.pathsep}assets",
+        # tray (pystray) + Pillow — คีย์ลัดใช้ Win32 RegisterHotKey ผ่าน ctypes จึงไม่ต้องพึ่ง pynput
         "--hidden-import=pystray",
         "--hidden-import=pystray._win32",
         "--collect-all=pystray",
-        # pynput for global hotkey support (Windows-specific)
-        "--hidden-import=pynput",
-        "--hidden-import=pynput.keyboard",
-        "--hidden-import=pynput.mouse",
-        "--hidden-import=pynput.keyboard._win32",
-        "--hidden-import=pynput.mouse._win32",
         # Pillow/PIL for image processing
         "--hidden-import=PIL",
         "--hidden-import=PIL.Image",
+        "--hidden-import=PIL.IcoImagePlugin",
         "--collect-all=PIL",
         # v2.5.5: Use --collect-all for tkcalendar + babel (--hidden-import misses submodules)
         "--collect-all=tkcalendar",  # Collects all submodules + data files

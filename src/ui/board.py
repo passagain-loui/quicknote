@@ -1,1565 +1,978 @@
-"""Main Board window — Tk + overrideredirect + scrollable canvas"""
+"""Board — หน้าต่างหลักของ QuickNote v3 (DESIGN_SPEC 3.x/9, สัญญา ARCHITECTURE ข้อ 5)
 
-import tkinter as tk
-import ctypes
+หลักการ:
+  - native window frame (ไม่ overrideredirect) — drag/resize/Snap/taskbar เป็นของ Windows
+  - ลำดับการ์ดมาจาก SQL เท่านั้น: _load_notes() ถอดการ์ดทุกใบแล้ว pack ใหม่ตามลำดับ DB (แก้ C5)
+    ไม่มี repack_card_to_top() / band-aid ใด ๆ
+  - Board เป็นเจ้าของการเขียน DB ทั้งหมดของ UI (การ์ดแค่เรียก callback) และเป็นเจ้าของ flow ของ alarm
+"""
+
+from __future__ import annotations
+
 import logging
-from .theme import Theme
-from .titlebar import TitleBar
-from .note_card import NoteCard
-from .settings_window import SettingsWindow
-from .custom_toast import CustomToastNotification
+import re
+import sys
+import tkinter as tk
+from datetime import datetime, timedelta
+from pathlib import Path
+from tkinter import messagebox, ttk
+from typing import TYPE_CHECKING, Callable
+
+from ..core import database as db
 from ..core.models import Note
-from ..core.constants import APP_NAME, APP_VERSION, APP_AUTHOR
-from ..core.database import get_all_notes, get_notes_by_status, get_note, create_note, delete_note, update_note, update_note_status_only
-from ..services.notification_queue import get_notification_queue
+from ..core.reminders import format_dt, format_reminder
+from . import strings
+from .icons import ICONS
+from .note_card import GLOBAL_SHORTCUTS, CARD_GAP_Y, CardCallbacks, NoteCard, ellipsize, forward_shortcuts
+from .scheduler import ReminderScheduler
+from .strings import t
+from .theme import Theme
+from .widgets import IconButton, PlaceholderEntry, Tooltip, UndoBar, px
 
-log = logging.getLogger(__name__)
+if TYPE_CHECKING:  # ToastManager ถูกเขียนโดย module อื่น — ใช้เป็น type เท่านั้น
+    from .toast import ToastManager
+
+log = logging.getLogger("quicknote.board")
+
+MIN_W, MIN_H = 300, 360          # px ที่ 96 DPI
+REFRESH_DEBOUNCE_MS = 150
+SEARCH_DEBOUNCE_MS = 150
+TOPMOST_REAPPLY_MS = 3000
+_GEO_RE = re.compile(r"(\d+)x(\d+)([+-])(-?\d+)([+-])(-?\d+)")
 
 
-def _get_screen_bounds() -> tuple:
-    """ได้ขนาดและตำแหน่ง screen (clamp บน Windows multi-monitor)"""
-    try:
-        gsm = ctypes.windll.user32.GetSystemMetrics
-        x = gsm(76)       # SM_XVIRTUALSCREEN
-        y = gsm(77)       # SM_YVIRTUALSCREEN
-        w = gsm(78)       # SM_CXVIRTUALSCREEN
-        h = gsm(79)       # SM_CYVIRTUALSCREEN
-        return (x, y, w, h)
-    except Exception:
-        # Fallback สำหรับ non-Windows หรือไม่สำเร็จ
-        return (0, 0, 1920, 1080)
+# ---------------------------------------------------------------- geometry helpers (pure → ทดสอบได้)
+def parse_geometry(geometry: str) -> tuple[int, int, int, int] | None:
+    """'WxH+X+Y' → (w, h, x, y); รูปแบบผิด → None  (Tk คืนตำแหน่งติดลบเป็น '+-8')"""
+    m = _GEO_RE.fullmatch(str(geometry or "").strip())
+    if not m:
+        return None
+    w, h, sx, x, sy, y = m.groups()
+    return int(w), int(h), int(x) * (1 if sx == "+" else -1), int(y) * (1 if sy == "+" else -1)
+
+
+def clamp_geometry(geometry: str, vx: int, vy: int, vw: int, vh: int, min_w: int, min_h: int,
+                   fallback: str = "380x600+120+120") -> str:
+    """บีบหน้าต่างให้อยู่ใน virtual screen ทั้งใบ (C4) — จอที่เคยใช้ถูกถอด/เปลี่ยนความละเอียดแล้วหน้าต่างไม่หลุดนอกจอ"""
+    parsed = parse_geometry(geometry) or parse_geometry(fallback)
+    w, h, x, y = parsed  # type: ignore[misc]
+    w = max(min_w, min(w, vw))
+    h = max(min_h, min(h, vh))
+    x = max(vx, min(x, vx + vw - w))
+    y = max(vy, min(y, vy + vh - h))
+    return f"{w}x{h}+{x}+{y}"
+
+
+def _icon_path() -> Path:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    return base / "assets" / "icon.ico"
 
 
 class Board:
-    """หน้าต่างหลัก — borderless, always-on-top, scrollable + load notes from DB"""
+    def __init__(self, root: tk.Tk, settings, theme: Theme, toasts: "ToastManager") -> None:
+        self.root = root
+        self.settings = settings
+        self.theme = theme
+        self.toasts = toasts
+        self.on_quit: Callable[[], None] | None = None   # main.py ตั้ง
+        # main.py ตั้งให้บอกว่าซ่อนได้ไหม (tray ต้องทำงานอยู่) — ไม่งั้นหน้าต่างที่ซ่อนจะไม่มีทางเรียกกลับ (M16)
+        self.can_hide: Callable[[], bool] = lambda: True
 
-    def __init__(self, geometry: str = "", theme_mode: str = "light", settings_obj=None, on_settings_saved=None, on_open_settings=None, command_queue=None):
-        self.theme = Theme(theme_mode)
-        self.settings = settings_obj  # Settings object from main.py
-        self.on_settings_saved = on_settings_saved  # Callback when settings are saved
-        self.on_open_settings = on_open_settings  # Callback to open settings window
-        self._resize_start_x = 0
-        self._resize_start_y = 0
-        self.note_cards = {}  # id → NoteCard widget
-        self.current_filter = "active"  # 'active' or 'completed'
-        self.settings_window_instance = None  # Singleton Settings window
-        self._scheduler_enabled = True  # v2.5.8: Flag to pause scheduler when dialog open
-        self.active_toasts = []  # v2.8.1: Keep references to prevent GC from destroying Toplevel windows
-        self.command_queue = command_queue  # v2.9.14: Thread-safe command queue from main thread
-        self._last_action_timestamp = 0  # v2.9.16: Debounce to prevent alarm re-trigger during DB commit (5s grace period)
-        self._refresh_timer = None  # v2.9.22: Debounce timer for UI refresh (prevent excessive _load_notes calls)
+        self.note_cards: dict[str, NoteCard] = {}
+        self._order: list[str] = []          # id ตามลำดับ DB ของแท็บปัจจุบัน (ก่อนกรองด้วย search)
+        self._tab = "active"
+        self._refresh_job: str | None = None
+        self._search_job: str | None = None
+        self._topmost_job: str | None = None
+        self._restore_top_job: str | None = None
+        self._settings_win = None
+        self._tracked: list[tuple[tk.Misc, dict[str, str]]] = []
+        self._scroll_shown = False
+        self._region_h = 0
+        self._empty_mode = ""
+        self._count_cache = {"active": 0, "completed": 0}
 
-        # Create window
-        self.root = tk.Tk()
-        self.root.overrideredirect(True)
-        self.root.config(bg=self.theme.c("bg"))
+        self._callbacks = CardCallbacks(
+            on_toggle_complete=self._on_toggle_complete, on_save=self._on_save,
+            on_request_expand=self._on_request_expand, on_reminder=self._open_reminder,
+            on_clear_reminder=self._on_clear_reminder, on_pin=self._on_pin, on_priority=self._on_priority,
+            on_color=self._on_color, on_delete=self._on_delete, on_alarm_done=self._alarm_done,
+            on_alarm_snooze=self._alarm_snooze_default)
 
-        # v2.9.9: Store board reference on root for dialog access
-        self.root._board = self
+        strings.set_language(str(settings.get("language", "th")))
+        # subscribe ก่อนสร้าง widget: board recolor พื้นก่อน แล้ว widget ลูก (IconButton) ค่อย after_idle อ่านสีจาก parent
+        self._unsub_theme = theme.subscribe(self._on_theme)
+        settings.subscribe(self._on_setting)
 
-        # Set minimum window size (for proper UI layout)
-        # ✓ v1.3.5: Increased from 450 to 500px width for header buttons (Status + Reminder + Delete)
-        self.root.minsize(500, 400)
+        self._init_window()
+        self._build_ui()
+        self._bind_keys()
+        self._load_notes()
+        self.theme.apply_window(self.root)
 
-        # v1.8.6: Withdraw protocol for native centering (prevents top-left glitch)
-        self._center_main_window()
+        # เจ้าของ alarm flow คือ Board: scheduler → refresh + toast
+        self.scheduler = ReminderScheduler(root, self._on_due, self._on_missed)
+        self.scheduler.on_tick(self._on_tick)
+        self.scheduler.start()
+        self._topmost_job = root.after(TOPMOST_REAPPLY_MS, self._reapply_topmost)
 
-        # DPI awareness (อาจจะตั้งไปแล้วใน main.py แต่ทำอีกที่เพื่อให้ปลอดภัย)
+    # ================================================================ window
+    def _init_window(self) -> None:
+        r, s = self.root, self.settings
+        r.title(t("board.window_title"))
         try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
-        except Exception:
+            r.iconbitmap(str(_icon_path()))
+        except tk.TclError:
+            pass  # ไม่มีไอคอน/ไม่ใช่ Windows — ใช้ไอคอน Tk ไปก่อน
+        r.minsize(px(r, MIN_W), px(r, MIN_H))
+        r.geometry(self._restore_geometry())
+        # ต้อง flush ตรงนี้ก่อนตั้ง -alpha/-topmost: ถ้าสร้างหน้าต่างจริงพร้อมกันหมด (iconbitmap + topmost) Tk 9 บน Windows
+        # ทิ้งตำแหน่งที่ขอไว้แล้วให้ Windows วางเองแบบ cascade (+32+32, +96+96 …) → ตำแหน่งที่บันทึกไว้ไม่ถูกคืน (C4)
+        r.update_idletasks()
+        r.attributes("-alpha", float(s.get("alpha", 1.0)))
+        self._apply_topmost()
+        r.protocol("WM_DELETE_WINDOW", self._on_close_request)
+        r.bind("<Unmap>", self._on_unmap, add="+")
+        r.bind("<Destroy>", self._on_root_destroy, add="+")
+
+    def _scale(self) -> float:
+        try:
+            return self.root.winfo_fpixels("1i") / 96.0
+        except tk.TclError:
+            return 1.0
+
+    def _restore_geometry(self) -> str:
+        """geometry ใน settings เก็บขนาดเป็นหน่วย 96 DPI (ใช้ได้ทุกความละเอียด) ตำแหน่งเป็นพิกเซลจริง"""
+        r, k = self.root, self._scale()
+        parsed = parse_geometry(str(self.settings.get("geometry", ""))) or parse_geometry("380x600+120+120")
+        w, h, x, y = parsed  # type: ignore[misc]
+        try:
+            vx, vy, vw, vh = r.winfo_vrootx(), r.winfo_vrooty(), r.winfo_vrootwidth(), r.winfo_vrootheight()
+        except tk.TclError:
+            vx, vy, vw, vh = 0, 0, 1920, 1080
+        return clamp_geometry(f"{round(w * k)}x{round(h * k)}+{x}+{y}", vx, vy, vw, vh,
+                              px(r, MIN_W), px(r, MIN_H))
+
+    def get_persistable_geometry(self) -> str:
+        """สตริงสำหรับ settings["geometry"] — ขนาดหน่วย 96 DPI + ตำแหน่งจริง"""
+        parsed = parse_geometry(self.root.geometry())
+        if parsed is None or parsed[0] <= 1:
+            return str(self.settings.get("geometry", "380x600+120+120"))
+        w, h, x, y = parsed
+        k = self._scale()
+        return f"{round(w / k)}x{round(h / k)}+{x}+{y}"
+
+    def _apply_topmost(self) -> None:
+        try:
+            self.root.attributes("-topmost", bool(self.settings.get("always_on_top", True)))
+        except tk.TclError:
             pass
 
-        # TitleBar
-        self.titlebar = TitleBar(self.root, self.root, self.theme)
+    def _reapply_topmost(self) -> None:
+        """กัน fullscreen app ดันเราลงล่าง — เฉพาะตอนผู้ใช้เปิด always_on_top และไม่มี dialog ของเราเปิดอยู่ (H2)"""
+        if self._topmost_job is not None:  # chain เดียวเสมอ แม้มีคนเรียกตรง ๆ (แบบเดียวกับ C2)
+            try:
+                self.root.after_cancel(self._topmost_job)
+            except (tk.TclError, ValueError):
+                pass
+            self._topmost_job = None
+        try:
+            if self.settings.get("always_on_top", True) and not self._has_open_toplevel():
+                self.root.attributes("-topmost", True)
+            self._topmost_job = self.root.after(TOPMOST_REAPPLY_MS, self._reapply_topmost)
+        except tk.TclError:
+            pass
 
-        # v1.8.4: Reset unpinned state AFTER titlebar is created (CRITICAL: order matters!)
-        self.root.attributes("-topmost", False)
-        self.titlebar.is_topmost = False
-        if hasattr(self.titlebar, 'btn_window_pin'):
-            self.titlebar.btn_window_pin.config(text="📍")
-        self.titlebar.on_new = self._on_new
-        self.titlebar.on_close = self._on_close
-        self.titlebar.on_minimize = self._on_minimize
-        self.titlebar.on_roll_up = self._on_roll_up
-        self.titlebar.on_toggle_topmost = self._on_toggle_topmost  # v1.5.1: window pin
-        self.titlebar.on_filter_changed = self._on_filter_changed
+    def _has_open_toplevel(self) -> bool:
+        """Settings / Reminder / toast ที่กำลังแสดง — ห้ามดันหน้าต่างหลักขึ้นทับ"""
+        try:
+            return any(isinstance(w, tk.Toplevel) and w.winfo_viewable() for w in self.root.winfo_children())
+        except tk.TclError:
+            return False
 
-        # v2.6.1: Toast banner state (in-app notification, no Toplevel)
-        self.toast_visible = False
-        self.toast_timer = None
+    def _on_close_request(self) -> None:
+        """ปุ่ม ✕ ของ Windows — main.py จะ override protocol นี้เพื่อรู้ว่า tray ทำงานอยู่หรือไม่"""
+        if self.settings.get("close_to_tray", True):
+            self.hide()
+        elif self.on_quit is not None:
+            self.on_quit()
+        else:
+            self.root.destroy()
 
-        # Roll-up state
-        self._rolled_up = False
-        self._saved_height = 600
+    def _on_unmap(self, e) -> None:
+        if e.widget is self.root:
+            self.flush_all_cards()  # ย่อ/ซ่อน = จุดที่ข้อมูลค้างอาจหายถ้าแอปถูกปิดต่อ (C8)
 
-        # v2.6.1: Toast banner (in-app notification, no Toplevel window)
-        # Hidden by default, shown only when reminder triggers
-        self.toast_frame = tk.Frame(self.root, bg="#FF3B30", highlightthickness=0)
-        # Don't pack by default — pack dynamically when shown
-        self.toast_content = {}  # Store toast message content
+    def _on_root_destroy(self, e) -> None:
+        if e.widget is self.root:
+            self.scheduler.stop()
+            self._unsub_theme()
 
-        # v2.3.0: Search Bar — Real-time note filtering
-        # v2.3.2: Minimal icon redesign (thin line + muted gray)
-        from tkinter import ttk
-        self.search_frame = tk.Frame(self.root, bg=self.theme.c("bg"), highlightthickness=0)
-        self.search_frame.pack(side="top", fill="x", padx=6, pady=3)
+    # ================================================================ show / hide
+    def show(self) -> None:
+        r = self.root
+        try:
+            r.deiconify()
+            r.lift()
+            # ปลดล็อก foreground ของ Windows: topmost ชั่วคราวแล้วคืนค่าตาม settings
+            r.attributes("-topmost", True)
+            r.focus_force()
+            if self._restore_top_job is not None:
+                r.after_cancel(self._restore_top_job)
+            self._restore_top_job = r.after(150, self._apply_topmost)
+        except tk.TclError:
+            pass
 
-        # v2.3.2: Minimal search icon (thin line style, muted gray)
-        self.search_label = tk.Label(
-            self.search_frame,
-            text="⌕",  # Minimal thin line search symbol
-            bg=self.theme.c("bg"),
-            fg="#8C8C8C",  # Muted gray color
-            font=("Segoe UI", 9),  # Smaller font for minimal appearance
-        )
-        self.search_label.pack(side="left", padx=(0, 6))
+    def hide(self) -> None:
+        self.flush_all_cards()
+        try:
+            if self.can_hide():
+                self.root.withdraw()
+            else:
+                self.root.iconify()  # ไม่มี tray = ย่อลง taskbar แทน (ยังมีปุ่มบน taskbar ให้กดเรียกกลับ)
+        except tk.TclError:
+            pass
 
-        self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(
-            self.search_frame,
-            textvariable=self.search_var,
-            width=28,
-            font=("Segoe UI", 9),
-        )
-        self.search_entry.pack(side="left", fill="x", expand=True, pady=2)
-        self.search_entry.bind("<KeyRelease>", self._on_search)
+    def toggle_visibility(self) -> None:
+        """M22: มองเห็นแต่ไม่มี focus (ถูกหน้าต่างอื่นบัง) → ดึงขึ้นมา ไม่ซ่อน"""
+        try:
+            visible = self.root.state() == "normal" and bool(self.root.winfo_viewable())
+            focused = self.root.focus_displayof() is not None
+        except tk.TclError:
+            return
+        if visible and focused:
+            self.hide()
+        else:
+            self.show()
 
-        # Bind clear button (Escape to clear search)
-        self.search_entry.bind("<Escape>", lambda e: self.search_var.set("") or self._on_search())
+    def _is_visible(self) -> bool:
+        try:
+            return bool(self.root.winfo_viewable())
+        except tk.TclError:
+            return False
 
-        # Body — scrollable area
-        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
-        self.body_frame = tk.Frame(self.root, bg=self.theme.c("note_bg"), highlightthickness=0)
-        self.body_frame.pack(side="top", fill="both", expand=True)
+    def _ensure_visible(self) -> None:
+        if not self._is_visible():
+            self.show()
 
-        # Canvas + scrollbar pattern
-        # v1.6.1: Ensure canvas has proper background color for seamless Dark Mode
-        self.canvas = tk.Canvas(
-            self.body_frame,
-            bg=self.theme.c("note_bg"),
-            highlightthickness=0,
-            height=300,
-            bd=0,  # v1.6.1: Remove border
-        )
-        self.canvas.pack(side="left", fill="both", expand=True)
+    # ================================================================ UI build
+    def _track(self, widget: tk.Misc, **opts: str) -> tk.Misc:
+        """ผูก widget กับ token สี เพื่อ recolor ตอนธีมเปลี่ยน"""
+        self._tracked.append((widget, opts))
+        widget.configure(**{k: self.theme.c(v) for k, v in opts.items()})
+        return widget
 
-        self.scrollbar = tk.Scrollbar(self.body_frame, command=self.canvas.yview)
-        self.scrollbar.pack(side="right", fill="y")
-        self.canvas.config(yscrollcommand=self.scrollbar.set)
+    def _build_ui(self) -> None:
+        # ลำดับ pack สำคัญ: toolbar → selector → quick-add → footer(ล่าง) → list(ขยาย)
+        self._build_toolbar()
+        self._build_selector()
+        self._build_quick_add()
+        self._build_footer()
+        self._build_list()
+        self._build_empty_state()
 
-        # Inner frame inside canvas
-        # v1.6.1: Add highlightthickness=0 to prevent border bleeds
-        self.inner_frame = tk.Frame(self.canvas, bg=self.theme.c("note_bg"), highlightthickness=0)
-        self.canvas_window = self.canvas.create_window(
-            (0, 0), window=self.inner_frame, anchor="nw"
-        )
+    def _build_toolbar(self) -> None:
+        r, th = self.root, self.theme
+        bar = tk.Frame(r, height=px(r, 48), bd=0, highlightthickness=0)
+        bar.pack(side="top", fill="x")
+        bar.pack_propagate(False)
+        self._track(bar, bg="surface")
+        self._toolbar = bar
 
-        # Empty state label (shown when no notes)
-        self.empty_state_label = tk.Label(
-            self.inner_frame,
-            text="ยังไม่มีโน้ต\n\nกดปุ่ม + เพื่อเริ่มสร้างโน้ตแรก",
-            bg=self.theme.c("note_bg"),
-            fg=self.theme.c("fg_muted"),
-            font=("Segoe UI", 11),
-            justify="center",
-            pady=60,
-        )
-        self.empty_state_label.pack(fill="both", expand=True)
+        self._tb_settings = IconButton(bar, th, ICONS["settings"], self.open_settings,
+                                       tooltip=lambda: t("board.settings_tip"))
+        self._tb_settings.pack(side="right", padx=(px(r, 2), px(r, 12)))
+        self._tb_topmost = IconButton(bar, th, ICONS["topmost"], self._on_topmost_toggle,
+                                      tooltip=lambda: t("board.topmost_tip"), toggle=True)
+        self._tb_topmost.set_active(bool(self.settings.get("always_on_top", True)))
+        self._tb_topmost.pack(side="right", padx=px(r, 2))
 
-        # Bind canvas resize to update inner frame width
-        self.canvas.bind("<Configure>", self._on_canvas_resize)
+        icon = tk.Label(bar, text=ICONS["search"], font=th.font("icon12"), bd=0)
+        self._track(icon, bg="surface", fg="text_secondary")
+        icon.pack(side="left", padx=(px(r, 14), px(r, 6)))
+        self._search_var = tk.StringVar(master=r)
+        self._search = PlaceholderEntry(bar, t("board.search_placeholder"), textvariable=self._search_var,
+                                        style=th.ttk_style("TEntry", "surface"),
+                                        placeholder_style=th.ttk_style("Placeholder.TEntry", "surface"))
+        self._search.pack(side="left", fill="x", expand=True, pady=px(r, 8))
+        self._search_clear = IconButton(bar, th, ICONS["cancel"], self._clear_search, size=28,
+                                        tooltip=lambda: t("board.search_clear_tip"), fg_token="text_secondary")
+        self._search_var.trace_add("write", self._on_search_changed)
+        forward_shortcuts(self._search)
+        self._search.bind("<Down>", lambda e: self._arrow_from_input(1))
 
-        # v2.9.26: Global mouse wheel scroll — bind on root so scrolling works anywhere in app
-        # Users can scroll from any part of the window, not just the scrollbar
-        self.root.bind_all("<MouseWheel>", self._on_global_mousewheel)
-        self.root.bind_all("<Button-4>", self._on_global_mousewheel)   # Linux wheel up
-        self.root.bind_all("<Button-5>", self._on_global_mousewheel)   # Linux wheel down
+    def _build_selector(self) -> None:
+        r, th = self.root, self.theme
+        bar = tk.Frame(r, bd=0, highlightthickness=0)
+        bar.pack(side="top", fill="x", padx=px(r, 12), pady=(px(r, 4), 0))
+        self._track(bar, bg="bg")
+        self._selector = bar
+        self._tabs: dict[str, tuple[tk.Label, tk.Frame]] = {}
+        for key, tip in (("active", "board.tab_active_tip"), ("completed", "board.tab_completed_tip")):
+            cell = tk.Frame(bar, bd=0, highlightthickness=0)
+            self._track(cell, bg="bg")
+            cell.pack(side="left", padx=(0, px(r, 18)))
+            lbl = tk.Label(cell, bd=0, cursor="hand2", takefocus=True, highlightthickness=2, padx=px(r, 2))
+            lbl.pack()
+            underline = tk.Frame(cell, height=px(r, 3), width=px(r, 16), bd=0, highlightthickness=0)
+            underline.pack(pady=(px(r, 1), 0))
+            lbl.bind("<Button-1>", lambda e, k=key: self._select_tab(k))
+            lbl.bind("<Return>", lambda e, k=key: self._select_tab(k))
+            lbl.bind("<space>", lambda e, k=key: self._select_tab(k))
+            Tooltip(lbl, (lambda tk_=tip: t(tk_)), theme=th)
+            self._tabs[key] = (lbl, underline)
+        self._paint_tabs()
 
-        # Focus on canvas click only (don't intercept widgets)
-        self.canvas.bind("<Button-1>", lambda e: self.root.focus_force(), add="+")
+    def _build_quick_add(self) -> None:
+        r = self.root
+        wrap = tk.Frame(r, bd=0, highlightthickness=0)
+        wrap.pack(side="top", fill="x", padx=px(r, 12), pady=(px(r, 2), px(r, 4)))
+        self._track(wrap, bg="bg")
+        self._qa_wrap = wrap
+        self._qa = PlaceholderEntry(wrap, t("board.quick_add_placeholder"))
+        self._qa.pack(fill="x")
+        self._qa.bind("<Return>", lambda e: self._quick_add(False))
+        self._qa.bind("<Shift-Return>", lambda e: self._quick_add(True))
+        self._qa.bind("<Down>", lambda e: self._arrow_from_input(1))
+        forward_shortcuts(self._qa)
 
-        # Footer — credit line + heartbeat (v2.2.2)
-        footer_frame = tk.Frame(self.root, bg=self.theme.c("bg"))
-        footer_frame.pack(side="bottom", fill="x", padx=8, pady=4)
+    def _build_footer(self) -> None:
+        r, th = self.root, self.theme
+        footer = tk.Frame(r, bd=0, highlightthickness=0)
+        footer.pack(side="bottom", fill="x")
+        self._track(footer, bg="bg")
+        self._footer = footer
+        self.undo_bar = UndoBar(footer, th, pack_options={
+            "side": "top", "fill": "x", "padx": px(r, 12), "pady": (px(r, 4), px(r, 8))})
+        status = tk.Frame(footer, height=px(r, 28), bd=0, highlightthickness=0)
+        status.pack_propagate(False)
+        self._track(status, bg="surface")
+        self._status = status
+        line = tk.Frame(status, height=1, bd=0, highlightthickness=0)
+        self._track(line, bg="stroke")
+        line.pack(side="top", fill="x")
+        self._status_icon = tk.Label(status, text=ICONS["clock"], font=th.font("icon10"), bd=0)
+        self._track(self._status_icon, bg="surface", fg="text_secondary")
+        self._status_icon.pack(side="left", padx=(px(r, 12), px(r, 6)))
+        self._status_text = tk.Label(status, font=th.font("caption"), bd=0, anchor="w")
+        self._track(self._status_text, bg="surface", fg="text_secondary")
+        self._status_text.pack(side="left", fill="x", expand=True)
+        self._status_shown = False
 
-        footer_text = f"{APP_NAME} v{APP_VERSION} • By {APP_AUTHOR}"
-        self.footer_label = tk.Label(
-            footer_frame,
-            text=footer_text,
-            bg=self.theme.c("bg"),
-            fg=self.theme.c("fg_muted"),
-            font=("Segoe UI", 7),
-        )
-        self.footer_label.pack(side="left")
+    def _build_list(self) -> None:
+        r = self.root
+        wrap = tk.Frame(r, bd=0, highlightthickness=0)
+        wrap.pack(side="top", fill="both", expand=True)
+        self._track(wrap, bg="bg")
+        self._list_wrap = wrap
+        self._canvas = tk.Canvas(wrap, highlightthickness=0, bd=0, yscrollincrement=px(r, 20))
+        self._track(self._canvas, bg="bg")
+        self._canvas.pack(fill="both", expand=True)
+        # scrollbar วางลอยทับขอบขวา (place) ไม่กินที่ → ความกว้างการ์ดไม่เปลี่ยนตอนแถบโผล่/หาย
+        self._scroll = ttk.Scrollbar(wrap, orient="vertical", command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=self._on_yscroll)
+        self._inner = tk.Frame(self._canvas, bd=0, highlightthickness=0)
+        self._track(self._inner, bg="bg")
+        self._win = self._canvas.create_window(0, 0, window=self._inner, anchor="nw")
+        self._canvas.bind("<Configure>", self._on_canvas_configure)
+        self._inner.bind("<Configure>", self._on_inner_configure)
 
-        # Heartbeat indicator (v2.2.2) — shows scheduler is running
-        # v2.6.2: Make label expand to fill available space, right-align text to prevent clipping
-        self.heartbeat_label = tk.Label(
-            footer_frame,
-            text="● Scheduler: Running",
-            bg=self.theme.c("bg"),
-            fg="#4CAF50",  # Green for active
-            font=("Segoe UI", 7),
-            justify="right",
-        )
-        self.heartbeat_label.pack(side="right", fill="x", expand=True, padx=(8, 0), anchor="e")
+    def _build_empty_state(self) -> None:
+        """empty state เป็น frame ตัวเดียวที่ pack/forget (แก้ M1/M2) ปรับข้อความตาม 3 กรณี"""
+        th, r = self.theme, self.root
+        f = tk.Frame(self._inner, bd=0, highlightthickness=0)
+        self._track(f, bg="bg")
+        self._empty = f
+        self._empty_icon = tk.Label(f, text=ICONS["add"], font=th.font("icon32"), bd=0)
+        self._track(self._empty_icon, bg="bg", fg="text_disabled")
+        self._empty_icon.pack(pady=(0, px(r, 6)))
+        self._empty_title = tk.Label(f, font=th.font("body_strong"), bd=0, wraplength=px(r, 280), justify="center")
+        self._track(self._empty_title, bg="bg", fg="text")
+        self._empty_title.pack()
+        self._empty_hint = tk.Label(f, font=th.font("caption"), bd=0, wraplength=px(r, 280), justify="center")
+        self._track(self._empty_hint, bg="bg", fg="text_secondary")
+        self._empty_hint.pack(pady=(px(r, 2), 0))
+        self._empty_link = ttk.Button(f, style=th.ttk_style("Link.TButton", "bg"), command=self._clear_search,
+                                      takefocus=True)
+        # ปุ่ม "ลบงานที่เสร็จแล้วทั้งหมด" ท้ายรายการแท็บ completed
+        self._tail = tk.Frame(self._inner, bd=0, highlightthickness=0)
+        self._track(self._tail, bg="bg")
+        self._tail_btn = ttk.Button(self._tail, style=th.ttk_style("Link.TButton", "bg"),
+                                    command=self._delete_all_completed, takefocus=True)
+        self._tail_btn.pack(pady=px(r, 8))
 
-        # Settings button (⚙) — right side of footer
-        self.btn_settings = tk.Button(
-            footer_frame,
-            text="⚙",
-            bg=self.theme.c("bg"),
-            fg=self.theme.c("fg"),
-            font=("Segoe UI Symbol", 10),
-            bd=0,
-            relief="flat",
-            activebackground=self.theme.c("bg_hover"),
-            activeforeground=self.theme.c("fg"),
-            command=self._open_settings,
-            padx=4,
-            pady=1,
-        )
-        self.btn_settings.pack(side="right", padx=(0, 4))
+    # ---------------------------------------------------------------- list scrolling
+    def _on_canvas_configure(self, e) -> None:
+        self._canvas.itemconfigure(self._win, width=e.width)
+        self._update_scrollregion()
 
-        # Store references for theme refresh
-        self.footer_frame = footer_frame
-        self.footer_label = self.footer_label  # Already set above
+    def _on_inner_configure(self, _e) -> None:
+        self._update_scrollregion()
 
-        # Resize handle (corner)
-        self.resize_corner = tk.Label(
-            self.root, text="◢", bg=self.theme.c("bg"), fg=self.theme.c("fg"),
-            cursor="sizing", font=("Segoe UI", 10)
-        )
-        self.resize_corner.place(relx=1.0, rely=1.0, anchor="se")
-        self.resize_corner.bind("<B1-Motion>", self._on_resize)
+    def _update_scrollregion(self) -> None:
+        ch = self._canvas.winfo_height()
+        self._region_h = max(self._inner.winfo_reqheight(), ch)
+        self._canvas.configure(scrollregion=(0, 0, self._canvas.winfo_width(), self._region_h))
 
-        # Always on top
-        self.root.attributes("-topmost", True)
-        # Alpha (default fully opaque)
+    def _on_yscroll(self, lo: str, hi: str) -> None:
+        self._scroll.set(lo, hi)
+        need = not (float(lo) <= 0.0 and float(hi) >= 1.0)
+        if need != self._scroll_shown:
+            self._scroll_shown = need
+            if need:
+                self._scroll.place(relx=1.0, rely=0.0, relheight=1.0, anchor="ne")
+            else:
+                self._scroll.place_forget()
+
+    def _on_wheel(self, e) -> None:
+        w = e.widget
+        # Text ที่ล้นความสูงต้องเลื่อนเนื้อหาเอง (class binding ทำให้แล้ว) — ไม่เลื่อนรายการซ้อน
+        if isinstance(w, tk.Text):
+            try:
+                if w.yview() != (0.0, 1.0):
+                    return
+            except tk.TclError:
+                pass
+        steps = max(1, abs(int(e.delta)) // 120) * 3
+        self._canvas.yview_scroll(-steps if e.delta > 0 else steps, "units")
+
+    def _scroll_into_view(self, note_id: str) -> None:
+        card = self.note_cards.get(note_id)
+        if card is None or not card.winfo_manager():
+            return
         self.root.update_idletasks()
-        self.root.attributes("-alpha", 1.0)
+        self._update_scrollregion()
+        gap = px(self.root, CARD_GAP_Y)
+        y0, y1 = card.winfo_y() - gap, card.winfo_y() + card.winfo_height() + gap
+        top = self._canvas.canvasy(0)
+        view_h = self._canvas.winfo_height()
+        total = max(1, self._region_h)
+        if y0 < top:
+            self._canvas.yview_moveto(max(0.0, y0 / total))
+        elif y1 > top + view_h:
+            self._canvas.yview_moveto(max(0.0, (y1 - view_h) / total))
 
-        # Visibility verification — ให้แน่ใจว่าหน้าต่างขึ้นมาจริง
-        self.root.update_idletasks()
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
-        self.root.attributes("-topmost", True)
+    def _scroll_to_top(self) -> None:
+        self._canvas.yview_moveto(0.0)
 
-        # Re-apply topmost every 3 seconds (Windows bug)
-        self._reapply_topmost()
+    # ================================================================ keyboard
+    def _bind_keys(self) -> None:
+        r = self.root
+        actions = {
+            "<<QN-NewNote>>": self.focus_quick_add, "<<QN-Search>>": self.focus_search,
+            "<<QN-Topmost>>": self._toggle_topmost_key,
+            "<<QN-TabActive>>": lambda: self._select_tab("active"),
+            "<<QN-TabCompleted>>": lambda: self._select_tab("completed"),
+        }
+        for seq, virtual in GLOBAL_SHORTCUTS.items():
+            r.event_add(virtual, seq)
+        for virtual, fn in actions.items():
+            r.bind(virtual, lambda e, fn=fn: (fn(), "break")[1])
+        r.bind("<Escape>", self._on_escape)
+        r.bind("<Up>", lambda e: self._on_arrow(-1))
+        r.bind("<Down>", lambda e: self._on_arrow(1))
+        # bind ที่ toplevel (ไม่ใช้ bind_all) → ไม่กวนเมาส์วีลของ Settings/dialog
+        r.bind("<MouseWheel>", self._on_wheel, add="+")
 
-        # v1.6.0: Register as theme change listener for real-time updates
-        self.theme.register_theme_change_listener(self._on_theme_changed)
+    def _on_escape(self, _e=None):
+        """Esc: ปิดเมนู (native จัดการเอง) → พับการ์ด → ล้างคำค้น → ซ่อนหน้าต่าง"""
+        card = self._expanded_card()
+        if card is not None:
+            card.collapse()
+            card.focus_card()
+            return "break"
+        if self._query():
+            self._clear_search()
+            return "break"
+        self.hide()
+        return "break"
 
-        # Load notes from database
+    def _visible_cards(self) -> list[NoteCard]:
+        return [self.note_cards[i] for i in self._order if i in self.note_cards and self.note_cards[i].winfo_manager()]
+
+    def _on_arrow(self, delta: int):
+        try:
+            w = self.root.focus_lastfor()  # key event มาถึงเฉพาะตอนแอปมี focus จริง ซึ่งผลเท่า focus_get
+        except (tk.TclError, KeyError):
+            return None
+        cards = self._visible_cards()
+        if isinstance(w, NoteCard) and w in cards:
+            i = cards.index(w) + delta
+            if 0 <= i < len(cards):
+                cards[i].focus_card()
+                self._scroll_into_view(cards[i].note.id)
+            return "break"
+        return None
+
+    def _arrow_from_input(self, delta: int):
+        """↓ จากช่องค้นหา/quick-add ไปที่การ์ดใบแรก"""
+        cards = self._visible_cards()
+        if delta > 0 and cards:
+            cards[0].focus_card()
+            self._scroll_into_view(cards[0].note.id)
+            return "break"
+        return None
+
+    def _toggle_topmost_key(self) -> None:
+        self.settings.set("always_on_top", not bool(self.settings.get("always_on_top", True)))
+
+    # ================================================================ public focus API
+    def focus_quick_add(self) -> None:
+        self._ensure_visible()
+        if self._tab != "active":
+            self._select_tab("active")
+        self._qa.focus_set()
+
+    def focus_search(self) -> None:
+        self._ensure_visible()
+        self._search.focus_set()
+        self._search.select_range(0, "end")
+
+    # ================================================================ tabs
+    def _select_tab(self, tab: str) -> None:
+        if tab == self._tab:
+            return
+        self.flush_all_cards()
+        self._tab = tab
+        if self._query():
+            self._search_var.set("")  # H9: ล้างคำค้นตอนเปลี่ยนแท็บเท่านั้น (ไม่ใช่ใน _load_notes)
+        self._paint_tabs()
+        if tab == "active":
+            self._qa_wrap.pack(side="top", fill="x", padx=px(self.root, 12),
+                               pady=(px(self.root, 2), px(self.root, 4)), after=self._selector)
+        else:
+            self._qa_wrap.pack_forget()
+        self._load_notes()
+        self._scroll_to_top()
+
+    def _paint_tabs(self) -> None:
+        th = self.theme
+        counts = self._count_cache
+        for key, (lbl, bar) in self._tabs.items():
+            sel = key == self._tab
+            lbl.configure(text=t(f"board.tab_{key}", n=counts.get(key, 0)),
+                          font=th.font("body_strong" if sel else "body"),
+                          fg=th.c("text" if sel else "text_secondary"), bg=th.c("bg"),
+                          highlightbackground=th.c("bg"), highlightcolor=th.c("accent"))
+            bar.configure(bg=th.c("accent" if sel else "bg"))
+            bar.master.configure(bg=th.c("bg"))
+
+    def _update_counts(self) -> None:
+        try:
+            self._count_cache = db.count_by_status()
+        except Exception:
+            log.exception("count_by_status failed")
+        self._paint_tabs()
+
+    # ================================================================ search
+    def _query(self) -> str:
+        return self._search.get_value().strip().lower()
+
+    def _on_search_changed(self, *_a) -> None:
+        if self._search_var.get():
+            if not self._search_clear.winfo_manager():
+                self._search_clear.pack(side="right", padx=(0, px(self.root, 2)))
+        else:
+            self._search_clear.pack_forget()
+        if self._search_job is not None:
+            self.root.after_cancel(self._search_job)
+        self._search_job = self.root.after(SEARCH_DEBOUNCE_MS, self._run_search)
+
+    def _run_search(self) -> None:
+        self._search_job = None
+        self._apply_filter()
+        self._scroll_to_top()
+
+    def _clear_search(self) -> None:
+        self._search.clear()
+        self._search_var.set("")
+        if self._search_job is not None:
+            self.root.after_cancel(self._search_job)
+            self._search_job = None
+        self._apply_filter()
+
+    # ================================================================ list refresh (C5 / H4 / H5 / H9)
+    def refresh(self, immediate: bool = False) -> None:
+        """debounce 150ms รวมคำขอที่ถี่ ๆ (alarm/dismiss/pin) เป็นการโหลดครั้งเดียว"""
+        if immediate:
+            self._load_notes()
+        elif self._refresh_job is None:
+            self._refresh_job = self.root.after(REFRESH_DEBOUNCE_MS, self._load_notes)
+
+    def rebuild(self) -> None:
+        """ทำลายการ์ดทั้งหมดโดยไม่ flush (ข้อมูลเก่าหลัง restore ต้องทิ้ง) แล้วโหลดใหม่"""
+        self._cancel_refresh()
+        for card in list(self.note_cards.values()):
+            card.destroy()
+        self.note_cards.clear()
+        self.undo_bar.hide()  # callback ของแถบเก่าอ้างโน้ตที่ไม่มีแล้ว
         self._load_notes()
 
-        # v2.9.14: Start command queue processor (every 100ms) — BEFORE reminder checker
-        # This ensures commands from background threads are processed in main thread
-        if self.command_queue:
-            self._process_command_queue()
-
-        # Start reminder checker (v1.3.0) — non-blocking, runs every 5 seconds
-        self._check_reminders()
-
-        # v2.8.6: Start notification queue checker — non-blocking, runs every 500ms
-        self._check_notification_queue()
-
-        # v2.9.3: Bind custom event for immediate notification processing (thread-safe wake-up)
-        self.root.bind("<<NewNotification>>", lambda e: self._on_new_notification_event())
-
-    def _get_safe_geometry(self, geometry: str) -> str:
-        """ตรวจสอบ geometry — ถ้าไม่ปลอดภัยให้ center ที่จอ"""
-        # Parse geometry string: "WxH+X+Y" or default
-        if not geometry or "x" not in geometry.lower():
-            # ไม่มี geometry → center ที่จอ
-            screen_x, screen_y, screen_w, screen_h = _get_screen_bounds()
-            w, h = 450, 550
-            x = screen_x + (screen_w - w) // 2
-            y = screen_y + (screen_h - h) // 2
-            return f"{w}x{h}+{x}+{y}"
-
-        # Parse WxH+X+Y
-        try:
-            parts = geometry.lower().split("+")
-            wh = parts[0].split("x")
-            w, h = int(wh[0]), int(wh[1])
-            x = int(parts[1]) if len(parts) > 1 else 0
-            y = int(parts[2]) if len(parts) > 2 else 0
-        except (ValueError, IndexError):
-            # Parse failed → center
-            screen_x, screen_y, screen_w, screen_h = _get_screen_bounds()
-            w, h = 450, 550
-            x = screen_x + (screen_w - w) // 2
-            y = screen_y + (screen_h - h) // 2
-            return f"{w}x{h}+{x}+{y}"
-
-        # Clamp x, y เข้าขอบเขต screen
-        screen_x, screen_y, screen_w, screen_h = _get_screen_bounds()
-        min_visible = 80  # ต้องเห็นแถบหัวอย่างน้อย 80px
-
-        # ถ้า x,y อยู่นอกขอบเขตจอ ให้ center ใหม่
-        if x + min_visible < screen_x or x >= screen_x + screen_w or \
-           y + min_visible < screen_y or y >= screen_y + screen_h:
-            x = screen_x + (screen_w - w) // 2
-            y = screen_y + (screen_h - h) // 2
-
-        return f"{w}x{h}+{x}+{y}"
-
-    def _restore_geometry(self, geometry: str) -> None:
-        """โหลด geometry ปลอดภัยลงหน้าต่าง"""
-        self.root.geometry(geometry)
-
-    def _center_main_window(self) -> None:
-        """v1.8.6: Native window centering with withdraw protocol (prevents top-left glitch)"""
-        try:
-            # Hide window during positioning (withdraw protocol)
-            self.root.withdraw()
-            self.root.update_idletasks()
-
-            # Get screen dimensions
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-
-            # If we got valid screen dimensions (>100px), use calculated center
-            if screen_w > 100 and screen_h > 100:
-                win_w, win_h = 420, 600
-                x = int((screen_w - win_w) / 2)
-                y = int((screen_h - win_h) / 2)
-                self.root.geometry(f"{win_w}x{win_h}+{x}+{y}")
-            else:
-                # Timing bug: winfo_screenwidth() returned 0
-                # Fallback to native Tkinter centering engine
-                try:
-                    self.root.eval('tk::PlaceWindow . center')
-                except Exception:
-                    pass
-
-            # Show window after positioning
-            self.root.deiconify()
-
-            # v2.9.45 Smoke-Test Fix: windowed .exe (--noconsole) map guard
-            # Rapid withdraw→geometry→deiconify can lose the map race on Tk 9.0 when running
-            # as a windowed PyInstaller exe (root stays withdrawn despite deiconify).
-            # Re-assert mapping shortly after startup — idempotent, no-op when already mapped.
-            def _ensure_mapped():
-                try:
-                    if self.root.winfo_exists() and not self.root.winfo_ismapped():
-                        self.root.deiconify()
-                except tk.TclError:
-                    pass  # Root destroyed during shutdown — safe to skip
-            self.root.after(150, _ensure_mapped)
-            self.root.after(600, _ensure_mapped)
-        except Exception:
-            # Fallback: just show the window
+    def _cancel_refresh(self) -> None:
+        if self._refresh_job is not None:
             try:
-                self.root.deiconify()
-            except Exception:
+                self.root.after_cancel(self._refresh_job)
+            except (tk.TclError, ValueError):
                 pass
+            self._refresh_job = None
 
-    def _on_canvas_resize(self, event):
-        """ปรับความกว้างของ inner frame ให้เท่า canvas"""
-        self.canvas.itemconfig(self.canvas_window, width=event.width)
-        # Update scroll region
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_global_mousewheel(self, event):
-        """v2.9.26: Global mouse wheel scroll — works from anywhere in app"""
-        if hasattr(self, 'canvas') and self.canvas:
-            if event.num == 5 or event.delta < 0:
-                self.canvas.yview_scroll(3, "units")
-            elif event.num == 4 or event.delta > 0:
-                self.canvas.yview_scroll(-3, "units")
-
-    def _on_mousewheel(self, event):
-        """เลื่อนด้วย mouse wheel (legacy, kept for compatibility)"""
-        self._on_global_mousewheel(event)
-
-    def _on_resize(self, event):
-        """ลากมุมล่างขวาเพื่อปรับขนาดหน้าต่าง"""
-        w = max(260, self.root.winfo_pointerx() - self.root.winfo_x())
-        h = max(180, self.root.winfo_pointery() - self.root.winfo_y())
-        self.root.geometry(f"{w}x{h}")
-
-    def repack_card_to_top(self, note_id: str):
-        """v2.9.42: Move note card to top of board (empty board safe)
-
-        This re-orders the card pack to appear at Index 0, making it the first visible card.
-        Called when a reminder is triggered OR a new note is created to bring to top.
-        Handles both empty board and board with existing cards.
-        """
-        if note_id not in self.note_cards:
-            return
-
+    def _load_notes(self) -> None:
+        self._cancel_refresh()
         try:
-            card = self.note_cards[note_id]
-
-            # v2.9.42: Use pack_slaves() to get actual visual pack order (not winfo_children)
-            # pack_slaves() returns widgets in the order they are visually packed
-            card_slaves = self.inner_frame.pack_slaves()
-
-            # Filter only existing note card widgets (exclude destroyed widgets + non-cards)
-            card_widgets = [c for c in card_slaves if c.winfo_exists() and c in self.note_cards.values()]
-
-            # Unpack and repack at the beginning (uses pack() ordering)
+            rows = db.get_notes_by_status(self._tab)
+        except Exception:
+            log.exception("cannot load notes")
+            return
+        keep = {r["id"] for r in rows}
+        for nid in [n for n in self.note_cards if n not in keep]:
+            self._destroy_card(self.note_cards.pop(nid))
+        for card in self.note_cards.values():  # ต้องถอดทั้งหมดก่อน pack ใหม่ ไม่งั้นลำดับไม่ขยับ (C5)
             card.pack_forget()
 
-            if card_widgets and card_widgets[0] != card:
-                # If there are other cards, pack before the first one (makes this card Index 0)
-                card.pack(before=card_widgets[0], fill="x", padx=4, pady=4)
-            else:
-                # If board is empty or this is the only card, just pack normally
-                card.pack(fill="x", padx=4, pady=4)
-
-            # v2.9.42: Scroll to top so new card is visible
-            self.root.after(50, lambda: self._scroll_to_top())
-
-            log.info(f"[Board] Card {note_id} repacked to top")
-        except Exception as e:
-            log.debug(f"[Board] Failed to repack card {note_id} to top: {e}")
-
-    def _load_notes(self):
-        """v2.9.36: อ่านโน้ตตาม current_filter จาก DB แล้วแสดง (Reuse widgets when possible)"""
-        # v2.3.0: Clear search when reloading notes (except from search event itself)
-        if hasattr(self, 'search_var'):
-            self.search_var.set("")
-
-        # v2.9.36: Smart widget reuse — Only destroy cards that are no longer in DB
-        # This reduces widget churn and improves performance during refreshes
-        notes_data = get_notes_by_status(self.current_filter)
-        current_note_ids = {row['id'] for row in notes_data}
-
-        # Remove cards for notes no longer in current filter
-        cards_to_remove = [nid for nid in self.note_cards if nid not in current_note_ids]
-        for note_id in cards_to_remove:
-            try:
-                card = self.note_cards[note_id]
-                card.pack_forget()
-                card.destroy()
-                del self.note_cards[note_id]
-            except Exception:
-                pass
-
-        if not notes_data:
-            # Show empty state (create if not exists)
-            if not hasattr(self, '_empty_state_created') or not self._empty_state_created:
-                self.empty_state_label = tk.Label(
-                    self.inner_frame,
-                    text="ยังไม่มีโน้ต\n\nกดปุ่ม + เพื่อเริ่มสร้างโน้ตแรก",
-                    bg=self.theme.c("note_bg"),
-                    fg=self.theme.c("fg_muted"),
-                    font=("Segoe UI", 11),
-                    justify="center",
-                    pady=60,
-                )
-                self._empty_state_created = True
-            self.empty_state_label.pack(fill="both", expand=True, pady=60)
-        else:
-            # Destroy empty state completely (no layout gap)
-            if hasattr(self, 'empty_state_label'):
-                try:
-                    if self.empty_state_label.winfo_exists():
-                        self.empty_state_label.destroy()
-                except Exception:
-                    pass
-                self._empty_state_created = False
-
-            # v2.9.36/v2.9.37: Repack existing cards in new order + create new ones for missing notes
-            for row in notes_data:
-                note_id = row['id']
-
-                # If card exists, update note data and repack in new order
-                if note_id in self.note_cards:
-                    # v2.9.37: Update the card's note data (status might have changed)
-                    card = self.note_cards[note_id]
-                    card.note = Note.from_dict(row)
-                    card.note.collapsed = card.note.collapsed or True  # Preserve collapsed state
-                    # v2.9.37: Ensure action button state is updated
-                    if hasattr(card, '_update_action_button'):
-                        card._update_action_button()
-                    # v2.9.37: Ensure status badge is updated
-                    if hasattr(card, '_update_strikethrough'):
-                        card._update_strikethrough()
-                    card.pack(fill="x", padx=4, pady=4)
-                else:
-                    # Create new card for notes not yet displayed
-                    note = Note.from_dict(row)
+        compact = bool(self.settings.get("compact", False))
+        self._order = []
+        expanded_seen = False
+        for row in rows:
+            note = Note.from_dict(row)
+            if not note.collapsed:  # กางทีละใบ: DB เก่า/restore อาจมีหลายใบ → เหลือใบแรก
+                if expanded_seen:
                     note.collapsed = True
-                    is_completed_tab = (self.current_filter == "completed")
-                    card = NoteCard(self.inner_frame, note, self.theme, is_completed_tab=is_completed_tab)
-                    card.on_update = lambda n=note: self._on_note_update(n)
-                    card.on_status_update = lambda n=note: self._on_note_status_update(n)
-                    card.on_pin_change = lambda note_id=note.id: self._on_pin_changed(note_id)
-                    card.on_delete_note = lambda n=note: self._on_note_delete(n)
-                    card.pack(fill="x", padx=4, pady=4)
-                    self.note_cards[note_id] = card
+                    db.update_fields(note.id, collapsed=True)
+                expanded_seen = True
+            card = self.note_cards.get(note.id)
+            if card is None:
+                card = NoteCard(self._inner, note, self.theme, self._callbacks, compact=compact)
+                self.note_cards[note.id] = card
+            else:
+                card.refresh_from(note)
+            self._order.append(note.id)
+        self._apply_filter()
+        self._update_counts()
+        self._update_status()
 
-        # Update scroll region
-        self.root.after(100, lambda: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-
-        # v2.9.6: Auto-scroll to top after loading notes (so user sees reminder task)
-        self.root.after(150, lambda: self._scroll_to_top())
-
-    def _scroll_to_top(self):
-        """v2.9.6: Auto-scroll canvas to top so reminder task is visible"""
+    def _destroy_card(self, card: NoteCard) -> None:
         try:
-            if hasattr(self, 'canvas') and self.canvas.winfo_exists():
-                self.canvas.update_idletasks()
-                self.canvas.yview_moveto(0.0)  # Move to top (0.0 = 0%)
-                log.info("[Board] Scrolled canvas to top")
-        except Exception as e:
-            log.warning(f"[Board] Failed to scroll to top: {e}")
+            card.flush_pending()
+        except Exception:
+            log.exception("flush before destroy failed")
+        card.destroy()
 
-    def _on_filter_changed(self, new_filter: str):
-        """เมื่อเปลี่ยน filter (Active ↔ Completed)"""
-        self.current_filter = new_filter
-        self._load_notes()  # This will clear search via _load_notes()
+    def _apply_filter(self) -> None:
+        """pack เฉพาะการ์ดที่ตรงคำค้น ตามลำดับ DB — และจัด empty state / ปุ่มท้ายรายการ"""
+        kw = self._query()
+        for card in self.note_cards.values():
+            card.pack_forget()
+        self._empty.pack_forget()
+        self._tail.pack_forget()
+        shown = 0
+        for nid in self._order:
+            card = self.note_cards[nid]
+            n = card.note
+            if kw and kw not in n.title.lower() and kw not in n.content.lower():
+                continue
+            card.pack(fill="x", padx=px(self.root, 12), pady=px(self.root, CARD_GAP_Y))
+            shown += 1
+        if shown:
+            if self._tab == "completed" and not kw:
+                self._tail_btn.configure(text=t("board.delete_all_completed"))
+                self._tail.pack(fill="x")
+        else:
+            self._show_empty(kw)
+        self._canvas.after_idle(self._update_scrollregion)
 
-    def _on_search(self, event=None):
-        """v2.3.0: Real-time search filter — show/hide notes based on keyword match"""
-        keyword = self.search_var.get().lower().strip()
+    def _show_empty(self, kw: str) -> None:
+        if kw:
+            self._empty_mode = "search"
+            self._empty_title.configure(text=t("board.empty_search", query=self._search.get_value().strip()))
+            self._empty_hint.pack_forget()
+            self._empty_link.configure(text=t("board.empty_search_clear"))
+            self._empty_link.pack(pady=(px(self.root, 4), 0))
+        else:
+            self._empty_mode = self._tab
+            self._empty_link.pack_forget()
+            if self._tab == "active":
+                self._empty_title.configure(text=t("board.empty_title"))
+                self._empty_hint.configure(text=t("board.empty_hint"))
+                self._empty_hint.pack(pady=(px(self.root, 2), 0))
+            else:
+                self._empty_title.configure(text=t("board.empty_completed"))
+                self._empty_hint.pack_forget()
+        self._empty.pack(pady=(px(self.root, 40), 0))
 
-        # If search is empty, show all notes
-        if not keyword:
-            for card in self.note_cards.values():
-                card.pack(fill="x", padx=4, pady=4)
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+    def flush_all_cards(self) -> None:
+        for card in list(self.note_cards.values()):
+            try:
+                card.flush_pending()
+            except Exception:
+                log.exception("flush failed for %s", card.note.id)
+
+    def _expanded_card(self) -> NoteCard | None:
+        return next((c for c in self.note_cards.values() if c.expanded), None)
+
+    # ================================================================ card callbacks → DB
+    def _on_save(self, note_id: str, changes: dict) -> None:
+        fields = {k: v for k, v in changes.items() if k in ("title", "content", "collapsed")}
+        if not fields:
             return
-
-        # Filter notes: match title or content
-        for note_id, card in self.note_cards.items():
-            note = card.note if hasattr(card, 'note') else None
-            if note:
-                title_match = keyword in note.title.lower()
-                content_match = keyword in note.content.lower()
-                if title_match or content_match:
-                    card.pack(fill="x", padx=4, pady=4)
-                else:
-                    card.pack_forget()
-            else:
-                card.pack(fill="x", padx=4, pady=4)
-
-        # Update scroll region
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _open_settings(self):
-        """Settings button (⚙) clicked — open SettingsWindow (singleton pattern)"""
         try:
-            # Singleton check: if Settings window already open, just lift it to front
-            if self.settings_window_instance:
-                try:
-                    if self.settings_window_instance.root.winfo_exists():
-                        print("[UI] Settings Window already open — lifting to front")
-                        self.settings_window_instance.root.lift()
-                        self.settings_window_instance.root.focus_force()
-                        return
-                except Exception:
-                    self.settings_window_instance = None
+            db.update_fields(note_id, **fields)
+        except Exception:
+            log.exception("cannot save %s", note_id)
 
-            print("[UI] Opening Settings Window...")
+    def _on_request_expand(self, note_id: str) -> None:
+        card = self.note_cards.get(note_id)
+        if card is None:
+            return
+        for other in self.note_cards.values():
+            if other is not card and other.expanded:
+                other.collapse()  # flush ก่อนพับเสมอ
+        card.expand()
+        self.root.after_idle(lambda: self._scroll_into_view(note_id))
 
-            # Check if settings object exists
-            if not self.settings:
-                import tkinter.messagebox as msgbox
-                msgbox.showerror("Settings Error", "Settings object not initialized")
-                return
-
-            # Pass settings object directly (not copy) so changes sync back
-            # SettingsWindow needs reference to settings dict, not a copy
-            settings_data = self.settings if isinstance(self.settings, dict) else (
-                self.settings.data if hasattr(self.settings, 'data') else {}
-            )
-
-            # Create new SettingsWindow (only if not already open)
-            # v1.5.2: Add on_window_closed callback to clear reference when window is closed
-            self.settings_window_instance = SettingsWindow(
-                self.root,
-                settings_data,  # Pass reference, not copy
-                self.theme,
-                on_save_callback=self._on_settings_saved,
-                main_root=self.root,  # Main QuickNote window for opacity/theme
-                on_window_closed=self._on_settings_window_closed  # v1.5.2: garbage collection fix
-            )
-            print("[OK] Settings Window opened successfully")
-
-        except Exception as e:
-            print(f"[ERROR] Failed to open settings: {e}")
-            import traceback
-            traceback.print_exc()
-
-            # Show error to user
-            try:
-                import tkinter.messagebox as msgbox
-                msgbox.showerror("Settings Error", f"Cannot open settings window:\n{str(e)}")
-            except Exception as err:
-                print(f"[ERROR] Failed to show error dialog: {err}")
-
-    def _on_note_update(self, note: Note):
-        """v2.2.3: Save note updates including reminder fields"""
-        # Save all note fields including reminder_datetime and reminder_triggered
-        update_note(note.id, title=note.title, content=note.content,
-                   status=note.status, collapsed=note.collapsed,
-                   reminder_datetime=note.reminder_datetime,
-                   reminder_triggered=note.reminder_triggered)
-
-        # ถ้า status เปลี่ยนและไม่ตรงกับ filter ปัจจุบัน ให้ลบออก
-        if note.status != self.current_filter:
-            if note.id in self.note_cards:
-                self.note_cards[note.id].pack_forget()
-                self.note_cards[note.id].destroy()
-                del self.note_cards[note.id]
-
-        # Refresh scroll region (เนื่องจากการพับ/กางอาจเปลี่ยนขนาด)
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_note_status_update(self, note: Note):
-        """v1.3.9: อัปเดตสถานะเท่านั้น (ไม่แตะ title/content) — prevent corruption on status change"""
-        # v1.4.0: Fetch fresh data from DB before saving to ensure content payload is complete
-        fresh_note_data = get_note(note.id)
-        if fresh_note_data:
-            # Update note object with fresh database state
-            note.title = fresh_note_data.get("title", note.title)
-            note.content = fresh_note_data.get("content", note.content)
-            note.collapsed = fresh_note_data.get("collapsed", note.collapsed)
-
-        # Save status change only
-        update_note_status_only(note.id, status=note.status)
-
-        # ถ้า status เปลี่ยนและไม่ตรงกับ filter ปัจจุบัน ให้ลบออก
-        if note.status != self.current_filter:
-            if note.id in self.note_cards:
-                self.note_cards[note.id].pack_forget()
-                self.note_cards[note.id].destroy()
-                del self.note_cards[note.id]
-
-        # Refresh scroll region
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_note_delete(self, note: Note):
-        """ลบโน้ต"""
-        delete_note(note.id)
-        if note.id in self.note_cards:
-            self.note_cards[note.id].pack_forget()
-            self.note_cards[note.id].destroy()
-            del self.note_cards[note.id]
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_pin_changed(self, note_id: str):
-        """v2.9.40: Handle pin state change — move card to top immediately then reload from DB
-
-        When user clicks pin/unpin button:
-        1. Immediately repack card to top of UI
-        2. Reload all notes from DB to update sort order (now with is_pinned as primary)
-        """
-        # v2.9.40: Immediately move card to top
-        self.repack_card_to_top(note_id)
-
-        # Reload notes to sync with new DB sort order (is_pinned DESC as primary)
-        self._load_notes()
-
-    def _on_new(self):
-        """ปุ่ม + เพิ่มโน้ตใหม่ — v2.9.41: Ensure new note appears at top of board"""
-        note_id = create_note(title="New Note", content="")
-        # v2.3.1: Reload all notes to respect sorting order (newest first)
-        self._load_notes()
-        # v2.9.41: Ensure newly created note is explicitly at top (handles empty board case)
-        self.repack_card_to_top(note_id)
-        # Focus on newly created note's title field (should be first in list)
-        if note_id in self.note_cards:
-            card = self.note_cards[note_id]
-            card.title_entry.focus()
-            card.title_entry.select_range(0, tk.END)
-
-    def _on_minimize(self):
-        """ปุ่มสีเหลือง — ถ้าไม่ได้ roll up ให้ withdraw ลง tray — ถ้า roll up แล้วให้ restore"""
-        if self._rolled_up:
-            self._on_roll_up()
+    def _on_toggle_complete(self, note_id: str) -> None:
+        row = db.get_note(note_id)
+        if row is None:
+            return
+        card = self.note_cards.get(note_id)
+        if row["status"] == "active":
+            db.set_status(note_id, "completed")
+            if row["reminder_triggered"] and row["reminder_datetime"]:
+                db.dismiss_reminder(note_id)  # กำลังดังอยู่แล้วเสร็จ → เลิกดัง ปิด toast
+            self.toasts.close_for(note_id)
+            message, target = t("undo.completed"), "active"
         else:
-            self.root.withdraw()
-
-    def _on_roll_up(self):
-        """Roll-up/restore — พับเหลือแถบหัวหรือกางกลับ"""
-        if self._rolled_up:
-            # Restore
-            self.body_frame.pack(side="top", fill="both", expand=True)
-            # Parse current geometry
-            geom = self.root.geometry()
-            # geom format: "WxH+X+Y"
-            parts = geom.split("+")
-            wh = parts[0].split("x")
-            w = int(wh[0])
-            x = int(parts[1]) if len(parts) > 1 else 100
-            y = int(parts[2]) if len(parts) > 2 else 100
-            self.root.geometry(f"{w}x{self._saved_height}+{x}+{y}")
-            self._rolled_up = False
+            db.set_status(note_id, "active")
+            message, target = t("undo.restored"), "completed"
+        self.undo_bar.show(message, on_undo=lambda: self._undo_status(note_id, target), on_expire=None)
+        self._update_counts()
+        if card is not None:
+            card.animate_out(then=lambda: self._load_notes())
         else:
-            # Roll-up (save height, hide body)
-            self._saved_height = self.root.winfo_height()
-            self.body_frame.pack_forget()
-            # Minimize height to just titlebar
-            geom = self.root.geometry()
-            parts = geom.split("+")
-            wh = parts[0].split("x")
-            w = int(wh[0])
-            x = int(parts[1]) if len(parts) > 1 else 100
-            y = int(parts[2]) if len(parts) > 2 else 100
-            self.root.geometry(f"{w}x32+{x}+{y}")
-            self._rolled_up = True
-
-    def _on_toggle_topmost(self, is_topmost: bool):
-        """Toggle window always-on-top state — v1.5.1"""
-        self.root.attributes("-topmost", is_topmost)
-
-    def _on_settings_window_closed(self):
-        """Settings window closed — v1.5.2: clear reference for garbage collection"""
-        print("[UI] Settings window closed — clearing reference")
-        self.settings_window_instance = None
-
-    def _on_theme_changed(self, theme):
-        """Handle real-time theme changes — v1.6.0: broadcast to all UI elements"""
-        try:
-            print(f"[Board] Theme changed to {theme.mode}, updating all UI...")
-            self.theme = theme
-            # Update main window colors
-            self.root.config(bg=theme.c("bg"))
-            # Update canvas
-            self.canvas.config(bg=theme.c("note_bg"))
-            # Update scrollbar
-            self.scrollbar.config(troughcolor=theme.c("bg"))
-            # Update footer
-            self.footer_frame.config(bg=theme.c("bg"))
-            self.footer_label.config(bg=theme.c("bg"), fg=theme.c("fg_muted"))
-            self.btn_settings.config(bg=theme.c("bg"), fg=theme.c("fg"),
-                                    activebackground=theme.c("bg_hover"))
-            # Update titlebar
-            self.titlebar.apply_theme(theme)
-            # Update all note cards
-            for card in self.note_cards.values():
-                try:
-                    card.apply_theme(theme)
-                except Exception as e:
-                    print(f"[Board] Failed to update card theme: {e}")
-            print("[Board] All UI elements updated")
-        except Exception as e:
-            print(f"[Board] Failed to update theme: {e}")
-
-    def _on_close(self):
-        """ปุ่ม close — ปิดโปรแกรม"""
-        # v1.8.2: Safety guard — release any modal grab before closing
-        try:
-            self.root.grab_release()
-        except Exception:
-            pass
-        self.root.quit()
-
-    def _reapply_topmost(self):
-        """รี-apply -topmost ทุก 3 วินาที (Windows fix)"""
-        try:
-            self.root.attributes("-topmost", True)
-        except Exception:
-            pass
-        self.root.after(3000, self._reapply_topmost)
-
-    def _request_ui_refresh(self):
-        """v2.9.22: Debounced UI refresh to prevent Tkinter freeze from excessive _load_notes calls
-
-        Consolidates multiple refresh requests within 200ms into a single UI update.
-        This prevents the main thread from being overwhelmed by back-to-back _load_notes calls.
-        """
-        try:
-            # Cancel any pending refresh
-            if self._refresh_timer is not None:
-                self.root.after_cancel(self._refresh_timer)
-
-            # Schedule refresh for 200ms from now
-            # If another refresh is requested within 200ms, it will cancel this and reschedule
-            self._refresh_timer = self.root.after(200, self._load_notes)
-        except Exception as e:
-            log.warning(f"[v2.9.22] UI refresh debouncer failed: {e}")
-            # Fallback: call _load_notes immediately
-            try:
-                self._load_notes()
-            except Exception as e2:
-                log.error(f"[v2.9.22] Fallback _load_notes failed: {e2}")
-
-    def _process_command_queue(self):
-        """v2.9.14: Process thread-safe command queue from background threads
-
-        This is the ONLY place where background threads can affect DB and GUI.
-        Notification/Tray threads send commands; Main thread executes them.
-        """
-        try:
-            if not self.command_queue:
-                return
-
-            # Process ALL queued commands in this batch
-            while True:
-                try:
-                    cmd = self.command_queue.get_nowait()  # Non-blocking get
-                except:
-                    break  # Queue empty
-
-                try:
-                    action = cmd.get("action")
-
-                    if action == "dismiss_note":
-                        # v2.9.14: Main thread marks reminder as triggered
-                        # v2.9.26: Also clear reminder_datetime to completely remove alarm state
-                        # v2.9.28: Mark note as recently dismissed to pin at top
-                        # v2.9.38: Clear alarm highlight when dismissed
-                        # v2.9.39: Clear reminder clock icon (⏰ → ⏱) when dismissed
-                        note_id = cmd.get("note_id")
-                        if note_id:
-                            from src.core.database import update_note
-                            # v2.9.26: Clear reminder_datetime AND set reminder_triggered=1
-                            # Use clear_reminder_datetime to selectively clear datetime while keeping triggered state
-                            # v2.9.28: Also mark_dismissed=True to pin note at top
-                            update_note(note_id, reminder_triggered=True, clear_reminder_datetime=True, mark_dismissed=True)
-                            # v2.9.16: Set debounce timestamp to prevent alarm re-trigger
-                            import time
-                            self._last_action_timestamp = time.time()
-                            # v2.9.38: Clear alarm highlight when dismissed
-                            # v2.9.39: Also update reminder state to show inactive clock icon
-                            if note_id in self.note_cards:
-                                card = self.note_cards[note_id]
-                                if hasattr(card, 'set_alarm_highlight'):
-                                    try:
-                                        card.set_alarm_highlight(False)
-                                    except Exception as e:
-                                        log.debug(f"[Dismiss] Failed to clear alarm highlight: {e}")
-                                # v2.9.39: Clear reminder icon (show ⏱ instead of ⏰)
-                                if hasattr(card, 'update_reminder_state'):
-                                    try:
-                                        card.update_reminder_state(False)
-                                    except Exception as e:
-                                        log.debug(f"[Dismiss] Failed to update reminder state: {e}")
-                            # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
-                            self._request_ui_refresh()
-
-                    elif action == "open_note":
-                        # v2.9.17: Fail-safe 'open_note' with exception isolation (no silent crashes!)
-                        note_id = cmd.get("note_id")
-                        if note_id:
-                            import time
-
-                            # STEP 1: CRITICAL DB COMMIT FIRST — must succeed to prevent alarm re-trigger
-                            try:
-                                from src.core.database import update_note
-                                update_note(note_id, reminder_triggered=True)
-                                # Set debounce timestamp for scheduler grace period
-                                self._last_action_timestamp = time.time()
-                                log.info(f"[v2.9.17] DB committed for note {note_id}, debounce active")
-                            except Exception as e:
-                                log.error(f"[v2.9.17] CRITICAL: DB commit failed for {note_id}: {e}")
-                                # Continue anyway — UI operations might still work
-
-                            # STEP 2: Stop alarm audio (isolated try-except)
-                            try:
-                                from src.services.notification_queue import get_notification_queue
-                                queue = get_notification_queue()
-                                if queue:
-                                    queue.stop_alarm()
-                            except Exception as e:
-                                log.debug(f"[v2.9.17] Audio stop failed (non-critical): {e}")
-
-                            # STEP 3: Refresh UI — isolated try-except
-                            try:
-                                # v2.9.22: Use debounced refresh to prevent Tkinter freeze
-                                self._request_ui_refresh()
-                                log.debug(f"[v2.9.17] UI refresh requested (debounced)")
-                            except Exception as e:
-                                log.debug(f"[v2.9.17] UI refresh failed (non-critical): {e}")
-
-                            # STEP 4: Force window to foreground — isolated try-except
-                            try:
-                                self._force_window_to_foreground_v2916()
-                                log.debug(f"[v2.9.17] Window brought to foreground")
-                            except Exception as e:
-                                log.debug(f"[v2.9.17] Window activation failed (non-critical): {e}")
-
-                            # STEP 5: Scroll to note — isolated try-except (use fresh DB fetch)
-                            try:
-                                from src.core.database import get_note
-                                note_data = get_note(note_id)
-                                if note_data:
-                                    self._scroll_to_note_by_id(note_id)
-                                    log.debug(f"[v2.9.17] Scrolled to note {note_id}")
-                            except Exception as e:
-                                log.debug(f"[v2.9.17] Scroll to note failed (non-critical): {e}")
-
-                            # STEP 6: Open note content — isolated try-except (use fresh DB fetch)
-                            try:
-                                from src.core.database import get_note
-                                from src.core.models import Note
-                                note_data = get_note(note_id)
-                                if note_data:
-                                    note_obj = Note.from_dict(note_data)
-                                    self._on_note_reminder_open(note_obj)
-                                    log.debug(f"[v2.9.17] Opened note content for {note_id}")
-                            except Exception as e:
-                                log.debug(f"[v2.9.17] Note open failed (non-critical): {e}")
-
-                    elif action == "snooze_note":
-                        # v2.9.14: Main thread reschedules reminder
-                        # v2.9.26: Use custom snooze duration from settings (default 5 minutes)
-                        # v2.9.38: Clear alarm highlight when snoozed
-                        note_id = cmd.get("note_id")
-                        if note_id:
-                            from src.core.database import update_note
-                            from datetime import datetime, timedelta
-                            # Get snooze duration from settings (default 5 if not set)
-                            snooze_mins = 5
-                            if self.settings:
-                                snooze_mins = self.settings.get("snooze_duration_minutes", 5) if hasattr(self.settings, 'get') else 5
-                            new_reminder = (datetime.now() + timedelta(minutes=snooze_mins)).strftime("%Y-%m-%d %H:%M")
-                            # v2.9.15: update_note() commits synchronously
-                            update_note(note_id, reminder_datetime=new_reminder, reminder_triggered=False)
-                            # v2.9.16: Set debounce timestamp to prevent alarm re-trigger
-                            import time
-                            self._last_action_timestamp = time.time()
-                            # v2.9.38: Clear alarm highlight when snoozed
-                            if note_id in self.note_cards:
-                                card = self.note_cards[note_id]
-                                if hasattr(card, 'set_alarm_highlight'):
-                                    try:
-                                        card.set_alarm_highlight(False)
-                                    except Exception as e:
-                                        log.debug(f"[Snooze] Failed to clear alarm highlight: {e}")
-                            # v2.9.22: Use debounced UI refresh instead of immediate _load_notes
-                            self._request_ui_refresh()
-
-                except Exception as e:
-                    log.error(f"[CommandQueue] Failed to process action '{action}': {e}")
-
-        except Exception as e:
-            log.error(f"[CommandQueue] Queue processing error: {e}")
-
-        finally:
-            # v2.9.14: Reschedule queue processor (every 100ms)
-            if self.command_queue:
-                self.root.after(100, self._process_command_queue)
-
-    def _force_window_to_foreground_v2915(self):
-        """v2.9.15: Force window to foreground using native shell-level restore (WM_SYSCOMMAND)
-
-        Previous methods (SetForegroundWindow, ShowWindow) blocked by Windows Focus Lock.
-        Solution: Use PostMessage with WM_SYSCOMMAND + SC_RESTORE (shell-level command).
-        """
-        try:
-            import ctypes
-            import win32gui
-            import win32con
-
-            hwnd = int(self.root.winfo_id())
-
-            # Step 1: Flash taskbar to attract attention
-            FLASHW_ALL = 3
-            ctypes.windll.user32.FlashWindow(hwnd, FLASHW_ALL)
-
-            # Step 2: Send WM_SYSCOMMAND with SC_RESTORE (61728 = 0xF120)
-            # This is at shell level, not blocked by Focus Lock
-            win32gui.PostMessage(hwnd, win32con.WM_SYSCOMMAND, win32con.SC_RESTORE, 0)
-
-            # Step 3: Bring to front with Tkinter fallback
-            self.root.deiconify()
-            self.root.state('normal')
-            self.root.lift()
-            self.root.focus_force()
-
-            log.info("[v2.9.15] Window restored using WM_SYSCOMMAND (shell-level)")
-        except Exception as e:
-            log.warning(f"[v2.9.15] Failed to force window to foreground: {e}")
-            # Fallback: basic Tkinter operations
-            try:
-                self.root.deiconify()
-                self.root.lift()
-                self.root.focus_force()
-            except Exception:
-                pass
-
-    def _force_window_to_foreground_v2916(self):
-        """v2.9.16: Force window to foreground using PyWinCtl (modern OS-level API)
-
-        PyWinCtl uses modern OS automation APIs that properly handle Windows Focus Lock.
-        Bypasses all traditional Win32 restrictions by using system-level window activation.
-        """
-        try:
-            import pywinctl as pwc
-
-            # Get all windows and find this app's window
-            app_title = "QuickNote"
-            windows = pwc.getWindowsWithTitle(app_title)
-
-            if windows:
-                win = windows[0]
-                # PyWinCtl .activate() properly handles Focus Lock
-                win.activate()
-                log.info("[v2.9.16] Window activated using PyWinCtl (OS-level API)")
-                return
-            else:
-                # Fallback to v2915 if PyWinCtl doesn't find window
-                log.warning("[v2.9.16] PyWinCtl didn't find window, falling back to v2915")
-                self._force_window_to_foreground_v2915()
-        except ImportError:
-            log.warning("[v2.9.16] PyWinCtl not available, falling back to v2915")
-            self._force_window_to_foreground_v2915()
-        except Exception as e:
-            log.warning(f"[v2.9.16] Failed to activate window with PyWinCtl: {e}")
-            self._force_window_to_foreground_v2915()
-
-    def _check_reminders(self):
-        """v2.2.3: Unbreakable reminder scheduler with visual debug (next reminder display)
-        v2.5.8: Check if scheduler is paused (dialog open) — if so, skip but reschedule anyway
-        v2.9.16: Debounce period (5s) after Open/Dismiss to prevent alarm re-trigger during DB commit"""
-        try:
-            from datetime import datetime
-            from src.core.database import get_next_due_reminder
-            import time
-
-            # v2.5.8: Skip checking reminders if scheduler is paused (dialog open)
-            # Still reschedule to keep loop alive
-            if not getattr(self, '_scheduler_enabled', True):
-                # Scheduler is paused, just reschedule and return
-                self.root.after(5000, self._check_reminders)
-                return
-
-            # v2.9.16: Debounce check — skip reminder checks for 5 seconds after Open/Dismiss/Snooze
-            # This gives DB commit time to complete before next scheduler cycle
-            if hasattr(self, '_last_action_timestamp') and self._last_action_timestamp > 0:
-                time_since_action = time.time() - self._last_action_timestamp
-                if time_since_action < 5.0:  # 5 second grace period
-                    log.debug(f"[v2.9.16] Debounce active ({time_since_action:.1f}s < 5s), skipping reminder check")
-                    self.root.after(5000, self._check_reminders)
-                    return
-
-            # Update heartbeat indicator with next due reminder (v2.2.3)
-            # v2.6.2: Shorten date format to time-only to prevent footer clipping
-            try:
-                timestamp = datetime.now().strftime("%H:%M:%S")
-                next_reminder = get_next_due_reminder()
-                # Extract time-only part (HH:MM) from next_reminder if available
-                if next_reminder:
-                    # Format: "YYYY-MM-DD HH:MM" — extract just "HH:MM"
-                    next_text = next_reminder.split()[-1] if " " in next_reminder else next_reminder
-                else:
-                    next_text = "None"
-                self.heartbeat_label.config(
-                    text=f"● Scheduler: {timestamp} | Next: {next_text}"
-                )
-            except Exception:
-                pass  # Silently fail heartbeat update
-
-            # Get all notes and check reminders
-            try:
-                all_notes = get_all_notes()
-            except Exception:
-                all_notes = []
-
-            # Use string comparison for reliability (ISO format: YYYY-MM-DD HH:MM)
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-            for note_data in all_notes:
-                try:
-                    # Skip if no reminder set
-                    if not note_data.get("reminder_datetime"):
-                        continue
-
-                    # Skip if already triggered
-                    if note_data.get("reminder_triggered"):
-                        continue
-
-                    # Get reminder time string (should be ISO format)
-                    reminder_str = note_data.get("reminder_datetime", "")
-                    if not reminder_str:
-                        continue
-
-                    # v2.9.8: Startup Alarm Storm Prevention
-                    # If reminder is way in the past (>1 hour old), auto-dismiss it
-                    # This prevents alarm flooding when reopening app after crash/close
-                    try:
-                        reminder_dt = datetime.strptime(reminder_str, "%Y-%m-%d %H:%M")
-                        now_dt = datetime.now()
-                        time_diff = (now_dt - reminder_dt).total_seconds()
-
-                        # If reminder is more than 1 hour old, mark as triggered without alarming
-                        if time_diff > 3600:  # 3600 seconds = 1 hour
-                            try:
-                                update_note(note_data["id"], reminder_triggered=True)
-                            except Exception:
-                                pass
-                            continue
-                    except Exception:
-                        # If time parsing fails, just proceed with normal logic
-                        pass
-
-                    # Safe string comparison: "2026-08-20 14:30" <= "2026-08-20 14:35"
-                    # This avoids datetime parsing exceptions entirely
-                    if reminder_str <= now_str:
-                        # v2.6.0: Trigger reminder notification (non-blocking via after_idle)
-                        # _trigger_reminder now handles DB update safely without blocking
-                        try:
-                            self._trigger_reminder(note_data)
-                        except Exception:
-                            pass  # Silently fail on notification error
-
-                except Exception:
-                    # Silently skip this note on any error
-                    pass
-
-        except Exception:
-            # Catch-all for any unexpected exception
-            pass
-
-        finally:
-            # v2.1.1: GUARANTEED to reschedule, unbreakable loop
-            # This ensures scheduler never dies, even on catastrophic failure
-            self.root.after(5000, self._check_reminders)
-
-    def _trigger_reminder(self, note_data: dict):
-        """v2.8.1: Windows native notification (no in-app GUI, zero freeze risk)
-        Use OS native toast notifications to Action Center — non-blocking, no Tkinter involvement"""
-        try:
-            # Convert note_data dict to Note object
-            from src.core.models import Note
-            note_obj = Note.from_dict(note_data)
-
-            # v2.9.25: CRITICAL — Immediately clamp alarm state to prevent repeat triggers
-            # This MUST happen BEFORE showing any UI/dialog to prevent scheduler loop from firing same alarm again
-            # Step 1: Lock alarm by setting reminder_triggered = 1 in database immediately
-            try:
-                update_note(note_data["id"], reminder_triggered=True)
-                log.info(f"[v2.9.25] Alarm state clamped: reminder_triggered=1 for {note_data['id']}")
-            except Exception as e:
-                log.warning(f"[v2.9.25] Failed to clamp alarm state: {e}")
-
-            # v2.9.24: IMMEDIATE UI REFRESH — refresh board BEFORE showing dialog
-            # This ensures task moves to Index 0 and red border shows immediately
-            try:
-                self._load_notes()
-            except Exception:
-                pass  # Silently fail if refresh doesn't work
-
-            # v2.9.39: REPACK CARD TO TOP — Move triggered note to Index 0 for maximum visibility
-            try:
-                self.repack_card_to_top(note_data["id"])
-            except Exception as e:
-                log.debug(f"[v2.9.39] Failed to repack card to top: {e}")
-
-            # v2.9.8: Show custom dialog with full button support (thread-safe routing)
-            # This completely avoids GUI freeze by using OS notification system
-            def show_native_notification():
-                try:
-                    from src.services.notification import get_notification_service
-                    service = get_notification_service()
-
-                    # v2.9.13: Store note_id on root for dialog to access
-                    # This allows dialog callbacks to use synchronous DB commit
-                    self.root._current_reminder_note_id = note_data["id"]
-
-                    # v2.9.14: Callback for [Open] button — put command in queue for main thread
-                    # Background thread sends command; main thread executes it
-                    def on_notification_click():
-                        try:
-                            if self.command_queue:
-                                self.command_queue.put({
-                                    "action": "open_note",
-                                    "note_id": note_data["id"]
-                                })
-                        except Exception:
-                            pass
-
-                    # v2.9.14: Callback for [Dismiss] button — put command in queue for main thread
-                    def on_dismiss():
-                        try:
-                            if self.command_queue:
-                                self.command_queue.put({
-                                    "action": "dismiss_note",
-                                    "note_id": note_data["id"]
-                                })
-                        except Exception:
-                            pass
-
-                    # v2.9.14: Callback for [Snooze 5m] button — put command in queue for main thread
-                    def on_snooze():
-                        try:
-                            if self.command_queue:
-                                self.command_queue.put({
-                                    "action": "snooze_note",
-                                    "note_id": note_data["id"]
-                                })
-                        except Exception:
-                            pass
-
-                    # v2.9.8: Callback to stop alarm sound (placeholder for audio player integration)
-                    def stop_alarm():
-                        try:
-                            # If audio player exists, stop it
-                            pass
-                        except Exception:
-                            pass
-
-                    # v2.9.26: Get custom snooze duration from settings
-                    snooze_mins = 5  # Default
-                    if self.settings:
-                        snooze_mins = self.settings.get("snooze_duration_minutes", 5) if hasattr(self.settings, 'get') else 5
-
-                    # Show Windows native toast notification with dialog + callbacks
-                    service.show_reminder_notification(
-                        note_title=note_obj.title[:50],
-                        note_content=note_obj.content[:100] if note_obj.content else "Reminder triggered",
-                        on_click=on_notification_click,
-                        on_dismiss=on_dismiss,
-                        on_snooze=on_snooze,
-                        stop_alarm=stop_alarm,
-                        parent_root=self.root,  # v2.9.8: Thread-safe dialog routing
-                        duration=8,
-                        snooze_duration_minutes=snooze_mins  # v2.9.26
-                    )
-
-                    # Also play notification sound
-                    service.play_notification_sound()
-
-                    # v2.9.24: Board already refreshed immediately before dialog showed
-                    # No need to refresh again here
-                except Exception:
-                    pass  # Silently fail to avoid blocking UI
-
-            # v2.9.29: CRITICAL FIX — Run notification on main thread via after()
-            # NOT in daemon thread! Tkinter is single-threaded; daemon threads cause deadlock with grab_set()
-            # root.after(0, ...) ensures notification runs on main thread after current event completes
-            self.root.after(0, show_native_notification)
-
-        except Exception:
-            pass  # Silently fail to avoid blocking UI
-
-    def _show_toast_banner(self, note):
-        """v2.8.1: DEPRECATED — Use Windows native notifications instead
-        This method is kept for backwards compatibility but does nothing"""
-        pass  # No-op: Native Windows notifications used instead
-
-    def _hide_toast_banner(self):
-        """v2.8.1: DEPRECATED — Use Windows native notifications instead
-        This method is kept for backwards compatibility but does nothing"""
-        pass  # No-op: Native Windows notifications used instead
-
-    def _dismiss_and_open_note(self, note):
-        """v2.8.1: DEPRECATED — Use Windows native notification click handler instead
-        This method is kept for backwards compatibility but does nothing"""
-        pass  # No-op: Native notification click handler used instead
-
-    def _play_notification_alert(self):
-        """v2.7.2: Play soft Ding-Dong audio alert (softer than notification, non-jarring)"""
-        try:
-            import winsound
-            # Primary: Use MailBeep for soft Ding-Dong tone (friendly, not harsh)
-            try:
-                winsound.PlaySound("MailBeep", winsound.SND_ALIAS | winsound.SND_ASYNC)
-            except Exception:
-                # Fallback 1: System notification sound
-                try:
-                    winsound.PlaySound("SystemNotification", winsound.SND_ALIAS | winsound.SND_ASYNC)
-                except Exception:
-                    # Fallback 2: Generic beep
-                    winsound.MessageBeep(winsound.MB_OK)
-        except Exception:
-            pass
-
-    def _on_note_reminder_open(self, note):
-        """v2.7.0: Callback when 'Open Note' clicked from reminder notification
-        Opens note and clears reminder state (stops icon from showing reminder is set)"""
-        try:
-            # v2.7.0: Clear reminder state when opening from notification
-            # This resets the reminder_datetime and reminder_triggered flags
-            # So the clock icon shows as "not set" instead of "already triggered"
-            try:
-                update_note(note.id, reminder_datetime=None, reminder_triggered=False)
-            except Exception:
-                pass  # Silently fail if DB update doesn't work
-
-            # Refresh the note card to show cleared reminder state
-            try:
-                self._load_notes()
-            except Exception:
-                pass
-
-            # Scroll to note in the view
-            self._show_note_in_view(note)
-        except Exception:
-            pass
-
-    def _highlight_and_scroll_to_note(self, note):
-        """v2.9.13: Highlight the note task and auto-scroll canvas to show it
-
-        After Open button is clicked and main window is brought to foreground,
-        scroll canvas to top and highlight the opened note for visual feedback.
-        """
-        try:
-            # Auto-scroll canvas to top to show the task
-            if hasattr(self, 'canvas'):
-                self.canvas.yview_moveto(0.0)
-
-            # Find and highlight the note card (if it exists)
-            if hasattr(self, 'note_cards') and note.id in self.note_cards:
-                card = self.note_cards[note.id]
-                # Briefly highlight the card with a flash effect (optional)
-                try:
-                    original_bg = card.cget("bg")
-                    # Flash the card background to highlight it
-                    card.config(bg="#FFFACD")  # Light yellow highlight
-                    self.root.after(200, lambda: card.config(bg=original_bg))
-                except Exception:
-                    pass
-
-        except Exception as e:
-            pass  # Silently fail
-
-    def _scroll_to_note_by_id(self, note_id):
-        """v2.9.17: Scroll canvas to show note by ID (fail-safe, no external object required)
-
-        Simpler version that only takes note_id and scrolls to it.
-        No dependency on note object — fresh lookup from UI state.
-        """
-        try:
-            # Auto-scroll canvas to top to show the opened task
-            if hasattr(self, 'canvas'):
-                self.canvas.yview_moveto(0.0)
-                log.debug(f"[v2.9.17] Scrolled canvas to top for note {note_id}")
-
-            # Find and highlight the note card by ID
-            if hasattr(self, 'note_cards') and note_id in self.note_cards:
-                card = self.note_cards[note_id]
-                try:
-                    original_bg = card.cget("bg")
-                    # Flash the card background to highlight it
-                    card.config(bg="#FFFACD")  # Light yellow highlight
-                    self.root.after(200, lambda: card.config(bg=original_bg))
-                    log.debug(f"[v2.9.17] Highlighted note card {note_id}")
-                except Exception:
-                    pass
-        except Exception as e:
-            log.debug(f"[v2.9.17] Scroll to note by ID failed: {e}")
-
-    def _check_notification_queue(self):
-        """v2.8.1: Check notification queue and display custom overlay toasts
-
-        v2.8.1 Critical Fix:
-        - Keep references to toasts to prevent GC from destroying Toplevel windows
-        - Re-render board after notification to move triggered tasks to top
-        """
-        try:
-            # Clean up closed toasts (those that were destroyed)
-            self.active_toasts = [t for t in self.active_toasts if t.toast_window and t.toast_window.winfo_exists()]
-
-            # Process all queued notifications (can be multiple)
-            notification_queue = get_notification_queue()
-            notifications_shown = False
-
-            while not notification_queue.is_empty():
-                msg = notification_queue.get_next_notification()
-                if msg:
-                    try:
-                        # Create custom overlay notification
-                        def on_open_callback():
-                            # Clear reminder from DB
-                            try:
-                                update_note(msg.note_id, clear_reminder=True)
-                            except Exception:
-                                pass
-                            # Bring main window to front and highlight the note
-                            self._on_open_note_from_notification(msg.note_id)
-
-                        # v2.9.0: Create toast with snooze support and keep reference (prevent GC)
-                        toast = CustomToastNotification(
-                            self.root,
-                            title=msg.title,
-                            message=msg.content,
-                            on_open=on_open_callback,
-                            on_dismiss=None,
-                            note_id=msg.note_id,  # v2.9.0: Enable snooze feature
-                            board=self  # v2.9.0: Allow re-render after snooze
-                        )
-                        self.active_toasts.append(toast)  # v2.8.1: Keep reference
-                        notifications_shown = True
-                    except Exception:
-                        pass  # Silently fail to avoid blocking UI
-
-            # v2.8.1: Re-render board to move triggered tasks to top (dynamic sorting)
-            if notifications_shown:
-                try:
-                    self._load_notes()
-                except Exception:
-                    pass
-
-        except Exception:
-            pass  # Silently fail
-
-        finally:
-            # Reschedule to check queue again in 500ms
-            self.root.after(500, self._check_notification_queue)
-
-    def _on_new_notification_event(self):
-        """v2.9.3: Event-based handler for immediate notification processing (thread-safe)"""
-        try:
-            # Force main window to foreground
-            self._force_main_window_foreground()
-            # Process queue immediately
-            self._check_notification_queue()
-        except Exception:
-            pass
-
-    def _force_main_window_foreground(self):
-        """v2.9.4: Bring main window to foreground using multiple strategies
-
-        Strategy 1: Win32 API SetForegroundWindow (requires active window)
-        Strategy 2: Tkinter lift() + topmost + focus_force()
-        Strategy 3: Show system tray notification to guide user
-        """
-        try:
-            if self.root.winfo_exists():
-                # Ensure window is visible and not minimized
-                self.root.deiconify()
-                self.root.state('normal')
-
-                # Strategy 1: Try Win32 SetForegroundWindow (most reliable on Windows)
-                try:
-                    import ctypes
-                    hwnd = int(self.root.winfo_id())
-                    ctypes.windll.user32.SetForegroundWindow(hwnd)
-                    log.info("[Board] SetForegroundWindow called successfully")
-                except Exception as e:
-                    log.debug(f"[Board] SetForegroundWindow failed: {e}")
-
-                # Strategy 2: Tkinter window management (backup)
-                self.root.attributes('-topmost', True)
-                self.root.lift()
-                self.root.focus_force()
-
-                # Release topmost after 1 second (allow user to use other apps)
-                self.root.after(1000, lambda: self.root.attributes('-topmost', False) if self.root.winfo_exists() else None)
-
-                log.info("[Board] Main window brought to foreground")
-        except Exception as e:
-            log.warning(f"[Board] Failed to bring main window to foreground: {e}")
-
-    def _on_open_note_from_notification(self, note_id: str):
-        """Open note when user clicks [Open] on custom notification"""
-        try:
-            # Reload notes to update UI
             self._load_notes()
-            # Find and highlight the note card
-            if note_id in self.note_cards:
-                self.note_cards[note_id]._show_content()
+
+    def _undo_status(self, note_id: str, status: str) -> None:
+        db.set_status(note_id, status)
+        self._load_notes()
+
+    def _on_pin(self, note_id: str, pinned: bool) -> None:
+        db.update_fields(note_id, is_pinned=pinned)
+        self._load_notes()
+
+    def _on_priority(self, note_id: str, priority: str) -> None:
+        db.update_fields(note_id, priority=priority)
+        self._load_notes()
+
+    def _on_color(self, note_id: str, color: str) -> None:
+        db.update_fields(note_id, color=color)
+        self._load_notes()
+
+    def _on_delete(self, note_id: str) -> None:
+        card = self.note_cards.get(note_id)
+        if card is not None:
+            card.flush_pending()  # ให้ Undo คืนโน้ตพร้อมข้อความล่าสุด
+        # แถบเก่าที่ค้างอยู่ต้องจบ (purge) "ก่อน" soft_delete ใบนี้ ไม่งั้น purge_deleted จะลบใบนี้ทิ้งไปด้วย
+        self.undo_bar.flush()
+        db.soft_delete(note_id)
+        self.toasts.close_for(note_id)
+        # H11: ซ่อนทันที + Undo 5 วินาที แล้วค่อยลบจริง
+        self.undo_bar.show(t("undo.deleted"), on_undo=lambda: self._undo_delete(note_id),
+                           on_expire=db.purge_deleted)
+        self._load_notes()
+
+    def _undo_delete(self, note_id: str) -> None:
+        db.undo_delete(note_id)
+        self._load_notes()
+
+    def _on_clear_reminder(self, note_id: str) -> None:
+        db.set_reminder(note_id, None)
+        self.toasts.close_for(note_id)
+        self._load_notes()
+
+    def _delete_all_completed(self) -> None:
+        n = self._count_cache.get("completed", 0)
+        if n and messagebox.askyesno(t("dialog.delete_completed.title"),
+                                     t("dialog.delete_completed.body", n=n), parent=self.root):
+            db.delete_all_completed()
+            self._load_notes()
+
+    # ================================================================ quick add
+    def _quick_add(self, expand: bool):
+        title = self._qa.get_value().strip()
+        if not title or self._tab != "active":
+            return "break"  # ช่องว่าง + Enter = ไม่ทำอะไร
+        if expand:
+            prev = self._expanded_card()
+            if prev is not None:
+                prev.collapse()
+        try:
+            note_id = db.create_note(title, collapsed=not expand)
         except Exception:
+            log.exception("cannot create note")
+            return "break"
+        self._qa.clear()
+        if self._query():
+            self._clear_search()  # โน้ตใหม่ไม่ตรงคำค้นจะถูกซ่อน ผู้ใช้จะนึกว่าไม่ได้สร้าง
+        self._load_notes()
+        self._scroll_into_view(note_id)
+        if expand:
+            card = self.note_cards.get(note_id)
+            if card is not None:
+                card.focus_content()
+        return "break"
+
+    # ================================================================ reminders / alarm flow
+    def _open_reminder(self, note_id: str) -> None:
+        row = db.get_note(note_id)
+        if row is None:
+            return
+        from .reminder_dialog import ReminderDialog  # โหลดตอนใช้ — ไฟล์นี้เขียนโดย module อื่น
+        ReminderDialog(self.root, Note.from_dict(row), self.theme,
+                       lambda when, repeat: self._on_reminder_saved(note_id, when, repeat))
+
+    def _on_reminder_saved(self, note_id: str, when: str | None, repeat: str) -> None:
+        if when is None:
+            db.set_reminder(note_id, None)
+            self.toasts.close_for(note_id)
+        else:
+            db.set_reminder(note_id, when, repeat)
+        self._load_notes()
+        self.scheduler.check_now()  # เวลาที่ผ่านไปแล้ว = ดังทันที (spec 5)
+
+    def _on_due(self, rows: list[dict]) -> None:
+        self._load_notes()  # การ์ดเปลี่ยนเป็นสถานะดัง + ขึ้นลำดับตาม SQL ก่อนโชว์ toast
+        for row in rows:
+            nid = row["id"]
+            self.toasts.show_reminder(
+                row, on_done=lambda nid=nid: self._alarm_done(nid),
+                on_snooze=lambda when, nid=nid: self._alarm_snooze(nid, when),
+                on_open=lambda nid=nid: self.reveal_note(nid),
+                on_dismiss=lambda nid=nid: self._alarm_dismiss(nid))
+        if rows and self._is_visible():
+            self._scroll_into_view(rows[0]["id"])
+
+    def _on_missed(self, rows: list[dict]) -> None:
+        self._load_notes()
+        self.toasts.show_missed(rows, on_view=self.show)
+
+    def _alarm_done(self, note_id: str) -> None:
+        row = db.get_note(note_id)
+        if row is None:
+            return
+        db.dismiss_reminder(note_id)  # ทำซ้ำ → เลื่อนรอบถัดไป, ครั้งเดียว → ล้าง
+        if (row["reminder_repeat"] or "none") == "none":
+            db.set_status(note_id, "completed")
+        self.toasts.close_for(note_id)
+        self._load_notes()
+
+    def _alarm_snooze(self, note_id: str, when: str) -> None:
+        db.snooze_reminder(note_id, when)
+        self.toasts.close_for(note_id)
+        self._load_notes()
+
+    def _alarm_snooze_default(self, note_id: str) -> None:
+        minutes = int(self.settings.get("snooze_default_minutes", 5))
+        self._alarm_snooze(note_id, format_dt(datetime.now() + timedelta(minutes=minutes)))
+
+    def _alarm_dismiss(self, note_id: str) -> None:
+        db.dismiss_reminder(note_id)
+        self.toasts.close_for(note_id)
+        self._load_notes()
+
+    def reveal_note(self, note_id: str) -> None:
+        """toast "เปิด": แสดงหน้าต่าง + สลับแท็บถ้าจำเป็น + เลื่อน + กางการ์ด"""
+        row = db.get_note(note_id)
+        if row is None or row["deleted_at"]:
+            return
+        self.show()
+        if row["status"] != self._tab:
+            self._select_tab(row["status"])
+        elif self._query():
+            self._clear_search()
+        self._load_notes()
+        if note_id in self.note_cards:
+            self._on_request_expand(note_id)
+            self._scroll_into_view(note_id)
+
+    # ================================================================ status bar
+    def _update_status(self) -> None:
+        try:
+            nxt = db.get_next_reminder()
+        except Exception:
+            nxt = None
+        if not nxt:
+            if self._status_shown:
+                self._status.pack_forget()
+                self._status_shown = False
+            return
+        when, _ = format_reminder(nxt["reminder_datetime"], datetime.now(), strings.get_language())
+        font = self.theme.font("caption")
+        room = max(80, self.root.winfo_width() - px(self.root, 60) - font.measure(t("board.status_next", time=when, title="")))
+        title = ellipsize(nxt["title"] or t("common.untitled"), font, room)
+        self._status_text.configure(text=t("board.status_next", time=when, title=title))
+        if not self._status_shown:
+            self._status.pack(side="bottom", fill="x")
+            self._status_shown = True
+
+    def _on_tick(self) -> None:
+        self.theme.refresh()  # ธีม/accent ของระบบเปลี่ยนระหว่างใช้งาน
+        self._update_status()
+
+    # ================================================================ settings window
+    def open_settings(self) -> None:
+        if self._settings_win is not None:
+            try:
+                self._settings_win.lift()
+                return
+            except tk.TclError:
+                self._settings_win = None
+        from .settings_window import SettingsWindow, make_default_actions
+        actions = make_default_actions(self.root, on_restored=self.rebuild)
+        self._settings_win = SettingsWindow(self.root, self.settings, self.theme, actions,
+                                            on_close=self._settings_closed)
+
+    def _settings_closed(self) -> None:
+        self._settings_win = None
+
+    def _on_topmost_toggle(self, state: bool) -> None:
+        self.settings.set("always_on_top", bool(state))
+
+    # ================================================================ live settings / theme
+    def _on_setting(self, key: str, value) -> None:
+        try:
+            if not self.root.winfo_exists():
+                return
+            if key == "alpha":
+                self.root.attributes("-alpha", float(value))
+            elif key == "always_on_top":
+                self._apply_topmost()
+                self._tb_topmost.set_active(bool(value))
+            elif key == "compact":
+                for card in self.note_cards.values():
+                    card.set_compact(bool(value))
+            elif key == "language":
+                self._on_language_changed(str(value))
+            elif key == "snooze_default_minutes":
+                for card in self.note_cards.values():
+                    card.refresh_from(card.note)
+        except tk.TclError:
             pass
 
-    def _on_settings_saved(self):
-        """Called when settings are saved — refresh UI (theme/alpha changes)"""
-        try:
-            if self.settings:
-                # Get settings dict (handle both dict and Settings object)
-                settings_dict = self.settings if isinstance(self.settings, dict) else (
-                    self.settings.data if hasattr(self.settings, 'data') else {}
-                )
+    def _on_language_changed(self, lang: str) -> None:
+        strings.set_language(lang)
+        self.flush_all_cards()
+        self._search.set_placeholder(t("board.search_placeholder"))
+        self._qa.set_placeholder(t("board.quick_add_placeholder"))
+        self.root.title(t("board.window_title"))
+        self.rebuild()
 
-                # Handle opacity change
-                new_alpha = settings_dict.get("alpha", 1.0)
-                try:
-                    new_alpha = float(new_alpha)
-                    new_alpha = max(0.2, min(1.0, new_alpha))
-                    self.root.attributes("-alpha", new_alpha)
-                    self.root.update_idletasks()
-                    print(f"[UI] Applied opacity: {new_alpha:.0%}")
-                except Exception as e:
-                    print(f"[WARN] Failed to apply opacity: {e}")
-
-                # Handle theme change — always refresh to ensure colors sync
-                new_theme_mode = settings_dict.get("theme", "light")
-                print(f"[UI] Setting theme to {new_theme_mode}...")
-                self.theme.set_mode(new_theme_mode)
-                self._refresh_ui_colors()
-                print("[OK] UI colors refreshed")
-
-        except Exception as e:
-            print(f"[WARN] Failed to refresh UI: {e}")
-
-    def _refresh_ui_colors(self):
-        """Refresh all UI widget colors based on current theme"""
-        try:
-            # Refresh main window background
-            self.root.config(bg=self.theme.c("bg"))
-            self.body_frame.config(bg=self.theme.c("bg"))
-            self.canvas.config(bg=self.theme.c("note_bg"), highlightthickness=0)
-            self.inner_frame.config(bg=self.theme.c("note_bg"))
-            self.scrollbar.config(bg=self.theme.c("bg"), troughcolor=self.theme.c("bg"))
-            self.empty_state_label.config(
-                bg=self.theme.c("note_bg"),
-                fg=self.theme.c("fg_muted"),
-                font=("Segoe UI", 11)
-            )
-
-            # Refresh titlebar colors
-            if hasattr(self, 'titlebar') and self.titlebar:
-                self.titlebar.root.config(bg=self.theme.c("bg"))
-                # Refresh titlebar filter buttons
-                try:
-                    for btn in [self.titlebar.btn_active, self.titlebar.btn_completed]:
-                        if btn:
-                            btn.config(bg=self.theme.c("bg"), fg=self.theme.c("fg"))
-                except Exception:
-                    pass
-
-            # Refresh footer colors
-            if hasattr(self, 'footer_frame') and self.footer_frame:
-                self.footer_frame.config(bg=self.theme.c("bg"))
-                if hasattr(self, 'footer_label'):
-                    self.footer_label.config(bg=self.theme.c("bg"), fg=self.theme.c("fg_muted"))
-                if hasattr(self, 'btn_settings'):
-                    self.btn_settings.config(bg=self.theme.c("bg"), fg=self.theme.c("fg"),
-                                           activebackground=self.theme.c("bg_hover"))
-
-            # Refresh ALL note cards — this is critical for theme change!
-            print(f"[UI] Updating {len(self.note_cards)} note cards...")
-            for card_id, card in self.note_cards.items():
-                try:
-                    # Update card widget colors
-                    card.config(bg=self.theme.c("bg"))
-                    # Update card internal structure (if has update_theme method)
-                    if hasattr(card, 'update_theme'):
-                        card.update_theme(self.theme)
-                    # Fallback: manually update key card elements
-                    else:
-                        # Update main frame
-                        if hasattr(card, 'main_frame'):
-                            card.main_frame.config(bg=self.theme.c("note_bg"))
-                        # Update header elements
-                        if hasattr(card, 'title_entry'):
-                            card.title_entry.config(bg=self.theme.c("note_bg"), fg=self.theme.c("fg"))
-                        if hasattr(card, 'content_text'):
-                            card.content_text.config(bg=self.theme.c("note_bg"), fg=self.theme.c("fg"))
-                except Exception as card_err:
-                    print(f"[WARN] Failed to update card {card_id}: {card_err}")
-
-            # Force UI redraw with new colors
-            self.root.update_idletasks()
-            self.root.update()
-            print("[OK] All UI colors refreshed successfully")
-
-        except Exception as e:
-            print(f"[ERROR] Failed to refresh colors: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def add_note_card(self, widget: tk.Widget) -> None:
-        """เพิ่ม note card ลงใน inner frame (legacy method)"""
-        widget.pack(fill="x", padx=4, pady=4)
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def mainloop(self):
-        """รัน event loop"""
-        self.root.mainloop()
-
-    def destroy(self):
-        """ปิดหน้าต่าง"""
-        self.root.quit()
+    def _on_theme(self) -> None:
+        th = self.theme
+        for widget, opts in self._tracked:
+            try:
+                widget.configure(**{k: th.c(v) for k, v in opts.items()})
+            except tk.TclError:
+                pass
+        self._paint_tabs()
+        for card in self.note_cards.values():
+            card.apply_theme()
+        self.theme.apply_window(self.root)
