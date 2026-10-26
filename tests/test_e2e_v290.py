@@ -3,6 +3,27 @@ Tests: Snooze 5m button + Toast Topmost Lock
 Must pass 100% before release
 """
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import sys
 import time
 from pathlib import Path

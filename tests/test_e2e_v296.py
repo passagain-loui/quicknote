@@ -1,8 +1,30 @@
 """E2E Test Suite for v2.9.6 — Auto-Scroll + Win32 MessageBox (Nuclear Option)"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
+import tempfile
 import time
 
 # Add src to path
@@ -19,7 +41,8 @@ class TestWin32MessageBoxServiceV296(unittest.TestCase):
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
         self.mb_service = Win32MessageBoxService()
 
@@ -74,12 +97,22 @@ class TestWin32MessageBoxServiceV296(unittest.TestCase):
         print("✓ Test 5: Global MessageBox service instance works")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestNotificationIntegrationV296(unittest.TestCase):
     """Test notification service integration with Win32 MessageBox (v2.9.6)"""
 
     def setUp(self):
         """Initialize"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
         self.notification_service = get_notification_service()
 
@@ -107,10 +140,19 @@ class TestNotificationIntegrationV296(unittest.TestCase):
 
     def test_version_v296(self):
         """Test 8: Version updated to v2.9.6"""
-        self.assertEqual(APP_VERSION, "2.9.6")
+        self.assertGreaterEqual(tuple(int(x) for x in APP_VERSION.split('.')), (2, 9, 6))  # v2.9.45: tolerate future versions
         print(f"✓ Test 8: App version is {APP_VERSION}")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestAutoScrollV296(unittest.TestCase):
     """Test auto-scroll to top feature (v2.9.6)"""
 

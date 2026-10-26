@@ -1,8 +1,30 @@
 """E2E Test Suite for v2.9.15 — Native Shell-Level Restore (WM_SYSCOMMAND + FlashWindow)"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
+import tempfile
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -16,7 +38,8 @@ class TestShellLevelRestoreV2915(unittest.TestCase):
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_win32_syscommand_constants(self):
@@ -157,6 +180,15 @@ class TestShellLevelRestoreV2915(unittest.TestCase):
         print(f"[PASS] Test 8: App version is {APP_VERSION}")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 def run_all_tests():
     """Run all test suites"""
     loader = unittest.TestLoader()

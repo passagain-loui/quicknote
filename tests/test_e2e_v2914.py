@@ -1,8 +1,30 @@
 """E2E Test Suite for v2.9.14 — Command Queue Pattern + Single-Thread DB Access"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
+import tempfile
 import queue
 
 # Add src to path
@@ -17,7 +39,8 @@ class TestCommandQueuePatternV2914(unittest.TestCase):
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_command_queue_creation(self):
@@ -100,12 +123,22 @@ class TestCommandQueuePatternV2914(unittest.TestCase):
         print("[PASS] Test 5: Multiple commands queued and processed in order")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestMainThreadDBAccessOnlyV2914(unittest.TestCase):
     """Test that ONLY Main Thread can access database (v2.9.14)"""
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_main_thread_updates_db(self):
@@ -192,12 +225,22 @@ class TestMainThreadDBAccessOnlyV2914(unittest.TestCase):
         print("[PASS] Test 9: 'snooze_note' command reschedules correctly")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestCrossThreadSafetyV2914(unittest.TestCase):
     """Test cross-thread safety with command queue (v2.9.14)"""
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_notification_thread_does_not_touch_db(self):
@@ -253,6 +296,15 @@ class TestCrossThreadSafetyV2914(unittest.TestCase):
         print(f"[PASS] Test 12: App version is {APP_VERSION}")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 def run_all_tests():
     """Run all test suites"""
     loader = unittest.TestLoader()

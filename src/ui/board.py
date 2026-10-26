@@ -339,6 +339,19 @@ class Board:
 
             # Show window after positioning
             self.root.deiconify()
+
+            # v2.9.45 Smoke-Test Fix: windowed .exe (--noconsole) map guard
+            # Rapid withdraw→geometry→deiconify can lose the map race on Tk 9.0 when running
+            # as a windowed PyInstaller exe (root stays withdrawn despite deiconify).
+            # Re-assert mapping shortly after startup — idempotent, no-op when already mapped.
+            def _ensure_mapped():
+                try:
+                    if self.root.winfo_exists() and not self.root.winfo_ismapped():
+                        self.root.deiconify()
+                except tk.TclError:
+                    pass  # Root destroyed during shutdown — safe to skip
+            self.root.after(150, _ensure_mapped)
+            self.root.after(600, _ensure_mapped)
         except Exception:
             # Fallback: just show the window
             try:

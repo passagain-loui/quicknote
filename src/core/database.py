@@ -85,27 +85,29 @@ def init_db() -> None:
         APP_DIR.mkdir(exist_ok=True)
 
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
+        try:  # v2.9.45: guarantee close on any failure (prevents file-lock leaks)
+            c = conn.cursor()
 
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS notes (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                content TEXT DEFAULT '',
-                status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed')),
-                collapsed BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                completed_at TIMESTAMP,
-                priority TEXT DEFAULT 'none' CHECK(priority IN ('none', 'low', 'medium', 'high')),
-                reminder_datetime TEXT,
-                reminder_triggered BOOLEAN DEFAULT 0,
-                is_pinned BOOLEAN DEFAULT 0,
-                last_dismissed_at TIMESTAMP
-            )
-        """)
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS notes (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    content TEXT DEFAULT '',
+                    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed')),
+                    collapsed BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    priority TEXT DEFAULT 'none' CHECK(priority IN ('none', 'low', 'medium', 'high')),
+                    reminder_datetime TEXT,
+                    reminder_triggered BOOLEAN DEFAULT 0,
+                    is_pinned BOOLEAN DEFAULT 0,
+                    last_dismissed_at TIMESTAMP
+                )
+            """)
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
 
     _migrate_db_schema()  # v1.3.0: ensure old DB gets new columns
     sanitize_reminders()  # v2.2.2: clean corrupted reminder times on startup
@@ -149,74 +151,80 @@ def create_note(title: str, content: str = "") -> str:
     with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent note creation
         note_id = uuid.uuid4().hex
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
+        try:  # v2.9.45: guarantee close on any failure
+            c = conn.cursor()
 
-        c.execute("""
-            INSERT INTO notes (id, title, content, created_at)
-            VALUES (?, ?, ?, ?)
-        """, (note_id, title, content, datetime.now().isoformat()))
+            c.execute("""
+                INSERT INTO notes (id, title, content, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (note_id, title, content, datetime.now().isoformat()))
 
-        conn.commit()
-        conn.close()
-        return note_id
+            conn.commit()
+            return note_id
+        finally:
+            conn.close()
 
 
 def get_all_notes() -> list[dict]:
     """อ่านทุกโน้ต คืนเป็น list of dict"""
     conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+    try:  # v2.9.45: guarantee close on any failure
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
 
-    c.execute("SELECT * FROM notes ORDER BY created_at DESC")
-    notes = [dict(row) for row in c.fetchall()]
+        c.execute("SELECT * FROM notes ORDER BY created_at DESC")
+        notes = [dict(row) for row in c.fetchall()]
 
-    conn.close()
-    return notes
+        return notes
+    finally:
+        conn.close()
 
 
 def get_notes_by_status(status: str) -> list[dict]:
     """อ่านโน้ตตามสถานะ (active/completed) — v2.8.2: Absolute sort by newest triggered reminder"""
     conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+    try:  # v2.9.45: guarantee close on any failure
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
 
-    # v2.9.40: Pin persistence — PINNED NOTES ARE PRIMARY SORT (always appear at top)
-    # v2.9.26: Secondary: Recently triggered alarms with datetime
-    # v2.9.28: Tertiary: Recently dismissed notes stay at top (pinned to top for quick access)
-    # Triggered alarm = reminder_triggered = 1 AND reminder_datetime IS NOT NULL
-    c.execute("""
-        SELECT * FROM notes
-        WHERE status = ?
-        ORDER BY
-                 -- v2.9.40 PRIMARY: PINNED NOTES FIRST (all pinned notes above unpinned)
-                 is_pinned DESC,
-                 -- SECONDARY: Recently triggered alarms with datetime go next
-                 -- v2.9.26: Must check both triggered=1 AND datetime is NOT NULL
-                 CASE
-                   WHEN reminder_triggered = 1 AND reminder_datetime IS NOT NULL
-                   THEN 0  -- Just triggered with datetime: high priority
-                   ELSE 1  -- Not triggered or datetime cleared: lower priority
-                 END,
-                 -- TERTIARY: Recently dismissed notes stay high (pinned to top for quick access)
-                 -- Use last_dismissed_at timestamp (most recent first) for recently dismissed notes
-                 CASE WHEN last_dismissed_at IS NOT NULL THEN 0 ELSE 1 END,
-                 last_dismissed_at DESC,
-                 -- QUATERNARY: by reminder time (soonest first)
-                 reminder_datetime ASC,
-                 -- QUINARY: priority
-                 CASE priority
-                   WHEN 'high' THEN 0
-                   WHEN 'medium' THEN 1
-                   WHEN 'low' THEN 2
-                   ELSE 3
-                 END,
-                 -- FINAL: creation time (newest first)
-                 created_at DESC
-    """, (status,))
-    notes = [dict(row) for row in c.fetchall()]
+        # v2.9.40: Pin persistence — PINNED NOTES ARE PRIMARY SORT (always appear at top)
+        # v2.9.26: Secondary: Recently triggered alarms with datetime
+        # v2.9.28: Tertiary: Recently dismissed notes stay at top (pinned to top for quick access)
+        # Triggered alarm = reminder_triggered = 1 AND reminder_datetime IS NOT NULL
+        c.execute("""
+            SELECT * FROM notes
+            WHERE status = ?
+            ORDER BY
+                     -- v2.9.40 PRIMARY: PINNED NOTES FIRST (all pinned notes above unpinned)
+                     is_pinned DESC,
+                     -- SECONDARY: Recently triggered alarms with datetime go next
+                     -- v2.9.26: Must check both triggered=1 AND datetime is NOT NULL
+                     CASE
+                       WHEN reminder_triggered = 1 AND reminder_datetime IS NOT NULL
+                       THEN 0  -- Just triggered with datetime: high priority
+                       ELSE 1  -- Not triggered or datetime cleared: lower priority
+                     END,
+                     -- TERTIARY: Recently dismissed notes stay high (pinned to top for quick access)
+                     -- Use last_dismissed_at timestamp (most recent first) for recently dismissed notes
+                     CASE WHEN last_dismissed_at IS NOT NULL THEN 0 ELSE 1 END,
+                     last_dismissed_at DESC,
+                     -- QUATERNARY: by reminder time (soonest first)
+                     reminder_datetime ASC,
+                     -- QUINARY: priority
+                     CASE priority
+                       WHEN 'high' THEN 0
+                       WHEN 'medium' THEN 1
+                       WHEN 'low' THEN 2
+                       ELSE 3
+                     END,
+                     -- FINAL: creation time (newest first)
+                     created_at DESC
+        """, (status,))
+        notes = [dict(row) for row in c.fetchall()]
 
-    conn.close()
-    return notes
+        return notes
+    finally:
+        conn.close()
 
 
 def update_note(note_id: str, title: Optional[str] = None,
@@ -231,59 +239,60 @@ def update_note(note_id: str, title: Optional[str] = None,
     """v2.9.36: อัปเดตโน้ต — ส่งแค่ฟิลด์ที่เปลี่ยน (thread-safe with lock)"""
     with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent note updates
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
+        try:  # v2.9.45: guarantee close on any failure
+            c = conn.cursor()
 
-        updates = []
-        params = []
+            updates = []
+            params = []
 
-        if title is not None:
-            updates.append("title = ?")
-            params.append(title)
-        if content is not None:
-            updates.append("content = ?")
-            params.append(content)
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status)
-            if status == "completed":
-                updates.append("completed_at = ?")
+            if title is not None:
+                updates.append("title = ?")
+                params.append(title)
+            if content is not None:
+                updates.append("content = ?")
+                params.append(content)
+            if status is not None:
+                updates.append("status = ?")
+                params.append(status)
+                if status == "completed":
+                    updates.append("completed_at = ?")
+                    params.append(datetime.now().isoformat())
+            if collapsed is not None:
+                updates.append("collapsed = ?")
+                params.append(collapsed)
+            if priority is not None:
+                updates.append("priority = ?")
+                params.append(priority)
+            # v2.8.3: Handle reminder_datetime clearing
+            # v2.9.26: Added clear_reminder_datetime for selective clearing (keeps reminder_triggered state)
+            if clear_reminder:
+                updates.append("reminder_datetime = NULL")
+                updates.append("reminder_triggered = 0")
+            elif clear_reminder_datetime:
+                updates.append("reminder_datetime = NULL")
+            elif reminder_datetime is not None:
+                updates.append("reminder_datetime = ?")
+                params.append(reminder_datetime)
+            if reminder_triggered is not None and not clear_reminder:
+                updates.append("reminder_triggered = ?")
+                params.append(reminder_triggered)
+            if is_pinned is not None:
+                # v1.5.0: Add pinning support
+                updates.append("is_pinned = ?")
+                params.append(is_pinned)
+
+            # v2.9.28: Mark note as recently dismissed (for pinning at top of board)
+            if mark_dismissed:
+                updates.append("last_dismissed_at = ?")
                 params.append(datetime.now().isoformat())
-        if collapsed is not None:
-            updates.append("collapsed = ?")
-            params.append(collapsed)
-        if priority is not None:
-            updates.append("priority = ?")
-            params.append(priority)
-        # v2.8.3: Handle reminder_datetime clearing
-        # v2.9.26: Added clear_reminder_datetime for selective clearing (keeps reminder_triggered state)
-        if clear_reminder:
-            updates.append("reminder_datetime = NULL")
-            updates.append("reminder_triggered = 0")
-        elif clear_reminder_datetime:
-            updates.append("reminder_datetime = NULL")
-        elif reminder_datetime is not None:
-            updates.append("reminder_datetime = ?")
-            params.append(reminder_datetime)
-        if reminder_triggered is not None and not clear_reminder:
-            updates.append("reminder_triggered = ?")
-            params.append(reminder_triggered)
-        if is_pinned is not None:
-            # v1.5.0: Add pinning support
-            updates.append("is_pinned = ?")
-            params.append(is_pinned)
 
-        # v2.9.28: Mark note as recently dismissed (for pinning at top of board)
-        if mark_dismissed:
-            updates.append("last_dismissed_at = ?")
-            params.append(datetime.now().isoformat())
-
-        if updates:
-            params.append(note_id)
-            sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
-            c.execute(sql, params)
-            conn.commit()
-
-        conn.close()
+            if updates:
+                params.append(note_id)
+                sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
+                c.execute(sql, params)
+                conn.commit()
+        finally:
+            conn.close()
 
 
 def update_note_status_only(note_id: str, status: str,
@@ -291,54 +300,59 @@ def update_note_status_only(note_id: str, status: str,
     """v2.9.36: อัปเดตสถานะของโน้ตเท่านั้น (thread-safe with lock)"""
     with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent status updates
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
+        try:  # v2.9.45: guarantee close on any failure
+            c = conn.cursor()
 
-        updates = []
-        params = []
+            updates = []
+            params = []
 
-        # Always update status
-        updates.append("status = ?")
-        params.append(status)
+            # Always update status
+            updates.append("status = ?")
+            params.append(status)
 
-        if status == "completed":
-            updates.append("completed_at = ?")
-            params.append(datetime.now().isoformat())
+            if status == "completed":
+                updates.append("completed_at = ?")
+                params.append(datetime.now().isoformat())
 
-        # Optional: update reminder_triggered
-        if reminder_triggered is not None:
-            updates.append("reminder_triggered = ?")
-            params.append(reminder_triggered)
+            # Optional: update reminder_triggered
+            if reminder_triggered is not None:
+                updates.append("reminder_triggered = ?")
+                params.append(reminder_triggered)
 
-        if updates:
-            params.append(note_id)
-            sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
-            c.execute(sql, params)
-            conn.commit()
-
-        conn.close()
+            if updates:
+                params.append(note_id)
+                sql = "UPDATE notes SET " + ", ".join(updates) + " WHERE id = ?"
+                c.execute(sql, params)
+                conn.commit()
+        finally:
+            conn.close()
 
 
 def delete_note(note_id: str) -> None:
     """v2.9.36: ลบโน้ต (thread-safe with lock)"""
     with DB_WRITE_LOCK:  # v2.9.36: Prevent concurrent note deletion
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
-        c.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-        conn.commit()
-        conn.close()
+        try:  # v2.9.45: guarantee close on any failure
+            c = conn.cursor()
+            c.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def get_note(note_id: str) -> Optional[dict]:
     """อ่านโน้ตเดียว"""
     conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+    try:  # v2.9.45: guarantee close on any failure
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
 
-    c.execute("SELECT * FROM notes WHERE id = ?", (note_id,))
-    row = c.fetchone()
+        c.execute("SELECT * FROM notes WHERE id = ?", (note_id,))
+        row = c.fetchone()
 
-    conn.close()
-    return dict(row) if row else None
+        return dict(row) if row else None
+    finally:
+        conn.close()
 
 
 def get_next_due_reminder() -> Optional[str]:
@@ -354,25 +368,27 @@ def get_next_due_reminder() -> Optional[str]:
     try:
         from datetime import datetime
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
+        try:  # v2.9.45: guarantee close on any failure
+            c = conn.cursor()
 
-        # Get current time in ISO format (YYYY-MM-DD HH:MM)
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            # Get current time in ISO format (YYYY-MM-DD HH:MM)
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Find earliest reminder that's not triggered and in the future
-        c.execute("""
-            SELECT MIN(reminder_datetime) FROM notes
-            WHERE reminder_datetime IS NOT NULL
-            AND reminder_triggered = 0
-            AND reminder_datetime > ?
-        """, (now_str,))
+            # Find earliest reminder that's not triggered and in the future
+            c.execute("""
+                SELECT MIN(reminder_datetime) FROM notes
+                WHERE reminder_datetime IS NOT NULL
+                AND reminder_triggered = 0
+                AND reminder_datetime > ?
+            """, (now_str,))
 
-        result = c.fetchone()
-        conn.close()
+            result = c.fetchone()
 
-        if result and result[0]:
-            return result[0]
-        return None
+            if result and result[0]:
+                return result[0]
+            return None
+        finally:
+            conn.close()
     except Exception:
         return None
 
@@ -388,34 +404,35 @@ def sanitize_reminders() -> None:
     """
     try:
         conn = _get_db_connection()  # v2.9.22: WAL-enabled connection
-        c = conn.cursor()
+        try:  # v2.9.45: guarantee close on any failure
+            c = conn.cursor()
 
-        # Get all reminders
-        c.execute("SELECT id, reminder_datetime FROM notes WHERE reminder_datetime IS NOT NULL")
-        rows = c.fetchall()
+            # Get all reminders
+            c.execute("SELECT id, reminder_datetime FROM notes WHERE reminder_datetime IS NOT NULL")
+            rows = c.fetchall()
 
-        cleaned = 0
-        for row_id, reminder_str in rows:
-            # Validate format: must be exactly "YYYY-MM-DD HH:MM" (16 chars)
-            if not reminder_str or len(str(reminder_str)) != 16:
-                # Invalid length — clear it
-                c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
-                cleaned += 1
-                continue
+            cleaned = 0
+            for row_id, reminder_str in rows:
+                # Validate format: must be exactly "YYYY-MM-DD HH:MM" (16 chars)
+                if not reminder_str or len(str(reminder_str)) != 16:
+                    # Invalid length — clear it
+                    c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
+                    cleaned += 1
+                    continue
 
-            # Validate format: must parse as YYYY-MM-DD HH:MM
-            try:
-                datetime.strptime(str(reminder_str), "%Y-%m-%d %H:%M")
-            except (ValueError, TypeError):
-                # Invalid format — clear it
-                c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
-                cleaned += 1
+                # Validate format: must parse as YYYY-MM-DD HH:MM
+                try:
+                    datetime.strptime(str(reminder_str), "%Y-%m-%d %H:%M")
+                except (ValueError, TypeError):
+                    # Invalid format — clear it
+                    c.execute("UPDATE notes SET reminder_datetime = NULL WHERE id = ?", (row_id,))
+                    cleaned += 1
 
-        if cleaned > 0:
-            conn.commit()
-            print(f"[Sanitize] Cleaned {cleaned} corrupted reminder(s)")
-
-        conn.close()
+            if cleaned > 0:
+                conn.commit()
+                print(f"[Sanitize] Cleaned {cleaned} corrupted reminder(s)")
+        finally:
+            conn.close()
     except Exception as e:
         print(f"[Sanitize Error] {e}")
 

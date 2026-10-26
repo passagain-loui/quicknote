@@ -1,5 +1,26 @@
 """E2E Test Suite for v2.9.37 — UI Action Buttons & Notification Topmost Fix"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
@@ -37,7 +58,7 @@ class TestUIActionButtonsV2937(unittest.TestCase):
         # Check that btn_action is created in __init__
         init_source = inspect.getsource(NoteCard.__init__)
         self.assertIn('btn_action', init_source, "NoteCard should have btn_action attribute")
-        self.assertIn('✔', init_source, "NoteCard should show Complete (✔) for active notes")
+        self.assertIn('✓', init_source, "NoteCard should show Complete (✓) for active notes (v2.9.39 minimalist)")
         self.assertIn('↩', init_source, "NoteCard should show Restore (↩) for completed notes")
 
         print("[PASS] Test 2: NoteCard has action button (Complete ✔ / Restore ↩)")
@@ -55,7 +76,7 @@ class TestUIActionButtonsV2937(unittest.TestCase):
         update_source = inspect.getsource(NoteCard._update_action_button)
         self.assertIn('completed', update_source, "_update_action_button should check note.status == 'completed'")
         self.assertIn('↩', update_source, "_update_action_button should set Restore (↩) for completed notes")
-        self.assertIn('✔', update_source, "_update_action_button should set Complete (✔) for active notes")
+        self.assertIn('✓', update_source, "_update_action_button should set Complete (✓) for active notes (v2.9.39 minimalist)")
 
         print("[PASS] Test 3: NoteCard._update_action_button() correctly handles status changes")
 

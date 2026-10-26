@@ -1,8 +1,30 @@
 """E2E Test Suite for v2.9.8 — Thread-Safe Dialog + Database State Sync + Startup Alarm Storm Prevention"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
+import tempfile
 import time
 from datetime import datetime, timedelta
 
@@ -18,7 +40,8 @@ class TestThreadSafeDialogRoutingV298(unittest.TestCase):
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_notification_service_accepts_parent_root(self):
@@ -37,8 +60,10 @@ class TestThreadSafeDialogRoutingV298(unittest.TestCase):
         from src.ui.unblockable_dialog import UnblockableCustomDialog
         self.assertTrue(hasattr(UnblockableCustomDialog, '_on_dismiss_click'))
         self.assertTrue(hasattr(UnblockableCustomDialog, '_on_snooze_click'))
-        self.assertTrue(hasattr(UnblockableCustomDialog, '_on_open_click'))
-        print("[PASS] Test 2: Custom dialog has callback handlers")
+        # v2.9.18/v2.9.20: dialog delegates to command queue; Open handler removed
+        self.assertFalse(hasattr(UnblockableCustomDialog, '_on_open_click'),
+                         "_on_open_click must stay removed (queue-delegated architecture)")
+        print("[PASS] Test 2: Custom dialog callback handlers verified")
 
     def test_thread_safe_routing_after_zero(self):
         """Test 3: Dialog routing uses root.after(0, ...) pattern"""
@@ -59,12 +84,22 @@ class TestThreadSafeDialogRoutingV298(unittest.TestCase):
         print("[PASS] Test 3: Thread-safe root.after(0, ...) pattern verified")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestDatabaseStateSyncV298(unittest.TestCase):
     """Test database state synchronization on button clicks (v2.9.8)"""
 
     def setUp(self):
         """Initialize database"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_dismiss_button_marks_triggered(self):
@@ -121,12 +156,22 @@ class TestDatabaseStateSyncV298(unittest.TestCase):
         print("[PASS] Test 7: reminder_triggered flag prevents re-triggering")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestStartupAlarmStormPreventionV298(unittest.TestCase):
     """Test startup alarm storm prevention (v2.9.8)"""
 
     def setUp(self):
         """Initialize database"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_old_reminder_auto_dismissed(self):
@@ -159,17 +204,27 @@ class TestStartupAlarmStormPreventionV298(unittest.TestCase):
         print("[PASS] Test 10: Startup alarm storm threshold is 1 hour (3600 seconds)")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestNotificationIntegrationV298(unittest.TestCase):
     """Test notification service integration (v2.9.8)"""
 
     def setUp(self):
         """Initialize"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_version_v298(self):
         """Test 11: Version updated to v2.9.8"""
-        self.assertEqual(APP_VERSION, "2.9.8")
+        self.assertGreaterEqual(tuple(int(x) for x in APP_VERSION.split('.')), (2, 9, 8))  # v2.9.45: tolerate future versions
         print(f"[PASS] Test 11: App version is {APP_VERSION}")
 
     def test_full_notification_flow(self):
@@ -191,6 +246,15 @@ class TestNotificationIntegrationV298(unittest.TestCase):
         print("[PASS] Test 12: Full notification flow verified (thread-safe + dialog + sync + prevention)")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 def run_all_tests():
     """Run all test suites"""
     loader = unittest.TestLoader()

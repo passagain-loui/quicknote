@@ -1,8 +1,30 @@
 """E2E Test Suite for v2.9.16 — PyWinCtl Integration & Alarm Debounce (5s Grace Period)"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
+import tempfile
 import time
 import queue
 
@@ -18,7 +40,8 @@ class TestPyWinCtlIntegrationV2916(unittest.TestCase):
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_pywinctl_library_available(self):
@@ -62,12 +85,22 @@ class TestPyWinCtlIntegrationV2916(unittest.TestCase):
         print("[PASS] Test 4: Fallback to v2915 built-in (robustness confirmed)")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestDebounceV2916(unittest.TestCase):
     """Test debounce mechanism to prevent alarm re-trigger (v2.9.16)"""
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_debounce_timestamp_initialization(self):
@@ -159,12 +192,22 @@ class TestDebounceV2916(unittest.TestCase):
         print(f"[PASS] Test 12: App version is {APP_VERSION}")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestCompleteOpenFlowV2916(unittest.TestCase):
     """Test complete Open button flow with PyWinCtl + Debounce (v2.9.16)"""
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_complete_open_flow_with_pywinctl_and_debounce(self):
@@ -202,6 +245,15 @@ class TestCompleteOpenFlowV2916(unittest.TestCase):
         print("[PASS] Test 13: Complete open flow with PyWinCtl + 5s debounce")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 def run_all_tests():
     """Run all test suites"""
     loader = unittest.TestLoader()

@@ -483,11 +483,15 @@ class NoteCard(tk.Frame):
         # Schedule save 500ms from now
         def save_content():
             self._content_save_timer = None
-            if self.content_text:  # Guard against widget being destroyed
-                new_content = self.content_text.get("1.0", "end-1c")
-                if new_content != self.note.content:  # Only save if changed
-                    self.note.content = new_content
-                    self.on_update(self.note)
+            try:
+                # v2.9.45 Audit Fix: destroyed widget is still truthy — must use winfo_exists()
+                if self.content_text.winfo_exists():
+                    new_content = self.content_text.get("1.0", "end-1c")
+                    if new_content != self.note.content:  # Only save if changed
+                        self.note.content = new_content
+                        self.on_update(self.note)
+            except tk.TclError:
+                pass  # Widget/board destroyed while timer pending — safe to skip
 
         # Use root.after if available, else fallback to direct schedule
         try:

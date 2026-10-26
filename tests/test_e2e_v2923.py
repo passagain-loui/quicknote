@@ -1,8 +1,30 @@
 """E2E Test Suite for v2.9.23 — Popup Topmost, Immediate Red Border & Top Sorting Fix"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
+import tempfile
 from datetime import datetime, timedelta
 
 # Add src to path
@@ -18,7 +40,8 @@ class TestPopupTopmostV2923(unittest.TestCase):
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_dialog_has_topmost_attribute(self):
@@ -51,12 +74,22 @@ class TestPopupTopmostV2923(unittest.TestCase):
         print(f"[PASS] Test 3: App version is {APP_VERSION}")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestRedBorderLogicV2923(unittest.TestCase):
     """Test immediate red border on alarm trigger — v2.9.23"""
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_red_border_shows_when_alarm_time_arrived(self):
@@ -135,24 +168,38 @@ class TestRedBorderLogicV2923(unittest.TestCase):
         print("[PASS] Test 6: Red border disappears when Snooze reschedules to future")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 class TestTaskSortingV2923(unittest.TestCase):
     """Test active alarm tasks sort to top (Index 0) — v2.9.23"""
 
     def setUp(self):
         """Initialize for tests"""
-        os.environ['DB_PATH'] = ':memory:'
+        os.environ.setdefault('_QN_DB_PATH_BAK', os.environ.get('DB_PATH') or '@@UNSET@@')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
         init_db()
 
     def test_active_alarm_task_at_index_0(self):
-        """Test 7: Active alarm task (time arrived, not dismissed) sorts to Index 0"""
+        """Test 7: Triggered alarm task (time arrived, scheduler locked triggered=1) sorts to Index 0
+
+        v2.9.45: updated to current sorting architecture (v2.9.26+) where
+        reminder_triggered=1 AND reminder_datetime IS NOT NULL is the top-priority group.
+        """
         # Create multiple notes
         note1_id = create_note(title="Normal Task 1", content="")
         note2_id = create_note(title="Active Alarm", content="")
         note3_id = create_note(title="Normal Task 2", content="")
 
-        # Set note2 to have PAST reminder (active alarm)
+        # Set note2 to have PAST reminder and trigger it (what the scheduler does on fire)
         past_time = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M")
-        update_note(note2_id, reminder_datetime=past_time, reminder_triggered=False, status="active")
+        update_note(note2_id, reminder_datetime=past_time, reminder_triggered=True, status="active")
 
         # Set note1 and note3 to Active status (no alarm)
         update_note(note1_id, status="active")
@@ -191,7 +238,10 @@ class TestTaskSortingV2923(unittest.TestCase):
         print("[PASS] Test 8: Multiple alarms sorted by soonest first")
 
     def test_dismissed_alarm_goes_below_active(self):
-        """Test 9: Dismissed alarm (reminder_triggered=1) goes below active alarms"""
+        """Test 9: Triggered alarm (reminder_triggered=1) sorts above plain active tasks
+
+        v2.9.45: aligned with v2.9.26+ ordering where triggered-with-datetime is primary group.
+        """
         # Create two notes
         note1_id = create_note(title="Active Alarm", content="")
         note2_id = create_note(title="Dismissed Alarm", content="")
@@ -204,14 +254,23 @@ class TestTaskSortingV2923(unittest.TestCase):
         # Fetch notes sorted
         notes = get_notes_by_status("active")
 
-        # note1 (active) should be at index 0
-        # note2 (dismissed) should be at index 1
+        # note2 (triggered alarm) should be at index 0 (primary sort group)
+        # note1 (plain task) should be at index 1
         self.assertEqual(len(notes), 2)
-        self.assertEqual(notes[0]['id'], note1_id)  # Active alarm
-        self.assertEqual(notes[1]['id'], note2_id)  # Dismissed alarm
-        print("[PASS] Test 9: Dismissed alarm sorts below active alarms")
+        self.assertEqual(notes[0]['id'], note2_id)  # Triggered alarm
+        self.assertEqual(notes[1]['id'], note1_id)  # Plain task
+        print("[PASS] Test 9: Triggered alarm sorts above plain tasks")
 
 
+
+    def tearDown(self):
+        prev = os.environ.pop('_QN_DB_PATH_BAK', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        elif prev != '@@UNSET@@':
+            os.environ['DB_PATH'] = prev
+        else:
+            os.environ.pop('DB_PATH', None)
 def run_all_tests():
     """Run all test suites"""
     loader = unittest.TestLoader()

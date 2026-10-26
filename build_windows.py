@@ -43,6 +43,8 @@ def find_iscc() -> str | None:
     common_paths = [
         Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
         Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
+        # v2.9.45: user-local install (per-user Inno Setup skips HKLM registry)
+        Path.home() / "AppData" / "Local" / "Programs" / "Inno Setup 6" / "ISCC.exe",
     ]
     for path in common_paths:
         if path.exists():
@@ -129,12 +131,32 @@ def build_exe(debug: bool = False) -> int:
     return 0
 
 
+def _sync_installer_version(script: Path) -> None:
+    """v2.9.46: rewrite every X.Y.Z token in installer.iss to current APP_VERSION.
+
+    Keeps the .iss in lockstep with src/core/constants.py so the automated
+    build never compiles an installer pointing at a stale portable exe.
+    """
+    import re
+    text = script.read_text(encoding="utf-8")
+    # (?<![\d.]) instead of \b: 'v2.9.45' / '=2.9.45' must match, '12.9.45' must not
+    new_text, n = re.subn(
+        r"(?<![\d.])\d+\.\d+\.\d+", APP_VERSION, text
+    )
+    if n and new_text != text:
+        script.write_text(new_text, encoding="utf-8")
+        print(f"[>] Synced installer.iss → v{APP_VERSION} ({n} refs)")
+
+
 def build_installer() -> int:
     """Build Windows Installer ด้วย Inno Setup"""
     script = ROOT / INSTALLER_SCRIPT
     if not script.exists():
         print(f"[x] ไม่พบ installer script: {script}")
         return 1
+
+    # v2.9.46: auto-sync version so Source path matches dist/<APP>_v<ver>.exe
+    _sync_installer_version(script)
 
     iscc = find_iscc()
     if not iscc:
@@ -155,7 +177,8 @@ def build_installer() -> int:
         print("[x] Inno Setup build ไม่สำเร็จ")
         return result.returncode
 
-    setup_exe = ROOT / "installer_output" / f"{APP_NAME}-Setup-v{APP_VERSION}.exe"
+    # v2.9.46: correct artifact name (OutputBaseFilename=QuickNote_v<X.Y.Z>_Setup)
+    setup_exe = ROOT / "installer_output" / f"{APP_NAME}_v{APP_VERSION}_Setup.exe"
     if setup_exe.exists():
         size_mb = setup_exe.stat().st_size / 1024 / 1024
         print(f"\n[/] Installer เสร็จแล้ว: {setup_exe}  ({size_mb:.1f} MB)")

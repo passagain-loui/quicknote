@@ -1,5 +1,26 @@
 """E2E Test Suite for v2.9.25 — Isolated Test DB & Alarm State Lock (No Repeat Triggers)"""
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import sys
 import os
@@ -24,11 +45,18 @@ class TestAlarmStateLockV2925(unittest.TestCase):
         from src.core import database
         self.temp_dir = Path(tempfile.mkdtemp())
         self.temp_db = self.temp_dir / "test.db"
-        database.DB_FILE = self.temp_db
-        database.APP_DIR = self.temp_dir
+        # v2.9.45: environ-based isolation (attr patching is a no-op since v2.9.43 dynamic DB_FILE)
+        self._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = str(self.temp_db)
         database.init_db()
 
     def tearDown(self):
+        # v2.9.45: restore ambient DB environment before cleanup
+        prev = getattr(self, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
         """Clean up test database"""
         if self.temp_dir.exists():
             shutil.rmtree(str(self.temp_dir))
@@ -92,11 +120,18 @@ class TestRedBorderOnTriggeredAlarmV2925(unittest.TestCase):
         from src.core import database
         self.temp_dir = Path(tempfile.mkdtemp())
         self.temp_db = self.temp_dir / "test.db"
-        database.DB_FILE = self.temp_db
-        database.APP_DIR = self.temp_dir
+        # v2.9.45: environ-based isolation (attr patching is a no-op since v2.9.43 dynamic DB_FILE)
+        self._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = str(self.temp_db)
         database.init_db()
 
     def tearDown(self):
+        # v2.9.45: restore ambient DB environment before cleanup
+        prev = getattr(self, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
         """Clean up test database"""
         if self.temp_dir.exists():
             shutil.rmtree(str(self.temp_dir))
@@ -189,9 +224,9 @@ class TestIsolatedTestDatabaseV2925(unittest.TestCase):
         test_db = temp_dir / "test.db"
 
         try:
-            # Override database module to use test DB
-            database.DB_FILE = test_db
-            database.APP_DIR = temp_dir
+            # v2.9.45: environ-based isolation (attr patching is a no-op since dynamic DB_FILE)
+            _prev_db_path = os.environ.get('DB_PATH')
+            os.environ['DB_PATH'] = str(test_db)
             database.init_db()
 
             # Create test note
@@ -215,6 +250,11 @@ class TestIsolatedTestDatabaseV2925(unittest.TestCase):
             print("[PASS] Test 7: E2E test DB isolated from production")
 
         finally:
+            # v2.9.45: restore ambient DB environment before cleanup
+            if _prev_db_path is None:
+                os.environ.pop('DB_PATH', None)
+            else:
+                os.environ['DB_PATH'] = _prev_db_path
             if temp_dir.exists():
                 shutil.rmtree(str(temp_dir))
 

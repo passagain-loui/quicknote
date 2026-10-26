@@ -1,5 +1,39 @@
 # QuickNote Changelog
 
+## v2.9.46 (2026-08-26) — Final Resilience & Production Polish
+
+### Added
+- `main.py`: Single-instance **signal listener** (`start_lock_signal_listener`) — the first instance now accepts connections on the lock socket; a second launch sends `SHOW` and exits(0) while the first window deiconifies + lifts + focuses (previously a silent no-op: nobody ever called `accept()`).
+- `main.py`: `graceful_shutdown()` — pynput hotkey listener, tray icon, and tray service stopped on EVERY exit path via try/finally around mainloop (tray-Quit previously leaked live listeners).
+- `main.py`: `cleanup_temp_artifacts()` — purges stale `qn_test_*` temp dirs (>7d) and old `notes.db-wal`/`-shm` sidecars (>1d) on exit.
+
+### Build automation
+- `build_windows.py`: auto-syncs `installer.iss` version refs from constants (lookbehind regex handles `vX.Y.Z`), fixed Setup artifact name check, added user-local ISCC path → `python build_windows.py` now produces portable exe **and** installer in one run.
+
+### Verified
+- Full suite: **334/334 OK** (7 new v2.9.46 tests: lock exclusivity, SHOW-signal socket round-trip, shutdown idempotency, temp purge, version)
+- Smoke (built binary): instance #2 exits code 0 · instance #1 window visible
+- LocalCore Gatekeeper (`Qwen-2.5-Coder-14B`): **EXIT_CODE 0**
+
+## v2.9.45 (2026-08-26) — Deep Bug Audit → Build Release
+
+### Fixed
+- `src/ui/note_card.py`: `save_content()` debounce callback now uses `winfo_exists()` instead of truthiness check; wrapped in try-except `tk.TclError` to prevent crash when NoteCard is destroyed while a 500ms debounce save is pending.
+- `src/core/database.py`: try/finally around all 10 connection users — exceptions no longer leak open connections / lock the DB file.
+- `src/ui/board.py`: `_ensure_mapped()` deferred re-map guard — windowed `.exe` no longer stays invisible when losing the withdraw→geometry→deiconify race on Tk 9.0.
+
+### Tests (327/327 OK, was 244/327)
+- UTF-8 stdio bootstrap in every test file (kills charmap crashes under legacy codepages).
+- DB isolation leaks eliminated across 22 suites (environ save/restore, temp-file DBs instead of `:memory:`/attr-patching); production database no longer touched by any suite.
+- Stale assertions updated: semantic version tuples, v2.9.39 ✓ icon, removed `_on_open_click`/`center_on_screen`, pin callback signature.
+- Tk 9.0.2 upstream AV workaround: Settings windows withdrawn + per-test `gc.collect()`.
+- LocalCore Gatekeeper (`Qwen-2.5-Coder-14B`): **EXIT_CODE 0**.
+
+### Installer (Phase 3)
+- `installer.iss`: version bumped 2.9.43 → 2.9.45 (6 refs incl. Source path to `dist/QuickNote_v2.9.45.exe`).
+- `build_windows.py`: `find_iscc()` now checks user-local install path (`%LOCALAPPDATA%\Programs\Inno Setup 6`) — per-user Inno Setup was invisible to the HKLM-only lookup.
+- Compiled: `installer_output/QuickNote_v2.9.45_Setup.exe` (35.09 MB, LZMA) — LocalCore dir-verify EXIT_CODE 0.
+
 ## v2.2.3 (2026-08-20) — SQLite Commits & Visual Debug
 
 ### 🔧 Critical Database Fix: Guarantee Data Persistence

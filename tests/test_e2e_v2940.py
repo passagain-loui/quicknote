@@ -7,7 +7,29 @@ Comprehensive regression test suite validating:
 4. Pin state persists across app restart
 """
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
+import os
 import tkinter as tk
 from pathlib import Path
 import tempfile
@@ -25,7 +47,30 @@ from src.core.constants import APP_VERSION
 class TestV2940PinPersistence(unittest.TestCase):
     """Test Suite 1: Pin State Saves to Database"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -70,14 +115,14 @@ class TestV2940PinPersistence(unittest.TestCase):
         )
 
         card = NoteCard(self.root, note, self.theme)
+        card.on_pin_change = lambda note_id: None  # v2.9.40: callback receives note_id
 
         # Initially unpinned
         self.assertEqual(card.btn_pin.cget("text"), "📍", "Unpinned button should show 📍")
         self.assertIn(card.btn_pin.cget("fg"), [self.theme.c("fg_muted"), "#B0B0B0", "#A0A0A0"],
                       "Unpinned button should be muted gray")
 
-        # Simulate pin toggle
-        card.note.is_pinned = True
+        # Simulate pin toggle (v2.9.40: _on_toggle_pin flips the flag itself)
         card._on_toggle_pin()
         self.assertEqual(card.btn_pin.cget("text"), "📌", "Pinned button should show 📌")
         self.assertEqual(card.btn_pin.cget("fg"), "#FF6B6B", "Pinned button should be red")
@@ -86,7 +131,30 @@ class TestV2940PinPersistence(unittest.TestCase):
 class TestV2940PinReordering(unittest.TestCase):
     """Test Suite 2: Pin Triggers Repack and Reordering"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -152,6 +220,23 @@ class TestV2940PinReordering(unittest.TestCase):
 class TestV2940DatabaseSorting(unittest.TestCase):
     """Test Suite 3: Database Sorting - Pinned Notes First"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def test_pinned_notes_sorted_first(self):
         """Test 3a: get_notes_by_status returns pinned notes first (is_pinned DESC as primary)"""
         # Create multiple test notes
@@ -200,6 +285,23 @@ class TestV2940DatabaseSorting(unittest.TestCase):
 class TestV2940VersionConstant(unittest.TestCase):
     """Test Suite 4: Version Verification"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def test_version_updated_to_2940(self):
         """Test 4a: Version constant is v2.9.40"""
         self.assertGreaterEqual(APP_VERSION, "2.9.43", f"Version should be 2.9.40, got {APP_VERSION}")
@@ -216,7 +318,30 @@ class TestV2940VersionConstant(unittest.TestCase):
 class TestV2940RegressionIntegration(unittest.TestCase):
     """Test Suite 5: Integration & Regression Tests"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -288,6 +413,7 @@ class TestV2940RegressionIntegration(unittest.TestCase):
         })
 
         card = NoteCard(self.root, note, self.theme)
+        card.on_pin_change = lambda note_id: None  # v2.9.40: callback receives note_id
 
         # Pin via database
         update_note(note_id, is_pinned=True)

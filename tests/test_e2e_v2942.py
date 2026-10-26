@@ -7,6 +7,27 @@ Comprehensive regression test suite validating:
 4. Verify card_widgets filtering excludes empty state label
 """
 
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
 import tkinter as tk
 from pathlib import Path
@@ -28,23 +49,19 @@ class TestV2942NewTaskTopPositioningFixed(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set up test database once for all tests in this class"""
-        # Backup original database
-        cls.original_db = None
-        if DB_FILE.exists():
-            cls.original_db = DB_FILE.with_suffix('.bak.db')
-            if cls.original_db.exists():
-                cls.original_db.unlink()
-            shutil.copy(DB_FILE, cls.original_db)
+        # v2.9.45: pin isolated per-class temp DB — never touches the production file
+        import tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
 
     @classmethod
     def tearDownClass(cls):
-        """Restore original database after all tests"""
-        if cls.original_db and cls.original_db.exists():
-            if DB_FILE.exists():
-                DB_FILE.unlink()
-            shutil.copy(cls.original_db, DB_FILE)
-            cls.original_db.unlink()
+        # v2.9.45: restore ambient DB_PATH
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
 
     def setUp(self):
         """Initialize test environment with fresh database"""
@@ -127,23 +144,19 @@ class TestV2942NewTaskWithExistingNotes(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set up test database once for all tests in this class"""
-        # Backup original database
-        cls.original_db = None
-        if DB_FILE.exists():
-            cls.original_db = DB_FILE.with_suffix('.bak.db')
-            if cls.original_db.exists():
-                cls.original_db.unlink()
-            shutil.copy(DB_FILE, cls.original_db)
+        # v2.9.45: pin isolated per-class temp DB — never touches the production file
+        import tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
 
     @classmethod
     def tearDownClass(cls):
-        """Restore original database after all tests"""
-        if cls.original_db and cls.original_db.exists():
-            if DB_FILE.exists():
-                DB_FILE.unlink()
-            shutil.copy(cls.original_db, DB_FILE)
-            cls.original_db.unlink()
+        # v2.9.45: restore ambient DB_PATH
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
 
     def setUp(self):
         """Initialize test environment with fresh database"""

@@ -8,7 +8,30 @@ Comprehensive regression test suite validating:
 5. Settings window deduping
 """
 
+_QN_KEEP: list = []  # v2.9.45: keepalive for withdrawn Settings windows (Tk9 AV workaround)
+# _QN_BOOTSTRAP_V2945: UTF-8 stdio + faulthandler + Tk9 GC mitigation (self-sufficient)
+import sys as _sys, gc as _gc, faulthandler as _fh
+import unittest as _unittest
+for _s in (_sys.stdout, _sys.stderr):
+    if _s and hasattr(_s, 'reconfigure'):
+        try:
+            _s.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+_fh.enable()
+if not getattr(_sys, '_qn_gc_patched', False):
+    _orig_tr = _unittest.case.TestCase.run
+    def _qn_run(self, *a, **k):
+        try:
+            return _orig_tr(self, *a, **k)
+        finally:
+            _gc.collect()
+    _unittest.case.TestCase.run = _qn_run
+    _sys._qn_gc_patched = True
+
+
 import unittest
+import os
 import tkinter as tk
 from pathlib import Path
 import tempfile
@@ -26,7 +49,30 @@ from src.core.constants import APP_VERSION
 class TestV2939IconHarmonization(unittest.TestCase):
     """Test Suite 1: Icon Harmonization (minimalist checkmark styling)"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -102,7 +148,30 @@ class TestV2939IconHarmonization(unittest.TestCase):
 class TestV2939TaskReordering(unittest.TestCase):
     """Test Suite 2: Task Re-ordering to Top on Alarm"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -144,7 +213,30 @@ class TestV2939TaskReordering(unittest.TestCase):
 class TestV2939ReminderStateClearing(unittest.TestCase):
     """Test Suite 3: Reminder Clock Icon State Updates"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -237,7 +329,30 @@ class TestV2939ReminderStateClearing(unittest.TestCase):
 class TestV2939GoogleOAuthFlow(unittest.TestCase):
     """Test Suite 4: Google OAuth Browser Flow Integration with Embedded Credentials"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")
@@ -315,7 +430,12 @@ class TestV2939GoogleOAuthFlow(unittest.TestCase):
             # Check that notebook exists and has tabs
             self.assertTrue(hasattr(settings, 'notebook'))
 
-            settings.root.destroy()
+            # v2.9.45: withdraw instead of native destroy — tcl9tk90.dll 9.0.2 AVs when
+            # destroying Toplevels after hundreds of prior interpreters (test-churn only;
+            # production runs a single interpreter and never reaches this state).
+            settings.root.withdraw()
+            _QN_KEEP.append(settings)
+
         except Exception as e:
             self.fail(f"Settings window creation failed: {e}")
 
@@ -335,7 +455,12 @@ class TestV2939GoogleOAuthFlow(unittest.TestCase):
             self.assertTrue(hasattr(settings, 'btn_connect'))
             self.assertTrue(hasattr(settings, 'btn_disconnect'))
 
-            settings.root.destroy()
+            # v2.9.45: withdraw instead of native destroy — tcl9tk90.dll 9.0.2 AVs when
+            # destroying Toplevels after hundreds of prior interpreters (test-churn only;
+            # production runs a single interpreter and never reaches this state).
+            settings.root.withdraw()
+            _QN_KEEP.append(settings)
+
         except Exception as e:
             self.fail(f"Settings window button check failed: {e}")
 
@@ -355,13 +480,35 @@ class TestV2939GoogleOAuthFlow(unittest.TestCase):
             self.assertTrue(hasattr(settings, '_on_google_authenticate'))
             self.assertTrue(callable(settings._on_google_authenticate))
 
-            settings.root.destroy()
+            # v2.9.45: withdraw instead of native destroy — tcl9tk90.dll 9.0.2 AVs when
+            # destroying Toplevels after hundreds of prior interpreters (test-churn only;
+            # production runs a single interpreter and never reaches this state).
+            settings.root.withdraw()
+            _QN_KEEP.append(settings)
+
         except Exception as e:
             self.fail(f"Settings window method check failed: {e}")
 
 
 class TestV2939VersionConstant(unittest.TestCase):
     """Test Suite 5: Version Verification"""
+
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
 
     def test_version_updated_to_2939(self):
         """Test 5a: Version constant is v2.9.39"""
@@ -379,7 +526,30 @@ class TestV2939VersionConstant(unittest.TestCase):
 class TestV2939RegressionIntegration(unittest.TestCase):
     """Test Suite 6: Integration & Regression Tests"""
 
+    @classmethod
+    def setUpClass(cls):
+        # v2.9.45: pin isolated per-class temp DB (suite expects an EMPTY board)
+        import tempfile as _tempfile
+        cls._prev_db_path = os.environ.get('DB_PATH')
+        os.environ['DB_PATH'] = os.path.join(_tempfile.mkdtemp(prefix='qn_test_'), 'notes.db')
+        from src.core.database import init_db as _init_db
+        _init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        prev = getattr(cls, '_prev_db_path', None)
+        if prev is None:
+            os.environ.pop('DB_PATH', None)
+        else:
+            os.environ['DB_PATH'] = prev
+
     def setUp(self):
+        # _QN_FRESH_DB: deterministic empty DB per test
+        dbp = os.environ.get('DB_PATH')
+        if dbp and os.path.isfile(dbp):
+            os.remove(dbp)
+        from src.core.database import init_db as _init_db
+        _init_db()
         """Initialize test environment"""
         self.root = tk.Tk()
         self.theme = Theme("light")

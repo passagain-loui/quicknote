@@ -7,6 +7,10 @@ import threading
 import socket
 import logging
 import queue
+import os
+import shutil
+import tempfile
+import time
 from pathlib import Path
 
 # Configure logging
@@ -88,6 +92,109 @@ def send_signal_to_existing_instance() -> bool:
         return True
     except Exception:
         return False
+
+
+def start_lock_signal_listener(lock: "SingleInstanceLock", dispatcher) -> threading.Thread | None:
+    """v2.9.46: รับสัญญาณ SHOW จาก instance ใหม่ → เรียก dispatcher (bring-to-front)
+
+    v2.9.45-and-before bug: first instance listened() but never accept()ed,
+    so the second instance's signal went nowhere and the window stayed hidden.
+    """
+    if not lock.socket:
+        return None
+
+    def _worker():
+        while True:
+            try:
+                conn, _addr = lock.socket.accept()
+                try:
+                    conn.settimeout(2.0)
+                    data = conn.recv(64)
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                if data.strip() == b"SHOW":
+                    try:
+                        dispatcher()
+                    except Exception as e:
+                        print(f"[!] Signal dispatch failed: {e}")
+            except OSError:
+                break  # socket closed → app shutting down
+
+    t = threading.Thread(target=_worker, daemon=True, name="QN-SignalListener")
+    t.start()
+    return t
+
+
+def graceful_shutdown(hotkey_listener=None, tray=None) -> None:
+    """v2.9.46: stop pynput listener + pystray icon explicitly (idempotent, all guarded).
+
+    Runs on EVERY exit path (WM_DELETE_WINDOW close, tray Quit, mainloop exception)
+    so no daemon listener survives into the next launch.
+    """
+    # Stop global hotkey listener (pynput keyboard hook)
+    try:
+        if hotkey_listener is not None:
+            hotkey_listener.stop()
+            print("[OK] Hotkey listener stopped")
+    except Exception as e:
+        print(f"[!] Hotkey stop: {e}")
+
+    # Stop legacy tray icon thread
+    try:
+        if tray is not None:
+            tray.stop()
+            print("[OK] Tray icon stopped")
+    except Exception as e:
+        print(f"[!] Tray stop: {e}")
+
+    # Stop system tray service (notification icon, v2.9.5)
+    try:
+        from src.services.tray_service import get_tray_service
+        svc = get_tray_service()
+        if svc is not None:
+            svc.stop_icon()
+            print("[OK] System tray service stopped")
+    except Exception as e:
+        print(f"[!] Tray service stop: {e}")
+
+
+def cleanup_temp_artifacts() -> None:
+    """v2.9.46: best-effort purge of stale temp/cache leftovers on exit.
+
+    - qn_test_* dirs: residue from E2E suites (older than 7 days)
+    - notes.db-wal / -shm sidecars: stale checkpoint files (older than 1 day;
+      SQLite checkpoints+removes them on clean close, old ones are junk)
+    Never raises — cleanup must not break shutdown.
+    """
+    now = time.time()
+
+    # 1) Old test-isolation temp databases
+    try:
+        tmp = tempfile.gettempdir()
+        for entry in Path(tmp).glob("qn_test_*"):
+            try:
+                if entry.is_dir() and (now - entry.stat().st_mtime) > 7 * 86400:
+                    shutil.rmtree(str(entry), ignore_errors=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2) Stale WAL/SHM sidecar files next to the production database
+    try:
+        db_home = Path.home() / ".quicknote"
+        for pattern in ("notes.db-wal", "notes.db-shm"):
+            for sidecar in db_home.glob(pattern):
+                try:
+                    if sidecar.is_file() and (now - sidecar.stat().st_mtime) > 86400:
+                        sidecar.unlink(missing_ok=True)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def main():
@@ -245,6 +352,20 @@ def main():
         print("[>] Starting hotkey listener...")
         hotkey_listener = start_hotkey_listener(hotkey_config, on_hotkey)
 
+        # === v2.9.46: Single-Instance Signal Listener ===
+        # Second launch sends "SHOW" over the lock socket → bring this window to front
+        def _bring_to_front():
+            try:
+                board.root.deiconify()
+                board.root.attributes("-topmost", True)
+                board.root.lift()
+                board.root.focus_force()
+                board.root.after(800, lambda: board.root.attributes("-topmost", False))
+            except Exception:
+                pass
+
+        start_lock_signal_listener(lock, lambda: board.root.after(0, _bring_to_front))
+
         # === Close Handler ===
         def on_closing():
             """Save settings and clean up"""
@@ -252,19 +373,8 @@ def main():
             settings.set("geometry", board.root.geometry())
             settings.save()
 
-            # Stop tray service (v2.9.5)
-            try:
-                from src.services.tray_service import get_tray_service
-                tray_service = get_tray_service()
-                tray_service.stop_icon()
-            except Exception:
-                pass
-
-            # Stop tray
-            tray.stop()
-
-            # Stop hotkey
-            hotkey_listener.stop()
+            # v2.9.46: unified graceful shutdown (pynput + pystray + service)
+            graceful_shutdown(hotkey_listener, tray)
 
             # Release lock
             lock.release()
@@ -274,9 +384,14 @@ def main():
         board.root.protocol("WM_DELETE_WINDOW", on_closing)
 
         print("[OK] QuickNote ready\n")
-        board.mainloop()
-
-        lock.release()
+        try:
+            board.mainloop()
+        finally:
+            # v2.9.46: EVERY exit path (tray Quit, WM close, exception) cleans up —
+            # no daemon listener survives into the next process launch
+            graceful_shutdown(hotkey_listener, tray)
+            cleanup_temp_artifacts()
+            lock.release()
         return 0
 
     except Exception as e:

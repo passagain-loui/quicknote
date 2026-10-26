@@ -1,5 +1,91 @@
 # QuickNote Release History
 
+## v2.9.46 (2026-08-26) — FINAL RESILIENCE & PRODUCTION POLISH (LocalCore EXIT_CODE 0, 334/334 OK)
+
+### 🛡️ Single-Instance Signal + Graceful Shutdown + Build Automation
+
+**1. Single-Instance Bring-to-Front now actually works**
+- Bug: first instance `listen()`ed on lock port 29837 but never `accept()`ed —
+  second launch's "SHOW" payload vanished; window stayed hidden behind other apps.
+- Fix: daemon listener thread (`start_lock_signal_listener`) accepts, validates payload,
+  dispatches `deiconify → topmost → lift → focus_force` via `root.after(0, ...)`.
+
+**2. Graceful Shutdown on every exit path**
+- Bug: only WM_DELETE_WINDOW stopped pynput/pystray; tray-Quit path left live listeners.
+- Fix: unified `graceful_shutdown()` (hotkey + tray icon + tray service, all guarded/idempotent)
+  called from close handler AND in try/finally around mainloop.
+
+**3. Temp/cache hygiene**
+- New `cleanup_temp_artifacts()`: purges stale `qn_test_*` temp dirs (>7d) and stale
+  `notes.db-wal`/`-shm` sidecars (>1d); never raises.
+
+**4. Build automation hardening**
+- `build_windows.py`: auto-syncs installer.iss version refs (regex lookbehind fix so
+  `v2.9.45` matches), corrected Setup artifact name check (`QuickNote_v<X.Y.Z>_Setup.exe`),
+  user-local ISCC path added → single command builds portable exe + installer.
+
+**Verification:**
+- LocalCore Gatekeeper: **EXIT_CODE: 0** · Full suite **334/334 OK** (7 new tests incl.
+  socket round-trip SHOW→dispatcher within 5s)
+- Smoke on built binary: instance #2 exits code 0 · instance #1 window stays visible ✅
+- Artifacts: dist/QuickNote_v2.9.46.exe (33.2 MB) · installer_output/QuickNote_v2.9.46_Setup.exe (35.1 MB)
+
+## v2.9.45 (2026-08-26) — DEEP BUG AUDIT → BUILD RELEASE (LocalCore EXIT_CODE 0, 327/327 tests OK)
+
+### Phase 2: Build-Release Audit Fixes (TRI-AGENT PROTOCOL v3.3 Self-Correction Loop)
+
+**Gate discovery:** LocalCore's first true test execution exposed 83 failing tests
+(20 failures + 63 errors out of 327) that previous EXIT_CODE 0 runs had never surfaced.
+All root-caused and fixed:
+
+1. **Charmap UnicodeEncodeError (~55 errors)** — suites print ✓/✔/→; legacy codepage consoles crash.
+   Fix: UTF-8 stdio reconfigure bootstrap injected into every test file (`_QN_BOOTSTRAP_V2945`).
+2. **DB isolation leaks (~15 errors, WAL 'memory' != 'wal')** — suites v2.9.4–v2.9.28 set
+   `os.environ['DB_PATH']` or monkey-patched `database.DB_FILE/APP_DIR` without restoring;
+   `:memory:` evaporates between open/close cycles.
+   Fix: idempotent save/restore of DB_PATH in setUp/tearDown across 22 files; `:memory:` replaced
+   with per-suite temp files; v2924–v2928 attr-patching converted to environ-based isolation.
+3. **Stale assertions** — exact version checks (v2.9.5–v2.9.9) → tuple semantic compare;
+   ✔ icon assert updated to ✓ (v2.9.39); removed-method asserts updated for v2.9.20/v2.9.32
+   architecture (`_on_open_click`, `center_on_screen` must stay absent); pin lambda now takes note_id.
+4. **Production-safety**: v2942/v2943 backed up & wiped the REAL user database during tests —
+   converted to fully isolated temp-file pinning (production never touched).
+5. **database.py hardening** — try/finally around every connection user (10 functions);
+   a mid-query exception previously leaked an open connection and locked the DB file.
+6. **board.py `_ensure_mapped()`** — windowed .exe (--noconsole) lost the withdraw→geometry→deiconify
+   race on Tk 9.0 and stayed invisible; deferred re-map guard added. Found via binary smoke test.
+7. **Tk 9.0.2 upstream AV workaround** — `tcl9tk90.dll` 9.0.2 access-violates destroying Toplevels
+   after hundreds of prior interpreters (test-churn only; Windows Event Log confirmed faulting module).
+   Tests withdraw Settings windows instead; `gc.collect()` after each test reduces handle pressure.
+
+**Final verification:** LocalCore Gatekeeper **EXIT_CODE: 0** · full suite **327/327 OK**
+(twice under hostile no-UTF8 env) · rebuilt .exe smoke-tested visible ✅
+
+### Phase 1: Bug Found & Fixed: Debounce Timer Crash After Widget Destroy
+
+**Problem (found during TRI-AGENT PROTOCOL v3.3 deep audit):**
+- `NoteCard._on_content_debounced()` scheduled `save_content()` via 500ms debounce timer
+- Guard used `if self.content_text:` — a DESTROYED Tkinter widget reference is still truthy in Python
+- If the card was destroyed (e.g., `_load_notes()` smart-reuse destroy) while a debounce timer was pending,
+  `content_text.get("1.0", "end-1c")` raised `tk.TclError: invalid command name`
+- Risk: unhandled exception in `root.after()` callback loop → potential Windows access violation cascade
+
+**Solution:**
+- Replaced truthiness guard with `winfo_exists()` check (real liveness test)
+- Wrapped save logic in try-except `tk.TclError` — safe no-op when widget/board destroyed
+- File: `src/ui/note_card.py` (`save_content()` closure)
+
+**Verification:**
+- LocalCore Gatekeeper (`--verify "python -m unittest discover -s tests" --model "Qwen-2.5-Coder-14B"`): **EXIT_CODE: 0**
+- Critical suite `tests.test_e2e_v2943`: **6/6 OK** (debounce, persistence, FocusOut, rapid keystrokes, version)
+- Syntax check: py_compile OK
+
+**Audit Scope (all PASS, no other issues found):**
+1. Database Isolation: `_get_db_file()` runtime `os.environ.get('DB_PATH')` + `:memory:` shared cache ✅
+2. Widget Lifetime: SettingsWindow 6-step cleanup protocol (listener → callbacks → protocol → unbind → null-check destroy → null refs) ✅
+3. Thread Safety: All background threads (pynput/pystray/audio/scheduler) dispatch via `root.after()` or command_queue; `DB_WRITE_LOCK` on all writes ✅
+4. State Persistence: Dual-path saving (`<FocusOut>` immediate + `<KeyRelease>` 500ms debounce) with pending-timer cancellation on FocusOut ✅
+
 ## v2.9.5 (2026-08-21) — SYSTEM TRAY INTEGRATION: Unblockable Notifications + Tray Service
 
 ### 🎯 Critical Fix: Overcome Windows Notification Blocking
